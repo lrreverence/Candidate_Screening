@@ -1,0 +1,12 @@
+# Vercel ignore file
+# Files and directories to exclude from deployment
+
+node_modules
+.git
+.vscode
+.idea
+*.log
+.DS_Store
+.env.local
+.env.*.local
+

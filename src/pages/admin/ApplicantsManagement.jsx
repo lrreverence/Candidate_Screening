@@ -1,0 +1,482 @@
+import React, { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
+
+const ApplicantsManagement = () => {
+  const [applications, setApplications] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filters, setFilters] = useState({
+    licenseType: '',
+    trainingLevel: '',
+    applicationStatus: ''
+  })
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 5
+
+  // Statistics
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    hired: 0,
+    expiring: 0
+  })
+
+  useEffect(() => {
+    fetchApplications()
+    fetchStats()
+  }, [filters, searchQuery])
+
+  const fetchStats = async () => {
+    try {
+      const { data: applicants, error } = await supabase
+        .from('applicants')
+        .select('status, license_status')
+
+      if (error) throw error
+
+      const total = applicants?.length || 0
+      const pending = applicants?.filter(app => app.status === 'Pending' || app.status === 'pending').length || 0
+      const hired = applicants?.filter(app => app.status === 'Hired' || app.status === 'hired').length || 0
+      const expiring = applicants?.filter(app => app.license_status === 'expired' || app.license_status === 'expiring').length || 0
+
+      setStats({ total, pending, hired, expiring })
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
+  }
+
+  const fetchApplications = async () => {
+    setLoading(true)
+    try {
+      // Join applicants with applications and jobs
+      let query = supabase
+        .from('applications')
+        .select(`
+          *,
+          applicants:applicant_id (
+            id,
+            first_name,
+            last_name,
+            email,
+            phone,
+            reference_code,
+            status,
+            license_type,
+            license_status,
+            training_level,
+            licenses
+          ),
+          jobs:job_id (
+            title
+          )
+        `)
+        .order('created_at', { ascending: false })
+
+      // Apply filters
+      if (filters.applicationStatus) {
+        query = query.eq('status', filters.applicationStatus.toLowerCase())
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+
+      // Filter by search query and additional filters
+      let filtered = data || []
+      
+      // Filter by license type and training level (from applicant)
+      if (filters.licenseType) {
+        filtered = filtered.filter(app => 
+          app.applicants?.license_type === filters.licenseType
+        )
+      }
+      if (filters.trainingLevel) {
+        filtered = filtered.filter(app => 
+          app.applicants?.training_level === filters.trainingLevel
+        )
+      }
+
+      // Filter by search query
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase()
+        filtered = filtered.filter(app =>
+          `${app.applicants?.first_name || ''} ${app.applicants?.last_name || ''}`.toLowerCase().includes(query) ||
+          app.applicants?.reference_code?.toLowerCase().includes(query) ||
+          app.applicants?.email?.toLowerCase().includes(query)
+        )
+      }
+
+      setApplications(filtered)
+    } catch (error) {
+      console.error('Error fetching applications:', error)
+      setApplications([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleFilterChange = (filterName, value) => {
+    setFilters(prev => ({ ...prev, [filterName]: value }))
+    setCurrentPage(1)
+  }
+
+  const handleResetFilters = () => {
+    setFilters({
+      licenseType: '',
+      trainingLevel: '',
+      applicationStatus: ''
+    })
+    setSearchQuery('')
+    setCurrentPage(1)
+  }
+
+  const handleApplyFilters = () => {
+    fetchApplications()
+  }
+
+  // Pagination
+  const paginatedApplications = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    const end = start + itemsPerPage
+    return applications.slice(start, end)
+  }, [applications, currentPage])
+
+  const totalPages = Math.ceil(applications.length / itemsPerPage)
+
+  const getStatusBadge = (status) => {
+    const statusMap = {
+      'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
+      'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
+      'screening': { bg: 'bg-blue-100', text: 'text-navy', label: 'Screening' },
+      'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
+      'hired': { bg: 'bg-green-100', text: 'text-green-800', label: 'Hired' },
+      'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' }
+    }
+
+    const config = statusMap[status?.toLowerCase()] || statusMap['pending']
+    return (
+      <span className={`inline-flex items-center rounded-md ${config.bg} px-2.5 py-1 text-xs font-semibold ${config.text}`}>
+        {config.label}
+      </span>
+    )
+  }
+
+  const getLicenseStatusBadge = (licenseStatus) => {
+    const statusMap = {
+      'valid': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', dot: 'bg-green-600', label: 'Valid' },
+      'expired': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-600', label: 'Expired' },
+      'review': { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-500', label: 'Review' },
+      'pending': { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', dot: 'bg-gray-500', label: 'Pending' }
+    }
+
+    const config = statusMap[licenseStatus?.toLowerCase()] || statusMap['pending']
+    return (
+      <span className={`inline-flex items-center gap-1.5 rounded-full ${config.bg} ${config.border} border px-2.5 py-1 text-xs font-medium ${config.text}`}>
+        <span className={`size-1.5 rounded-full ${config.dot}`}></span>
+        {config.label}
+      </span>
+    )
+  }
+
+  const getInitials = (firstName, lastName) => {
+    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase()
+  }
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A'
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  return (
+    <main className="flex flex-1 flex-col overflow-hidden bg-[#f3f4f6]">
+      {/* Top Navigation Bar */}
+      <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-8 shadow-sm">
+        <div>
+          <h2 className="text-xl font-bold text-navy">Applicant Management</h2>
+          <p className="text-xs text-gray-500">View and manage security personnel applications</p>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Search */}
+          <div className="relative w-64">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">search</span>
+            <input
+              className="h-10 w-full rounded-md border border-gray-300 bg-gray-50 pl-10 pr-4 text-sm text-gray-700 focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy transition-all"
+              placeholder="Search by name or ID..."
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <button className="flex size-10 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 relative">
+            <span className="material-symbols-outlined">notifications</span>
+            <span className="absolute top-2 right-2 size-2 rounded-full bg-red-500 ring-2 ring-white"></span>
+          </button>
+          <button className="flex size-10 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100">
+            <span className="material-symbols-outlined">help</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto p-8">
+        {/* KPI Stats Cards */}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Total Applicants</p>
+                <p className="mt-1 text-2xl font-bold text-navy">{stats.total}</p>
+              </div>
+              <div className="rounded-md bg-blue-50 p-2 text-primary">
+                <span className="material-symbols-outlined">groups</span>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center text-xs text-green-600">
+              <span className="material-symbols-outlined text-sm">trending_up</span>
+              <span className="ml-1 font-medium">+12% from last month</span>
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Pending Review</p>
+                <p className="mt-1 text-2xl font-bold text-navy">{stats.pending}</p>
+              </div>
+              <div className="rounded-md bg-yellow-50 p-2 text-yellow-600">
+                <span className="material-symbols-outlined">pending_actions</span>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center text-xs text-yellow-600">
+              <span className="font-medium">Requires immediate attention</span>
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Hired This Month</p>
+                <p className="mt-1 text-2xl font-bold text-navy">{stats.hired}</p>
+              </div>
+              <div className="rounded-md bg-green-50 p-2 text-green-600">
+                <span className="material-symbols-outlined">check_circle</span>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center text-xs text-green-600">
+              <span className="material-symbols-outlined text-sm">trending_up</span>
+              <span className="ml-1 font-medium">+2% vs target</span>
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">License Expiry</p>
+                <p className="mt-1 text-2xl font-bold text-navy">{stats.expiring}</p>
+              </div>
+              <div className="rounded-md bg-red-50 p-2 text-red-600">
+                <span className="material-symbols-outlined">warning</span>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center text-xs text-red-600">
+              <span className="font-medium">Expiring within 30 days</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Section */}
+        <div className="flex flex-col gap-6 rounded-lg border border-gray-200 bg-white shadow-sm">
+          {/* Advanced Filter Toolbar */}
+          <div className="flex flex-col gap-4 border-b border-gray-200 p-6 lg:flex-row lg:items-end">
+            <div className="flex-1 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">License Type</span>
+                <div className="relative">
+                  <select
+                    className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                    value={filters.licenseType}
+                    onChange={(e) => handleFilterChange('licenseType', e.target.value)}
+                  >
+                    <option value="">All Licenses</option>
+                    <option value="PLTC">PLTC (Private Lady)</option>
+                    <option value="SO">SO (Security Officer)</option>
+                    <option value="SG">SG (Security Guard)</option>
+                    <option value="Class 1A">Class 1A</option>
+                    <option value="Class 1C">Class 1C</option>
+                  </select>
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
+                </div>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Training Level</span>
+                <div className="relative">
+                  <select
+                    className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                    value={filters.trainingLevel}
+                    onChange={(e) => handleFilterChange('trainingLevel', e.target.value)}
+                  >
+                    <option value="">All Training</option>
+                    <option value="BOSH">BOSH Certified</option>
+                    <option value="CCTV">CCTV Operator</option>
+                    <option value="VIP">VIP Protection</option>
+                  </select>
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
+                </div>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Application Status</span>
+                <div className="relative">
+                  <select
+                    className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                    value={filters.applicationStatus}
+                    onChange={(e) => handleFilterChange('applicationStatus', e.target.value)}
+                  >
+                    <option value="">Any Status</option>
+                    <option value="Pending">Pending Review</option>
+                    <option value="Screening">Screening</option>
+                    <option value="Interview">Interview Scheduled</option>
+                    <option value="Hired">Hired</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
+                </div>
+              </label>
+            </div>
+            <div className="flex gap-3 pt-4 lg:pt-0">
+              <button
+                onClick={handleResetFilters}
+                className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:ring-offset-1"
+              >
+                <span className="material-symbols-outlined text-lg">restart_alt</span>
+                Reset
+              </button>
+              <button
+                onClick={handleApplyFilters}
+                className="flex items-center gap-2 rounded-md bg-navy px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-navy-light focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-1"
+              >
+                <span className="material-symbols-outlined text-lg">filter_list</span>
+                Apply Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Data Grid / Table */}
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-gray-500">Loading applications...</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[800px] table-auto text-left text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr className="border-b border-gray-200">
+                      <th className="px-6 py-4 font-semibold tracking-wider">Applicant Name</th>
+                      <th className="px-6 py-4 font-semibold tracking-wider">Position Applied</th>
+                      <th className="px-6 py-4 font-semibold tracking-wider">
+                        <div className="flex items-center gap-1 cursor-pointer hover:text-navy">
+                          Applied Date
+                          <span className="material-symbols-outlined text-base">arrow_drop_down</span>
+                        </div>
+                      </th>
+                      <th className="px-6 py-4 font-semibold tracking-wider">License Status</th>
+                      <th className="px-6 py-4 font-semibold tracking-wider">Status</th>
+                      <th className="px-6 py-4 font-semibold tracking-wider text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {paginatedApplications.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                          No applications found
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedApplications.map((app) => {
+                        const applicant = app.applicants
+                        return (
+                          <tr key={app.id} className="group hover:bg-blue-50/30 transition-colors">
+                            <td className="whitespace-nowrap px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex size-10 items-center justify-center rounded-full bg-gray-200 text-gray-600 font-bold shadow-sm">
+                                  {getInitials(applicant?.first_name, applicant?.last_name)}
+                                </div>
+                                <div>
+                                  <div className="font-medium text-navy text-base">
+                                    {applicant?.first_name} {applicant?.last_name}
+                                  </div>
+                                  <div className="text-xs text-gray-500">ID: {applicant?.reference_code || `APP-${app.id}`}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-gray-700">
+                              {app.jobs?.title || 'General Application'}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-gray-700">
+                              {formatDate(app.submitted_at || app.created_at)}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4">
+                              {getLicenseStatusBadge(applicant?.license_status)}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4">
+                              {getStatusBadge(app.status)}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Link
+                                  to={`/admin/applicants/${app.id}`}
+                                  className="rounded p-1.5 text-gray-500 hover:bg-white hover:text-navy hover:shadow-sm transition-all"
+                                  title="View Profile"
+                                >
+                                  <span className="material-symbols-outlined text-[20px]">visibility</span>
+                                </Link>
+                                <button
+                                  className="rounded p-1.5 text-gray-500 hover:bg-white hover:text-primary hover:shadow-sm transition-all"
+                                  title="Edit Application"
+                                >
+                                  <span className="material-symbols-outlined text-[20px]">edit</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {/* Pagination */}
+              <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
+                <div className="text-sm text-gray-500">
+                  Showing <span className="font-medium text-gray-900">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
+                  <span className="font-medium text-gray-900">
+                    {Math.min(currentPage * itemsPerPage, applications.length)}
+                  </span>{' '}
+                  of <span className="font-medium text-gray-900">{applications.length}</span> results
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </main>
+  )
+}
+
+export default ApplicantsManagement
+
