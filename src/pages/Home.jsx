@@ -18,9 +18,9 @@ const Home = () => {
   const fallbackJobs = [
     {
       id: 1,
-      title: "Senior Security Officer",
-      location: "Downtown Financial District",
-      salary: "$24 - $28/hr",
+      title: "Security Guard (Armed)",
+      location: "Makati City, Metro Manila",
+      salary: "₱18,000 - ₱22,000/month",
       type: "Full-time",
       shift: "Night Shift",
       image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDZRk1m2i3zfyB3hCaKff_AaKIkUS-CTpDqys4aGCynnaHv0j12a4W1adJzL-j7qLkeNbOXgCg1a_H8CNti8u0ayjNHdYwra9uxSx49Sni_0sEIAnbPttmR-zqjVOp8vc4p3QT6qrWiEDfYD2oZ-VRtGilar8Bj6EKSmIk8duqo0pUnz7GrfY-HcBgMROD8VwkQEhcjfHBmuy9pkJ013rxG65VXxQmd6SRD6cMr_NnKjc2s8AaT9IzN9G0GCI9QOjO1jkqmZa3BKl0",
@@ -31,44 +31,44 @@ const Home = () => {
     },
     {
       id: 2,
-      title: "CCTV Surveillance Operator",
-      location: "Central Monitoring Station",
-      salary: "$22/hr",
-      type: "Rotating Shift",
-      shift: "Indoors",
+      title: "CCTV Operator",
+      location: "Quezon City, Metro Manila",
+      salary: "₱16,000 - ₱20,000/month",
+      type: "Full-time",
+      shift: "Rotating Shift",
       image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAd3CslepwCSCpzvnCvkdjTpLzFZo7a4Etdl0lv97RQpd0h28B4gQZBPPK5zeKow3OM3jsmbGeeBZx5P9B7rpa1lG9V1-cGrI8ftwtDNudIM0nlajhnlbeeXbghOIGz8RHQuwFQb3MO34wjCfprCTIPe5k97fse0DsQREMslQTr3A_PifwdY3uad8mQmNsFDsix0nDMfF0Ts3IhftoVa_lJ7tNXmP75zhcVr7wdoR9G48rUJJIurAwWJc1JSZeIt9g75dmj9Lk-bAU",
       category: "CCTV Operator"
     },
     {
       id: 3,
-      title: "Event Security Specialist",
-      location: "Stadium & Arena Complex",
-      salary: "$30/hr",
-      type: "Contract",
-      shift: "Weekends",
+      title: "Security Guard (Unarmed)",
+      location: "BGC, Taguig City",
+      salary: "₱15,000 - ₱18,000/month",
+      type: "Full-time",
+      shift: "Day Shift",
       image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBh9NMyTEvvaGeIKwMO8q4oXClyDNEfQZbeGYFYAkN8akCAZ24d5EgqzkxMRYvQzMGHKGBvpT01CapUkx4T2G2IAUzZhq6TvhBt4649rDmEobaxK5WreRqjiA1hDNJ2QojG35dXwHl-ECy-06STI2vJVHMyssr7x6GWL0nLx9ixPB10hKhW2yNOxPv6danYy-Gb_bSV5cu-ntXN_q_ljLo9xD2YOApmT13Y4GG5Ncg6AjnlN8Tvdlo-XdtxJykbRqlJv4iu6SHwvWA",
       badge_text: "Featured",
       badge_icon: "star",
       badge_color: "white",
-      category: "Armed Guard"
+      category: "Unarmed"
     },
     {
       id: 4,
-      title: "Front Desk Concierge Security",
-      location: "Tech Hub Office Park",
-      salary: "$20/hr",
-      type: "Part-time",
-      shift: "Morning",
+      title: "Security Guard (Mall)",
+      location: "SM Megamall, Mandaluyong",
+      salary: "₱16,000 - ₱19,000/month",
+      type: "Full-time",
+      shift: "Rotating Shift",
       image: "https://lh3.googleusercontent.com/aida-public/AB6AXuCvKqooubCoZGLRW7V4ltaM6NioiQHhGVpY1y-vsWMHOvpsiD-DzwmTBjXElR_57s0VowCVX2o5eOku1mGsFcxYO-YU7Gv_zUaAGnD0J32av5BscfikETzCx5bM8NAaxQCGB0ts0_cbO9taEVpE5tN4bjfCYp5sUoXMmac4gIUhcQFm_OCku93Vkw-mNm05jJumUA1tHqgguVbP0YyOjddNAXl9BGQQPhcQI4LLzIrwKmVfEYJ5AxuHY8FZXU7ZshksmOpmhyeeS4c",
       category: "Unarmed"
     },
     {
       id: 5,
-      title: "Mobile Patrol Officer",
-      location: "Westside Industrial Zone",
-      salary: "$23/hr",
+      title: "Mobile Patrol Guard",
+      location: "Pasig City, Metro Manila",
+      salary: "₱17,000 - ₱21,000/month",
       type: "Full-time",
-      shift: "Graveyard",
+      shift: "Graveyard Shift",
       image: "https://lh3.googleusercontent.com/aida-public/AB6AXuC1bg08hhvOVTxQc6qVqHCSaooNdV2mj5taGFS5ox5-4rncQ0vqOShI017F-MtNCkpigVEY4oXl0jqcG9fIYmfSYBJAOP4x2Jl5lDhSKPbCsMXA8h187ooq2ksnL4Obiwix2LKWVwLWFxGnbDDyr0WtrqWnd85r-Jh-WzgFZsbQ98nefREOnh4BDSgOtZBO-v01Fa_KSsuNd9F6eot95kllgrwffensJQ2O56wtZep1fzDsxu4sdpYfAmapl1OmFOMUToTU1alFvII",
       category: "Patrol"
     }
@@ -424,15 +424,15 @@ const Home = () => {
             <div className="flex flex-col gap-3 text-text-muted text-sm">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-[18px]">phone</span>
-                <span>(800) 555-0123</span>
+                <span>(02) 8921 0001</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-[18px]">mail</span>
-                <span>careers@epowersecurity.com</span>
+                <span>epower.2012@yahoo.com</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-[18px]">pin_drop</span>
-                <span>123 Security Blvd, New York, NY</span>
+                <span>Bonny Serrano Ave, Cubao, Quezon City, Metro Manila</span>
               </div>
             </div>
           </div>
