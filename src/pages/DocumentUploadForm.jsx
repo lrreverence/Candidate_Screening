@@ -338,10 +338,10 @@ const DocumentUploadForm = () => {
             {hasFile ? (
               <>
                 <p className="text-primary text-sm font-medium break-all px-4">{file.name}</p>
-                <p className="text-[#92c9a8] text-xs">{formatFileSize(file.size)}</p>
+                <p className="text-[#93c5fd] text-xs">{formatFileSize(file.size)}</p>
               </>
             ) : (
-              <p className="text-[#92c9a8] text-xs">{acceptedFormats}</p>
+              <p className="text-[#93c5fd] text-xs">{acceptedFormats}</p>
             )}
           </div>
 
@@ -354,7 +354,7 @@ const DocumentUploadForm = () => {
                   e.stopPropagation()
                   onRemove(type)
                 }}
-                className="flex items-center justify-center rounded-full h-10 w-10 bg-border-dark text-[#92c9a8] hover:text-white hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                className="flex items-center justify-center rounded-full h-10 w-10 bg-border-dark text-[#93c5fd] hover:text-white hover:bg-red-500/20 hover:text-red-400 transition-colors"
                 title="Remove file"
               >
                 <span className="material-symbols-outlined text-xl">delete</span>
@@ -431,7 +431,7 @@ const DocumentUploadForm = () => {
             <h1 className="text-white text-3xl md:text-4xl font-bold leading-tight tracking-tight">
               Upload Your Documents
             </h1>
-            <p className="text-[#92c9a8] text-sm md:text-base font-normal leading-relaxed max-w-2xl">
+            <p className="text-[#93c5fd] text-sm md:text-base font-normal leading-relaxed max-w-2xl">
               Please provide your Resume, 201 File, and ID Photo. Ensure all text is legible.
               <br className="hidden md:block" />
               Accepted formats: PDF, JPG, PNG. Max file size: 10MB.
@@ -474,9 +474,9 @@ const DocumentUploadForm = () => {
             </div>
 
             {/* Additional Info / Help */}
-            <div className="rounded-xl bg-[#1a3326] p-4 flex items-start gap-3 border border-border-dark">
-              <span className="material-symbols-outlined text-[#92c9a8] mt-0.5">info</span>
-              <p className="text-sm text-[#92c9a8] leading-relaxed">
+            <div className="rounded-xl bg-[#1e293b] p-4 flex items-start gap-3 border border-border-dark">
+              <span className="material-symbols-outlined text-[#93c5fd] mt-0.5">info</span>
+              <p className="text-sm text-[#93c5fd] leading-relaxed">
                 <strong>Note:</strong> The 201 File must include your NBI Clearance, Birth Certificate, and Government Numbers (SSS, PhilHealth, Pag-IBIG). If you don't have all documents ready, you can save your progress and return later.
               </p>
             </div>
@@ -494,7 +494,7 @@ const DocumentUploadForm = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex items-center justify-center rounded-full h-12 px-10 bg-primary text-background-dark font-bold hover:bg-green-400 transition-colors shadow-[0_0_20px_rgba(43,238,121,0.2)] w-full sm:w-auto disabled:opacity-50"
+                className="flex items-center justify-center rounded-full h-12 px-10 bg-primary text-background-dark font-bold hover:bg-blue-400 transition-colors shadow-[0_0_20px_rgba(59,130,246,0.2)] w-full sm:w-auto disabled:opacity-50"
               >
                 {loading ? 'Saving...' : 'Next Step'}
                 <span className="ml-2 material-symbols-outlined text-sm">arrow_forward</span>

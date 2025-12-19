@@ -269,7 +269,7 @@ const ApplicationForm = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display transition-colors duration-200">
       {/* Navigation */}
-      <header className="border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#112218]">
+      <header className="border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#0f172a]">
         <div className="px-4 lg:px-8 py-4 flex items-center justify-between max-w-7xl mx-auto w-full">
           <Link to="/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-background-dark">
@@ -309,18 +309,18 @@ const ApplicationForm = () => {
         </div>
 
         {/* Progress Indicator */}
-        <div className="bg-white dark:bg-[#193324] p-6 rounded-xl border border-gray-200 dark:border-white/5 mb-10 shadow-sm">
+        <div className="bg-white dark:bg-[#1e293b] p-6 rounded-xl border border-gray-200 dark:border-white/5 mb-10 shadow-sm">
           <div className="flex justify-between mb-4 text-sm font-medium">
             <span className="text-primary">Step 1: Personal Info</span>
             <span className="text-gray-400">Step 1 of 4</span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-black/30 rounded-full h-2.5">
-            <div className="bg-primary h-2.5 rounded-full w-[25%] shadow-[0_0_10px_rgba(43,238,121,0.5)]"></div>
+            <div className="bg-primary h-2.5 rounded-full w-[25%] shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
           </div>
         </div>
 
         {/* Main Form Card */}
-        <div className="bg-white dark:bg-[#193324] rounded-2xl p-6 md:p-10 border border-gray-200 dark:border-white/5 shadow-xl">
+        <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 md:p-10 border border-gray-200 dark:border-white/5 shadow-xl">
           <h2 className="text-xl font-bold mb-8 flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-white/10">
             <span className="material-symbols-outlined text-primary">person</span>
             Identity Information
@@ -517,7 +517,7 @@ const ApplicationForm = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full md:w-auto px-10 py-4 rounded-full bg-primary text-background-dark font-bold hover:bg-primary/90 transition-all transform hover:scale-[1.02] shadow-[0_0_20px_rgba(43,238,121,0.3)] flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full md:w-auto px-10 py-4 rounded-full bg-primary text-background-dark font-bold hover:bg-primary/90 transition-all transform hover:scale-[1.02] shadow-[0_0_20px_rgba(59,130,246,0.3)] flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {loading ? 'Saving...' : (
                   <>
@@ -540,7 +540,7 @@ const ApplicationForm = () => {
         </div>
       </main>
 
-      <footer className="py-8 border-t border-gray-200 dark:border-white/10 mt-auto bg-white dark:bg-[#112218]">
+      <footer className="py-8 border-t border-gray-200 dark:border-white/10 mt-auto bg-white dark:bg-[#0f172a]">
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-sm text-gray-500 dark:text-gray-400">
           <p>© 2025 E Power Security. All rights reserved.</p>
           <div className="flex gap-6 mt-4 md:mt-0">

@@ -129,7 +129,7 @@ const ApplicationSuccess = () => {
   return (
     <div className="bg-background-light dark:bg-background-dark text-[#111418] dark:text-white font-display min-h-screen flex flex-col overflow-x-hidden">
       {/* Navigation Bar */}
-      <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#e7eef4] dark:border-b-[#234832] px-4 py-3 md:px-10 bg-background-light dark:bg-background-dark z-20">
+      <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#e7eef4] dark:border-b-[#1e40af] px-4 py-3 md:px-10 bg-background-light dark:bg-background-dark z-20">
         <Link to="/" className="flex items-center gap-4 text-[#111418] dark:text-white">
           <div className="size-8 flex items-center justify-center rounded-lg bg-primary/20 text-primary">
             <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>shield</span>
@@ -145,7 +145,7 @@ const ApplicationSuccess = () => {
           {user ? (
             <span className="text-[#111418] dark:text-white text-sm">{user.email}</span>
           ) : (
-            <Link to="/" className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-4 bg-[#e7eef4] dark:bg-[#234832] text-[#111418] dark:text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary hover:text-background-dark transition-all">
+            <Link to="/" className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-4 bg-[#e7eef4] dark:bg-[#1e40af] text-[#111418] dark:text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary hover:text-background-dark transition-all">
               <span className="truncate">Login</span>
             </Link>
           )}
@@ -161,12 +161,12 @@ const ApplicationSuccess = () => {
           {/* Success State Card */}
           <div className="flex flex-col items-center gap-6 text-center px-4">
             {/* Large Success Icon with Glow */}
-            <div className="relative flex items-center justify-center size-24 rounded-full bg-primary/10 border-4 border-primary/20 shadow-[0_0_40px_-10px_rgba(43,238,121,0.3)]">
+            <div className="relative flex items-center justify-center size-24 rounded-full bg-primary/10 border-4 border-primary/20 shadow-[0_0_40px_-10px_rgba(59,130,246,0.3)]">
               <span className="material-symbols-outlined text-primary" style={{ fontSize: '48px' }}>check_circle</span>
             </div>
             <div className="flex flex-col items-center gap-2">
               <h1 className="text-[#111418] dark:text-white text-3xl md:text-4xl font-bold leading-tight tracking-tight">Application Received</h1>
-              <p className="text-[#637588] dark:text-[#92c9a8] text-base font-normal leading-normal max-w-[480px]">
+              <p className="text-[#637588] dark:text-[#93c5fd] text-base font-normal leading-normal max-w-[480px]">
                 Thank you for applying to E Power Security. Your details have been securely transmitted to our recruitment team.
               </p>
             </div>
@@ -175,15 +175,15 @@ const ApplicationSuccess = () => {
           {/* Reference ID Card */}
           {referenceId && (
             <div className="w-full">
-              <div className="bg-white dark:bg-[#193324] border border-[#e7eef4] dark:border-[#326747] rounded-xl p-6 md:p-8 flex flex-col md:flex-row items-center md:justify-between gap-6 shadow-sm">
+              <div className="bg-white dark:bg-[#1e293b] border border-[#e7eef4] dark:border-[#2563eb] rounded-xl p-6 md:p-8 flex flex-col md:flex-row items-center md:justify-between gap-6 shadow-sm">
                 <div className="flex flex-col gap-1 items-center md:items-start text-center md:text-left">
-                  <p className="text-[#637588] dark:text-[#92c9a8] text-sm font-bold tracking-wider uppercase">Your Reference ID</p>
+                  <p className="text-[#637588] dark:text-[#93c5fd] text-sm font-bold tracking-wider uppercase">Your Reference ID</p>
                   <p className="text-[#111418] dark:text-white text-2xl md:text-3xl font-mono font-bold tracking-tight">{referenceId}</p>
                   <p className="text-xs text-[#637588] dark:text-[#6a8f7a] mt-1">Please save this ID for future correspondence.</p>
                 </div>
                 <button
                   onClick={handleCopyId}
-                  className="group flex items-center justify-center gap-2 h-12 px-6 rounded-full bg-[#e7eef4] dark:bg-[#112218] hover:bg-primary dark:hover:bg-primary text-[#111418] dark:text-primary dark:hover:text-[#112218] transition-all border border-transparent dark:border-[#326747] dark:hover:border-primary shrink-0 w-full md:w-auto"
+                  className="group flex items-center justify-center gap-2 h-12 px-6 rounded-full bg-[#e7eef4] dark:bg-[#0f172a] hover:bg-primary dark:hover:bg-primary text-[#111418] dark:text-primary dark:hover:text-[#0f172a] transition-all border border-transparent dark:border-[#2563eb] dark:hover:border-primary shrink-0 w-full md:w-auto"
                 >
                   <span className="material-symbols-outlined text-xl">
                     {copied ? 'check' : 'content_copy'}
@@ -201,14 +201,14 @@ const ApplicationSuccess = () => {
               {nextSteps.map((step, index) => (
                 <div
                   key={index}
-                  className="flex flex-row md:flex-col items-center md:items-start gap-4 p-4 rounded-xl bg-white dark:bg-[#193324]/50 border border-[#e7eef4] dark:border-[#326747]/50"
+                  className="flex flex-row md:flex-col items-center md:items-start gap-4 p-4 rounded-xl bg-white dark:bg-[#1e293b]/50 border border-[#e7eef4] dark:border-[#2563eb]/50"
                 >
-                  <div className="flex items-center justify-center size-10 rounded-full bg-[#e7eef4] dark:bg-[#234832] text-[#111418] dark:text-white shrink-0">
+                  <div className="flex items-center justify-center size-10 rounded-full bg-[#e7eef4] dark:bg-[#1e40af] text-[#111418] dark:text-white shrink-0">
                     <span className="material-symbols-outlined text-xl">{step.icon}</span>
                   </div>
                   <div className="flex flex-col">
                     <h4 className="text-[#111418] dark:text-white text-base font-bold">{step.title}</h4>
-                    <p className="text-[#637588] dark:text-[#92c9a8] text-sm mt-1">{step.description}</p>
+                    <p className="text-[#637588] dark:text-[#93c5fd] text-sm mt-1">{step.description}</p>
                   </div>
                 </div>
               ))}
@@ -219,13 +219,13 @@ const ApplicationSuccess = () => {
           <div className="flex flex-col sm:flex-row gap-4 w-full mt-6 justify-center">
             <Link
               to="/"
-              className="flex-1 min-w-[160px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-primary text-[#102217] text-base font-bold leading-normal tracking-[0.015em] hover:brightness-110 transition-all shadow-[0_4px_20px_-4px_rgba(43,238,121,0.4)] flex"
+              className="flex-1 min-w-[160px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-primary text-[#0f172a] text-base font-bold leading-normal tracking-[0.015em] hover:brightness-110 transition-all shadow-[0_4px_20px_-4px_rgba(59,130,246,0.4)] flex"
             >
               <span className="truncate">Return to Home</span>
             </Link>
             <Link
               to="/"
-              className="flex-1 min-w-[160px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-transparent border border-[#e7eef4] dark:border-[#326747] text-[#111418] dark:text-white text-base font-bold leading-normal tracking-[0.015em] hover:bg-[#e7eef4] dark:hover:bg-[#193324] transition-all flex"
+              className="flex-1 min-w-[160px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-transparent border border-[#e7eef4] dark:border-[#2563eb] text-[#111418] dark:text-white text-base font-bold leading-normal tracking-[0.015em] hover:bg-[#e7eef4] dark:hover:bg-[#1e293b] transition-all flex"
             >
               <span className="truncate">View Other Openings</span>
             </Link>
@@ -234,13 +234,13 @@ const ApplicationSuccess = () => {
       </main>
 
       {/* Footer */}
-      <footer className="flex flex-col gap-6 px-5 py-10 text-center border-t border-[#e7eef4] dark:border-[#234832] bg-background-light dark:bg-background-dark mt-auto">
+      <footer className="flex flex-col gap-6 px-5 py-10 text-center border-t border-[#e7eef4] dark:border-[#1e40af] bg-background-light dark:bg-background-dark mt-auto">
         <div className="flex flex-wrap items-center justify-center gap-6">
-          <a className="text-[#637588] dark:text-[#92c9a8] text-base font-normal leading-normal hover:text-primary transition-colors" href="#">Privacy Policy</a>
-          <a className="text-[#637588] dark:text-[#92c9a8] text-base font-normal leading-normal hover:text-primary transition-colors" href="#">Terms of Service</a>
-          <a className="text-[#637588] dark:text-[#92c9a8] text-base font-normal leading-normal hover:text-primary transition-colors" href="#">Support</a>
+          <a className="text-[#637588] dark:text-[#93c5fd] text-base font-normal leading-normal hover:text-primary transition-colors" href="#">Privacy Policy</a>
+          <a className="text-[#637588] dark:text-[#93c5fd] text-base font-normal leading-normal hover:text-primary transition-colors" href="#">Terms of Service</a>
+          <a className="text-[#637588] dark:text-[#93c5fd] text-base font-normal leading-normal hover:text-primary transition-colors" href="#">Support</a>
         </div>
-        <p className="text-[#637588] dark:text-[#92c9a8] text-sm font-normal leading-normal">© 2025 E Power Security. All rights reserved.</p>
+        <p className="text-[#637588] dark:text-[#93c5fd] text-sm font-normal leading-normal">© 2025 E Power Security. All rights reserved.</p>
       </footer>
     </div>
   )

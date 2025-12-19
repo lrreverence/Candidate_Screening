@@ -211,7 +211,7 @@ const QualificationsForm = () => {
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display min-h-screen flex flex-col overflow-x-hidden">
       {/* Top Navigation */}
-      <div className="w-full bg-background-light dark:bg-background-dark border-b border-gray-200 dark:border-[#234832]">
+      <div className="w-full bg-background-light dark:bg-background-dark border-b border-gray-200 dark:border-[#1e40af]">
         <header className="flex items-center justify-between whitespace-nowrap px-6 lg:px-10 py-4 max-w-7xl mx-auto w-full">
           <Link to="/" className="flex items-center gap-4 text-slate-900 dark:text-white">
             <div className="size-8 text-primary">
@@ -228,7 +228,7 @@ const QualificationsForm = () => {
             {user ? (
               <span className="text-slate-600 dark:text-gray-300 text-sm">{user.email}</span>
             ) : (
-              <Link to="/" className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-6 bg-primary text-[#112218] text-sm font-bold leading-normal hover:bg-green-400 transition-colors">
+              <Link to="/" className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-6 bg-primary text-[#0f172a] text-sm font-bold leading-normal hover:bg-blue-400 transition-colors">
                 <span className="truncate">Login</span>
               </Link>
             )}
@@ -244,11 +244,11 @@ const QualificationsForm = () => {
             <div className="flex gap-6 justify-between items-end">
               <div>
                 <p className="text-slate-900 dark:text-white text-lg font-bold leading-normal">Application Progress</p>
-                <p className="text-slate-500 dark:text-[#92c9a8] text-sm font-normal">Step 2 of 4: Qualifications</p>
+                <p className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">Step 2 of 4: Qualifications</p>
               </div>
               <span className="material-symbols-outlined text-primary text-3xl">verified</span>
             </div>
-            <div className="rounded-full bg-gray-200 dark:bg-[#326747] h-3 overflow-hidden">
+            <div className="rounded-full bg-gray-200 dark:bg-[#2563eb] h-3 overflow-hidden">
               <div className="h-full rounded-full bg-primary relative w-1/2">
                 <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/30 animate-pulse"></div>
               </div>
@@ -260,14 +260,14 @@ const QualificationsForm = () => {
             <h1 className="text-slate-900 dark:text-white text-3xl md:text-5xl font-black leading-tight tracking-[-0.033em]">
               Qualifications & Licenses
             </h1>
-            <p className="text-slate-600 dark:text-[#92c9a8] text-base md:text-lg font-normal leading-relaxed max-w-2xl">
+            <p className="text-slate-600 dark:text-[#93c5fd] text-base md:text-lg font-normal leading-relaxed max-w-2xl">
               Please provide details about your certifications and physical attributes to ensure you match the requirements for our security positions.
             </p>
           </div>
 
           <form onSubmit={handleNext} className="flex flex-col gap-8">
             {/* Licenses Checklist */}
-            <div className="bg-surface-light dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-[#326747]">
+            <div className="bg-surface-light dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-[#2563eb]">
               <h3 className="text-slate-900 dark:text-white text-xl font-bold mb-6 flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">badge</span>
                 Select Valid Licenses
@@ -279,18 +279,18 @@ const QualificationsForm = () => {
                     className={`group relative flex items-center gap-4 p-4 rounded-xl border ${
                       formData.licenses.includes(license.id)
                         ? 'border-primary dark:border-primary bg-primary/10'
-                        : 'border-gray-200 dark:border-[#326747] bg-background-light dark:bg-[#112218]'
+                        : 'border-gray-200 dark:border-[#2563eb] bg-background-light dark:bg-[#0f172a]'
                     } hover:border-primary dark:hover:border-primary cursor-pointer transition-all`}
                   >
                     <input
                       type="checkbox"
                       checked={formData.licenses.includes(license.id)}
                       onChange={() => handleLicenseChange(license.id)}
-                      className="h-6 w-6 rounded border-gray-400 dark:border-[#326747] text-primary focus:ring-primary/50 focus:ring-offset-0 bg-transparent transition-colors"
+                      className="h-6 w-6 rounded border-gray-400 dark:border-[#2563eb] text-primary focus:ring-primary/50 focus:ring-offset-0 bg-transparent transition-colors"
                     />
                     <div className="flex flex-col">
                       <span className="text-slate-900 dark:text-white font-medium">{license.label}</span>
-                      <span className="text-slate-500 dark:text-[#92c9a8] text-xs">{license.subtitle}</span>
+                      <span className="text-slate-500 dark:text-[#93c5fd] text-xs">{license.subtitle}</span>
                     </div>
                   </label>
                 ))}
@@ -298,7 +298,7 @@ const QualificationsForm = () => {
             </div>
 
             {/* Physical Attributes Section */}
-            <div className="bg-surface-light dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-[#326747]">
+            <div className="bg-surface-light dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-[#2563eb]">
               <h3 className="text-slate-900 dark:text-white text-xl font-bold mb-6 flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">accessibility_new</span>
                 Physical Attributes
@@ -307,11 +307,11 @@ const QualificationsForm = () => {
                 <label className="flex flex-col w-full md:w-1/2 group">
                   <p className="text-slate-900 dark:text-white text-base font-medium leading-normal pb-2 flex justify-between">
                     Height
-                    <span className="text-slate-500 dark:text-[#92c9a8] text-sm font-normal">in cm</span>
+                    <span className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">in cm</span>
                   </p>
                   <div className="relative">
                     <input
-                      className="form-input flex w-full rounded-full text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#326747] bg-background-light dark:bg-[#193324] h-14 placeholder:text-slate-400 dark:placeholder:text-[#92c9a8]/50 px-6 text-base font-normal leading-normal transition-shadow"
+                      className="form-input flex w-full rounded-full text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#2563eb] bg-background-light dark:bg-[#1e293b] h-14 placeholder:text-slate-400 dark:placeholder:text-[#93c5fd]/50 px-6 text-base font-normal leading-normal transition-shadow"
                       placeholder="180"
                       type="number"
                       value={formData.height_cm}
@@ -325,11 +325,11 @@ const QualificationsForm = () => {
                 <label className="flex flex-col w-full md:w-1/2 group">
                   <p className="text-slate-900 dark:text-white text-base font-medium leading-normal pb-2 flex justify-between">
                     Weight
-                    <span className="text-slate-500 dark:text-[#92c9a8] text-sm font-normal">in kg</span>
+                    <span className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">in kg</span>
                   </p>
                   <div className="relative">
                     <input
-                      className="form-input flex w-full rounded-full text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#326747] bg-background-light dark:bg-[#193324] h-14 placeholder:text-slate-400 dark:placeholder:text-[#92c9a8]/50 px-6 text-base font-normal leading-normal transition-shadow"
+                      className="form-input flex w-full rounded-full text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#2563eb] bg-background-light dark:bg-[#1e293b] h-14 placeholder:text-slate-400 dark:placeholder:text-[#93c5fd]/50 px-6 text-base font-normal leading-normal transition-shadow"
                       placeholder="85"
                       type="number"
                       value={formData.weight_kg}
@@ -344,21 +344,21 @@ const QualificationsForm = () => {
             </div>
 
             {/* Document Upload Area */}
-            <div className="bg-surface-light dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-[#326747]">
+            <div className="bg-surface-light dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-[#2563eb]">
               <h3 className="text-slate-900 dark:text-white text-xl font-bold mb-4 flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">upload_file</span>
                 Documentation
               </h3>
               <div
-                className="mt-2 flex justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-[#326747] px-6 py-10 hover:bg-gray-50 dark:hover:bg-[#193324] transition-colors cursor-pointer group"
+                className="mt-2 flex justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-[#2563eb] px-6 py-10 hover:bg-gray-50 dark:hover:bg-[#1e293b] transition-colors cursor-pointer group"
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
                 onClick={() => document.getElementById('file-upload').click()}
               >
                 <div className="text-center">
-                  <span className="material-symbols-outlined text-gray-400 dark:text-[#92c9a8] text-5xl group-hover:text-primary transition-colors">cloud_upload</span>
+                  <span className="material-symbols-outlined text-gray-400 dark:text-[#93c5fd] text-5xl group-hover:text-primary transition-colors">cloud_upload</span>
                   <div className="mt-4 flex text-sm leading-6 text-slate-600 dark:text-gray-400">
-                    <span className="relative cursor-pointer rounded-md font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 hover:text-green-400">
+                    <span className="relative cursor-pointer rounded-md font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 hover:text-blue-400">
                       <span>Upload a file</span>
                     </span>
                     <p className="pl-1">or drag and drop</p>
@@ -393,7 +393,7 @@ const QualificationsForm = () => {
               <button
                 type="button"
                 onClick={handleBack}
-                className="group flex items-center gap-2 px-6 py-3 rounded-full border border-gray-300 dark:border-[#326747] text-slate-700 dark:text-white font-bold hover:bg-gray-100 dark:hover:bg-[#193324] transition-all"
+                className="group flex items-center gap-2 px-6 py-3 rounded-full border border-gray-300 dark:border-[#2563eb] text-slate-700 dark:text-white font-bold hover:bg-gray-100 dark:hover:bg-[#1e293b] transition-all"
               >
                 <span className="material-symbols-outlined text-lg transition-transform group-hover:-translate-x-1">arrow_back</span>
                 Back
@@ -401,7 +401,7 @@ const QualificationsForm = () => {
               <button
                 type="submit"
                 disabled={loading || uploading}
-                className="group flex items-center gap-2 px-8 py-3 rounded-full bg-primary text-[#112218] font-bold shadow-[0_0_15px_rgba(43,238,121,0.3)] hover:shadow-[0_0_25px_rgba(43,238,121,0.5)] hover:bg-[#1add6a] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group flex items-center gap-2 px-8 py-3 rounded-full bg-primary text-[#0f172a] font-bold shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] hover:bg-[#2563eb] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Saving...' : 'Next Step'}
                 <span className="material-symbols-outlined text-lg transition-transform group-hover:translate-x-1">arrow_forward</span>

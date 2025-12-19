@@ -105,7 +105,7 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-[#112218] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 placeholder="John Doe"
               />
             </div>
@@ -120,7 +120,7 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-[#112218] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 placeholder="you@example.com"
               />
             </div>
@@ -136,7 +136,7 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full px-4 py-3 bg-[#112218] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 placeholder="At least 6 characters"
               />
             </div>
@@ -152,7 +152,7 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full px-4 py-3 bg-[#112218] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 placeholder="Confirm your password"
               />
             </div>
@@ -166,11 +166,11 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
               />
               <label htmlFor="terms" className="text-sm text-text-muted">
                 I agree to the{' '}
-                <a href="#" className="text-primary hover:text-[#5aff9d] transition-colors">
+                <a href="#" className="text-primary hover:text-[#60a5fa] transition-colors">
                   Terms of Service
                 </a>{' '}
                 and{' '}
-                <a href="#" className="text-primary hover:text-[#5aff9d] transition-colors">
+                <a href="#" className="text-primary hover:text-[#60a5fa] transition-colors">
                   Privacy Policy
                 </a>
               </label>
@@ -179,7 +179,7 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-12 rounded-full bg-primary text-[#112218] text-sm font-bold hover:bg-[#5aff9d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full h-12 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -198,7 +198,7 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
               Already have an account?{' '}
               <button
                 onClick={onSwitchToLogin}
-                className="text-primary hover:text-[#5aff9d] font-medium transition-colors"
+                className="text-primary hover:text-[#60a5fa] font-medium transition-colors"
               >
                 Sign in
               </button>

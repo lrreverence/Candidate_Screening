@@ -68,7 +68,7 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-[#112218] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 placeholder="you@example.com"
               />
             </div>
@@ -83,7 +83,7 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-[#112218] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 placeholder="Enter your password"
               />
             </div>
@@ -95,7 +95,7 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
               </label>
               <button
                 type="button"
-                className="text-sm text-primary hover:text-[#5aff9d] transition-colors"
+                className="text-sm text-primary hover:text-[#60a5fa] transition-colors"
               >
                 Forgot password?
               </button>
@@ -104,7 +104,7 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-12 rounded-full bg-primary text-[#112218] text-sm font-bold hover:bg-[#5aff9d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full h-12 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -123,7 +123,7 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
               Don't have an account?{' '}
               <button
                 onClick={onSwitchToSignup}
-                className="text-primary hover:text-[#5aff9d] font-medium transition-colors"
+                className="text-primary hover:text-[#60a5fa] font-medium transition-colors"
               >
                 Sign up
               </button>

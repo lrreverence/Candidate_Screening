@@ -143,7 +143,7 @@ const Home = () => {
   return (
     <div className="bg-background-light dark:bg-background-dark font-display min-h-screen flex flex-col overflow-x-hidden text-white">
       {/* Navbar */}
-      <header className="sticky top-0 z-50 w-full border-b border-[#234832] bg-[#112218]/95 backdrop-blur-md">
+      <header className="sticky top-0 z-50 w-full border-b border-[#1e40af] bg-[#0f172a]/95 backdrop-blur-md">
         <div className="px-4 md:px-10 py-3 max-w-[1200px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4 text-white">
             <div className="size-8 text-primary">
@@ -162,7 +162,7 @@ const Home = () => {
                   onClick={async () => {
                     await signOut()
                   }}
-                  className="flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#2c5a3e] transition-colors"
+                  className="flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#1e3a8a] transition-colors"
                 >
                   Sign Out
                 </button>
@@ -171,13 +171,13 @@ const Home = () => {
               <>
                 <button
                   onClick={() => setShowLoginModal(true)}
-                  className="hidden sm:flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#2c5a3e] transition-colors"
+                  className="hidden sm:flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#1e3a8a] transition-colors"
                 >
                   Login
                 </button>
                 <button
                   onClick={() => setShowSignupModal(true)}
-                  className="flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-primary text-[#112218] text-sm font-bold hover:bg-[#5aff9d] transition-colors"
+                  className="flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors"
                 >
                   Register
                 </button>
@@ -194,7 +194,7 @@ const Home = () => {
           <div 
             className="w-full max-w-[1200px] rounded-2xl md:rounded-3xl overflow-hidden relative min-h-[480px] flex flex-col items-center justify-center p-6 text-center bg-cover bg-center"
             style={{
-              backgroundImage: `linear-gradient(rgba(17, 34, 24, 0.7) 0%, rgba(17, 34, 24, 0.9) 100%), url("${heroBackgroundImage}")`
+              backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%), url("${heroBackgroundImage}")`
             }}
           >
             <div className="flex flex-col gap-4 mb-8 max-w-2xl relative z-10">
@@ -221,7 +221,7 @@ const Home = () => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
-                <button className="hidden sm:flex shrink-0 h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-primary text-[#112218] text-sm font-bold hover:bg-[#5aff9d] transition-colors">
+                <button className="hidden sm:flex shrink-0 h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors">
                   Find Jobs
                 </button>
               </label>
@@ -239,7 +239,7 @@ const Home = () => {
                   onClick={() => setSelectedCategory('All Jobs')}
                   className={`flex h-9 shrink-0 items-center gap-2 px-4 rounded-full text-sm font-bold transition ${
                     selectedCategory === 'All Jobs' 
-                      ? 'bg-primary text-[#112218]' 
+                      ? 'bg-primary text-[#0f172a]' 
                       : 'bg-card-dark border border-secondary text-white hover:bg-secondary'
                   }`}
                 >
@@ -249,7 +249,7 @@ const Home = () => {
                   onClick={() => setSelectedCategory('Armed Guard')}
                   className={`flex h-9 shrink-0 items-center gap-2 px-4 rounded-full text-sm font-medium transition ${
                     selectedCategory === 'Armed Guard' 
-                      ? 'bg-primary text-[#112218]' 
+                      ? 'bg-primary text-[#0f172a]' 
                       : 'bg-card-dark border border-secondary text-white hover:bg-secondary'
                   }`}
                 >
@@ -260,7 +260,7 @@ const Home = () => {
                   onClick={() => setSelectedCategory('Unarmed')}
                   className={`flex h-9 shrink-0 items-center gap-2 px-4 rounded-full text-sm font-medium transition ${
                     selectedCategory === 'Unarmed' 
-                      ? 'bg-primary text-[#112218]' 
+                      ? 'bg-primary text-[#0f172a]' 
                       : 'bg-card-dark border border-secondary text-white hover:bg-secondary'
                   }`}
                 >
@@ -271,7 +271,7 @@ const Home = () => {
                   onClick={() => setSelectedCategory('CCTV Operator')}
                   className={`flex h-9 shrink-0 items-center gap-2 px-4 rounded-full text-sm font-medium transition ${
                     selectedCategory === 'CCTV Operator' 
-                      ? 'bg-primary text-[#112218]' 
+                      ? 'bg-primary text-[#0f172a]' 
                       : 'bg-card-dark border border-secondary text-white hover:bg-secondary'
                   }`}
                 >
@@ -282,7 +282,7 @@ const Home = () => {
                   onClick={() => setSelectedCategory('Patrol')}
                   className={`flex h-9 shrink-0 items-center gap-2 px-4 rounded-full text-sm font-medium transition ${
                     selectedCategory === 'Patrol' 
-                      ? 'bg-primary text-[#112218]' 
+                      ? 'bg-primary text-[#0f172a]' 
                       : 'bg-card-dark border border-secondary text-white hover:bg-secondary'
                   }`}
                 >
@@ -301,7 +301,7 @@ const Home = () => {
                 {filteredJobs.map((job) => (
                   <article 
                     key={job.id}
-                    className="group relative flex flex-col bg-card-dark border border-[#234832] rounded-2xl overflow-hidden hover:border-primary/50 hover:shadow-[0_0_20px_rgba(43,238,121,0.1)] transition-all duration-300"
+                    className="group relative flex flex-col bg-card-dark border border-[#1e40af] rounded-2xl overflow-hidden hover:border-primary/50 hover:shadow-[0_0_20px_rgba(59,130,246,0.1)] transition-all duration-300"
                   >
                     <div 
                       className="h-40 w-full bg-cover bg-center relative"
@@ -344,7 +344,7 @@ const Home = () => {
                         </button>
                         <button 
                           onClick={() => handleApply(job.id)}
-                          className="flex-1 h-10 rounded-full bg-primary text-[#112218] text-sm font-bold hover:bg-[#5aff9d] transition-colors flex items-center justify-center gap-1"
+                          className="flex-1 h-10 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-1"
                         >
                           Apply
                           <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
@@ -354,7 +354,7 @@ const Home = () => {
                   </article>
                 ))}
                 {/* Job Card 6 (Apply CTA) */}
-                <article className="flex flex-col items-center justify-center text-center bg-[#112218] border-2 border-dashed border-[#234832] rounded-2xl p-6 min-h-[400px]">
+                <article className="flex flex-col items-center justify-center text-center bg-[#0f172a] border-2 border-dashed border-[#1e40af] rounded-2xl p-6 min-h-[400px]">
                   <div className="size-16 rounded-full bg-secondary/50 flex items-center justify-center mb-4">
                     <span className="material-symbols-outlined text-3xl text-primary">person_add</span>
                   </div>
@@ -362,7 +362,7 @@ const Home = () => {
                   <p className="text-text-muted mb-6">Join our talent pool. We are always looking for qualified professionals.</p>
                   <button 
                     onClick={() => handleApply(null)}
-                    className="h-10 px-6 rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#2c5a3e] transition-colors"
+                    className="h-10 px-6 rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#1e3a8a] transition-colors"
                   >
                     Submit General Application
                   </button>
@@ -373,7 +373,7 @@ const Home = () => {
         </section>
 
         {/* Stats Section */}
-        <section className="w-full px-4 md:px-10 py-12 md:py-16 mt-8 bg-card-dark border-y border-[#234832] flex justify-center">
+        <section className="w-full px-4 md:px-10 py-12 md:py-16 mt-8 bg-card-dark border-y border-[#1e40af] flex justify-center">
           <div className="w-full max-w-[1200px] flex flex-wrap justify-center gap-8 md:gap-16">
             {stats.map((stat, index) => (
               <div key={index} className="flex flex-col items-center text-center">
@@ -388,7 +388,7 @@ const Home = () => {
       </main>
 
       {/* Footer */}
-      <footer className="w-full bg-[#112218] pt-12 pb-8 px-4 md:px-10 border-t border-[#234832]">
+      <footer className="w-full bg-[#0f172a] pt-12 pb-8 px-4 md:px-10 border-t border-[#1e40af]">
         <div className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="col-span-1 md:col-span-1">
             <div className="flex items-center gap-2 text-white mb-4">
@@ -437,7 +437,7 @@ const Home = () => {
             </div>
           </div>
         </div>
-        <div className="border-t border-[#234832] pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-[#5a7a68]">
+        <div className="border-t border-[#1e40af] pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-[#60a5fa]">
           <p>© 2025 E Power Security. All rights reserved.</p>
           <div className="flex gap-4">
             <a className="hover:text-primary transition-colors" href="#">Terms of Service</a>

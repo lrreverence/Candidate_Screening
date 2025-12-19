@@ -150,7 +150,7 @@ const ApplicantsManagement = () => {
       'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
       'screening': { bg: 'bg-blue-100', text: 'text-navy', label: 'Screening' },
       'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
-      'hired': { bg: 'bg-green-100', text: 'text-green-800', label: 'Hired' },
+      'hired': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Hired' },
       'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' }
     }
 
@@ -164,7 +164,7 @@ const ApplicantsManagement = () => {
 
   const getLicenseStatusBadge = (licenseStatus) => {
     const statusMap = {
-      'valid': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', dot: 'bg-green-600', label: 'Valid' },
+      'valid': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-600', label: 'Valid' },
       'expired': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-600', label: 'Expired' },
       'review': { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-500', label: 'Review' },
       'pending': { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', dot: 'bg-gray-500', label: 'Pending' }
@@ -233,7 +233,7 @@ const ApplicantsManagement = () => {
                 <span className="material-symbols-outlined">groups</span>
               </div>
             </div>
-            <div className="mt-2 flex items-center text-xs text-green-600">
+            <div className="mt-2 flex items-center text-xs text-blue-600">
               <span className="material-symbols-outlined text-sm">trending_up</span>
               <span className="ml-1 font-medium">+12% from last month</span>
             </div>
@@ -258,11 +258,11 @@ const ApplicantsManagement = () => {
                 <p className="text-sm font-medium text-gray-500">Hired This Month</p>
                 <p className="mt-1 text-2xl font-bold text-navy">{stats.hired}</p>
               </div>
-              <div className="rounded-md bg-green-50 p-2 text-green-600">
+              <div className="rounded-md bg-blue-50 p-2 text-blue-600">
                 <span className="material-symbols-outlined">check_circle</span>
               </div>
             </div>
-            <div className="mt-2 flex items-center text-xs text-green-600">
+            <div className="mt-2 flex items-center text-xs text-blue-600">
               <span className="material-symbols-outlined text-sm">trending_up</span>
               <span className="ml-1 font-medium">+2% vs target</span>
             </div>

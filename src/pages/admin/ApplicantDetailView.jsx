@@ -157,7 +157,7 @@ const ApplicantDetailView = () => {
       'submitted': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Pending Review' },
       'screening': { bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/20', label: 'Screening' },
       'interview': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Interview' },
-      'hired': { bg: 'bg-green-500/10', text: 'text-green-500', border: 'border-green-500/20', label: 'Hired' },
+      'hired': { bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/20', label: 'Hired' },
       'rejected': { bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20', label: 'Rejected' }
     }
 
@@ -300,7 +300,7 @@ const ApplicantDetailView = () => {
                     {getInitials(applicant?.first_name, applicant?.last_name)}
                   </div>
                   <div className="absolute -bottom-2 -right-2 bg-[#111722] p-1 rounded-full">
-                    <div className="bg-green-500 rounded-full h-4 w-4 border-2 border-[#111722]" title="Online"></div>
+                    <div className="bg-blue-500 rounded-full h-4 w-4 border-2 border-[#111722]" title="Online"></div>
                   </div>
                 </div>
                 <div className="flex flex-col flex-1 min-w-0">
@@ -432,7 +432,7 @@ const ApplicantDetailView = () => {
                         </p>
                       </div>
                       <div className="text-right">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-green-500/20 text-green-400 border border-green-500/20">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/20">
                           Active
                         </span>
                       </div>
