@@ -32,28 +32,53 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
       const [firstName, ...lastNameParts] = fullName.split(' ')
       const lastName = lastNameParts.join(' ') || ''
 
-      const { error } = await signUp(email, password, {
+      const { data, error } = await signUp(email, password, {
         full_name: fullName,
         first_name: firstName,
         last_name: lastName,
       })
 
       if (error) {
-        setError(error.message)
+        // Provide user-friendly error messages
+        let errorMessage = error.message || 'Failed to create account. Please try again.'
+        if (error.message?.includes('User already registered')) {
+          errorMessage = 'An account with this email already exists. Please sign in instead.'
+        } else if (error.message?.includes('Password')) {
+          errorMessage = 'Password does not meet requirements. Please use a stronger password.'
+        } else if (error.message?.includes('email')) {
+          errorMessage = 'Please enter a valid email address.'
+        }
+        setError(errorMessage)
       } else {
-        setSuccess(true)
-        // Don't close immediately - show success message
-        setTimeout(() => {
-          onClose()
-          setEmail('')
-          setPassword('')
-          setConfirmPassword('')
-          setFullName('')
-          setSuccess(false)
-        }, 2000)
+        // Check if email confirmation is required
+        if (data?.user && !data?.session) {
+          // Email confirmation required
+          setSuccess(true)
+          setTimeout(() => {
+            onClose()
+            setEmail('')
+            setPassword('')
+            setConfirmPassword('')
+            setFullName('')
+            setSuccess(false)
+          }, 3000)
+        } else if (data?.session) {
+          // User is immediately signed in (email confirmation disabled)
+          setSuccess(true)
+          setTimeout(() => {
+            onClose()
+            setEmail('')
+            setPassword('')
+            setConfirmPassword('')
+            setFullName('')
+            setSuccess(false)
+          }, 2000)
+        } else {
+          setError('Account creation failed. Please try again.')
+        }
       }
     } catch (err) {
-      setError('An unexpected error occurred')
+      setError(err.message || 'An unexpected error occurred')
     } finally {
       setLoading(false)
     }
@@ -82,7 +107,13 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
           {/* Success Message */}
           {success && (
             <div className="mb-4 p-3 rounded-lg bg-primary/20 border border-primary/50 text-primary text-sm">
-              Account created! Please check your email to verify your account.
+              <div className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-lg">check_circle</span>
+                <div>
+                  <p className="font-semibold mb-1">Account created successfully!</p>
+                  <p className="text-xs">Please check your email to verify your account before signing in.</p>
+                </div>
+              </div>
             </div>
           )}
 

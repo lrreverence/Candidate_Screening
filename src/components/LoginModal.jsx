@@ -14,16 +14,25 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
     setLoading(true)
 
     try {
-      const { error } = await signIn(email, password)
+      const { data, error } = await signIn(email, password)
       if (error) {
-        setError(error.message)
-      } else {
+        // Provide user-friendly error messages
+        let errorMessage = error.message || 'Failed to sign in. Please check your credentials.'
+        if (error.message?.includes('Invalid login credentials')) {
+          errorMessage = 'Invalid email or password. Please try again.'
+        } else if (error.message?.includes('Email not confirmed')) {
+          errorMessage = 'Please verify your email address before signing in. Check your inbox for a confirmation email.'
+        }
+        setError(errorMessage)
+      } else if (data?.user) {
         onClose()
         setEmail('')
         setPassword('')
+      } else {
+        setError('Sign in failed. Please try again.')
       }
     } catch (err) {
-      setError('An unexpected error occurred')
+      setError(err.message || 'An unexpected error occurred')
     } finally {
       setLoading(false)
     }
