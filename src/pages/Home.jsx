@@ -93,6 +93,7 @@ const Home = () => {
         category: job.category
       }))
     }
+    // Always return fallback jobs if Supabase is empty or still loading
     return fallbackJobs
   }, [supabaseJobs])
 
@@ -296,12 +297,7 @@ const Home = () => {
               </div>
             </div>
             {/* Job Grid */}
-            {loading ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="text-text-muted">Loading jobs...</div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredJobs.map((job) => (
                   <article 
                     key={job.id}
@@ -375,7 +371,6 @@ const Home = () => {
                   </button>
                 </article>
               </div>
-            )}
           </div>
         </section>
 

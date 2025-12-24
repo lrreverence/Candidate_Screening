@@ -32,8 +32,8 @@ export const SupabaseProvider = ({ children }) => {
         .order('created_at', { ascending: false })
 
       if (fetchError) {
-        // If table doesn't exist, that's okay - we'll use fallback data
-        console.log('Jobs table not found, using fallback data:', fetchError.message)
+        // If table doesn't exist or there's an error, that's okay - we'll use fallback data
+        console.log('Jobs table error, using fallback data:', fetchError.message)
         setJobs([])
       } else {
         setJobs(data || [])
@@ -43,6 +43,7 @@ export const SupabaseProvider = ({ children }) => {
       setError(err.message)
       setJobs([])
     } finally {
+      // Always set loading to false, even if there's an error
       setLoading(false)
     }
   }
