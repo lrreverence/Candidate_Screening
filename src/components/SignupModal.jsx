@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
@@ -197,13 +198,13 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
               />
               <label htmlFor="terms" className="text-sm text-text-muted">
                 I agree to the{' '}
-                <a href="#" className="text-primary hover:text-[#60a5fa] transition-colors">
+                <Link to="/terms" className="text-primary hover:text-[#60a5fa] transition-colors">
                   Terms of Service
-                </a>{' '}
+                </Link>{' '}
                 and{' '}
-                <a href="#" className="text-primary hover:text-[#60a5fa] transition-colors">
+                <Link to="/privacy" className="text-primary hover:text-[#60a5fa] transition-colors">
                   Privacy Policy
-                </a>
+                </Link>
               </label>
             </div>
 

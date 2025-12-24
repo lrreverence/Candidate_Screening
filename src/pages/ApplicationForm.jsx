@@ -280,7 +280,7 @@ const ApplicationForm = () => {
           <nav className="hidden md:flex items-center gap-8">
             <Link to="/" className="text-sm font-medium hover:text-primary transition-colors">Home</Link>
             <Link to="/" className="text-sm font-medium hover:text-primary transition-colors">Careers</Link>
-            <Link to="/" className="text-sm font-medium hover:text-primary transition-colors">Contact</Link>
+            <Link to="/contact" className="text-sm font-medium hover:text-primary transition-colors">Contact</Link>
             {user ? (
               <span className="text-sm font-medium text-text-muted">{user.email}</span>
             ) : (
@@ -544,8 +544,8 @@ const ApplicationForm = () => {
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-sm text-gray-500 dark:text-gray-400">
           <p>© 2025 E Power Security. All rights reserved.</p>
           <div className="flex gap-6 mt-4 md:mt-0">
-            <a className="hover:text-primary transition-colors" href="#">Privacy Policy</a>
-            <a className="hover:text-primary transition-colors" href="#">Terms of Service</a>
+            <Link to="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-primary transition-colors">Terms of Service</Link>
           </div>
         </div>
       </footer>

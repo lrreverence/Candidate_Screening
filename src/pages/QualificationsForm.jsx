@@ -223,7 +223,7 @@ const QualificationsForm = () => {
             <div className="flex items-center gap-9">
               <Link to="/" className="text-slate-600 dark:text-gray-300 text-sm font-medium hover:text-primary transition-colors">Home</Link>
               <Link to="/" className="text-slate-600 dark:text-gray-300 text-sm font-medium hover:text-primary transition-colors">Jobs</Link>
-              <Link to="/" className="text-slate-600 dark:text-gray-300 text-sm font-medium hover:text-primary transition-colors">Contact</Link>
+              <Link to="/contact" className="text-slate-600 dark:text-gray-300 text-sm font-medium hover:text-primary transition-colors">Contact</Link>
             </div>
             {user ? (
               <span className="text-slate-600 dark:text-gray-300 text-sm">{user.email}</span>

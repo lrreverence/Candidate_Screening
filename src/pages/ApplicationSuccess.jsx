@@ -140,7 +140,7 @@ const ApplicationSuccess = () => {
           <div className="flex items-center gap-9">
             <Link to="/" className="text-[#111418] dark:text-white text-sm font-medium leading-normal hover:text-primary transition-colors">Home</Link>
             <Link to="/" className="text-[#111418] dark:text-white text-sm font-medium leading-normal hover:text-primary transition-colors">Careers</Link>
-            <Link to="/" className="text-[#111418] dark:text-white text-sm font-medium leading-normal hover:text-primary transition-colors">Contact Us</Link>
+            <Link to="/contact" className="text-[#111418] dark:text-white text-sm font-medium leading-normal hover:text-primary transition-colors">Contact Us</Link>
           </div>
           {user ? (
             <span className="text-[#111418] dark:text-white text-sm">{user.email}</span>
@@ -236,8 +236,8 @@ const ApplicationSuccess = () => {
       {/* Footer */}
       <footer className="flex flex-col gap-6 px-5 py-10 text-center border-t border-[#e7eef4] dark:border-[#1e40af] bg-background-light dark:bg-background-dark mt-auto">
         <div className="flex flex-wrap items-center justify-center gap-6">
-          <a className="text-[#637588] dark:text-[#93c5fd] text-base font-normal leading-normal hover:text-primary transition-colors" href="#">Privacy Policy</a>
-          <a className="text-[#637588] dark:text-[#93c5fd] text-base font-normal leading-normal hover:text-primary transition-colors" href="#">Terms of Service</a>
+          <Link to="/privacy" className="text-[#637588] dark:text-[#93c5fd] text-base font-normal leading-normal hover:text-primary transition-colors">Privacy Policy</Link>
+          <Link to="/terms" className="text-[#637588] dark:text-[#93c5fd] text-base font-normal leading-normal hover:text-primary transition-colors">Terms of Service</Link>
           <a className="text-[#637588] dark:text-[#93c5fd] text-base font-normal leading-normal hover:text-primary transition-colors" href="#">Support</a>
         </div>
         <p className="text-[#637588] dark:text-[#93c5fd] text-sm font-normal leading-normal">© 2025 E Power Security. All rights reserved.</p>

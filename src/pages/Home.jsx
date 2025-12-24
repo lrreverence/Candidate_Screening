@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useSupabase } from '../contexts/SupabaseContext'
 import { useAuth } from '../contexts/AuthContext'
 import LoginModal from '../components/LoginModal'
@@ -234,7 +234,7 @@ const Home = () => {
           <div className="w-full max-w-[1200px]">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <h2 className="text-white text-2xl font-bold leading-tight">Open Positions</h2>
-              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide no-scrollbar mask-gradient">
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide no-scrollbar pr-2 md:pr-0">
                 <button 
                   onClick={() => setSelectedCategory('All Jobs')}
                   className={`flex h-9 shrink-0 items-center gap-2 px-4 rounded-full text-sm font-bold transition ${
@@ -413,10 +413,10 @@ const Home = () => {
           <div className="col-span-1">
             <h4 className="text-white font-bold mb-4 text-sm uppercase tracking-wider">Company</h4>
             <ul className="flex flex-col gap-2 text-text-muted text-sm">
-              <li><a className="hover:text-primary transition-colors" href="#">About Us</a></li>
-              <li><a className="hover:text-primary transition-colors" href="#">Our Services</a></li>
-              <li><a className="hover:text-primary transition-colors" href="#">Contact</a></li>
-              <li><a className="hover:text-primary transition-colors" href="#">Privacy Policy</a></li>
+              <li><Link to="/about" className="hover:text-primary transition-colors">About Us</Link></li>
+              <li><Link to="/services" className="hover:text-primary transition-colors">Our Services</Link></li>
+              <li><Link to="/contact" className="hover:text-primary transition-colors">Contact</Link></li>
+              <li><Link to="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
             </ul>
           </div>
           <div className="col-span-1">
@@ -440,8 +440,8 @@ const Home = () => {
         <div className="border-t border-[#1e40af] pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-[#60a5fa]">
           <p>© 2025 E Power Security. All rights reserved.</p>
           <div className="flex gap-4">
-            <a className="hover:text-primary transition-colors" href="#">Terms of Service</a>
-            <a className="hover:text-primary transition-colors" href="#">Privacy Policy</a>
+            <Link to="/terms" className="hover:text-primary transition-colors">Terms of Service</Link>
+            <Link to="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
           </div>
         </div>
       </footer>

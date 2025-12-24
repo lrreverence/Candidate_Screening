@@ -6,6 +6,11 @@ import QualificationsForm from './pages/QualificationsForm'
 import DocumentUploadForm from './pages/DocumentUploadForm'
 import ApplicationSuccess from './pages/ApplicationSuccess'
 import AdminDashboard from './pages/admin/AdminDashboard'
+import TermsOfService from './pages/TermsOfService'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import AboutUs from './pages/AboutUs'
+import OurServices from './pages/OurServices'
+import Contact from './pages/Contact'
 
 const App = () => {
   return (
@@ -17,6 +22,11 @@ const App = () => {
       <Route path="/apply/:jobId?/success" element={<ApplicationSuccess />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/admin/applicants" element={<AdminDashboard />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/about" element={<AboutUs />} />
+      <Route path="/services" element={<OurServices />} />
+      <Route path="/contact" element={<Contact />} />
     </Routes>
   )
 }
