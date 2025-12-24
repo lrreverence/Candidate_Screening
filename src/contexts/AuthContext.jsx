@@ -9,7 +9,7 @@ const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch user profile from users table
+  // Fetch user profile from users table using RPC function to bypass RLS complexity
   const fetchUserProfile = async (userId) => {
     if (!userId) {
       setUserProfile(null)
@@ -19,18 +19,23 @@ const AuthProvider = ({ children }) => {
     try {
       console.log('[AUTH] Fetching user profile for:', userId)
       
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
-      )
-      
-      const queryPromise = supabase
+      // Try RPC function first (bypasses RLS complexity)
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('get_user_profile', { user_id: userId })
+
+      if (!rpcError && rpcData && rpcData.length > 0) {
+        console.log('[AUTH] User profile loaded via RPC:', rpcData[0])
+        setUserProfile(rpcData[0])
+        return
+      }
+
+      // Fallback to direct query if RPC fails
+      console.log('[AUTH] RPC failed, trying direct query...')
+      const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single()
-
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise])
 
       if (error) {
         console.error('[AUTH] Error fetching user profile:', error)
@@ -40,7 +45,7 @@ const AuthProvider = ({ children }) => {
         }
         setUserProfile(null)
       } else {
-        console.log('[AUTH] User profile loaded:', data)
+        console.log('[AUTH] User profile loaded via direct query:', data)
         setUserProfile(data)
       }
     } catch (error) {
