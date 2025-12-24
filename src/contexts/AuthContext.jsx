@@ -18,14 +18,23 @@ const AuthProvider = ({ children }) => {
 
     try {
       console.log('[AUTH] Fetching user profile for:', userId)
-      const { data, error } = await supabase
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
+      )
+      
+      const queryPromise = supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single()
 
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise])
+
       if (error) {
         console.error('[AUTH] Error fetching user profile:', error)
+        console.error('[AUTH] Error details:', JSON.stringify(error, null, 2))
         if (error.code === 'PGRST116') {
           console.log('[AUTH] No user profile found (PGRST116)')
         }
@@ -36,6 +45,7 @@ const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('[AUTH] Exception fetching user profile:', error)
+      console.error('[AUTH] Exception details:', error.message, error.stack)
       setUserProfile(null)
     }
   }
@@ -43,6 +53,7 @@ const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('[AUTH] Initial session:', session?.user?.id)
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
@@ -55,6 +66,7 @@ const AuthProvider = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('[AUTH] Auth state changed:', _event, session?.user?.id)
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
