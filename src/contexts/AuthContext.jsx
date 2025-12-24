@@ -3,15 +3,7 @@ import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext({})
 
-export const useAuth = () => {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
-}
-
-export const AuthProvider = ({ children }) => {
+const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [userProfile, setUserProfile] = useState(null)
   const [session, setSession] = useState(null)
@@ -25,20 +17,25 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
+      console.log('[AUTH] Fetching user profile for:', userId)
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single()
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('Error fetching user profile:', error)
+      if (error) {
+        console.error('[AUTH] Error fetching user profile:', error)
+        if (error.code === 'PGRST116') {
+          console.log('[AUTH] No user profile found (PGRST116)')
+        }
         setUserProfile(null)
       } else {
+        console.log('[AUTH] User profile loaded:', data)
         setUserProfile(data)
       }
     } catch (error) {
-      console.error('Error fetching user profile:', error)
+      console.error('[AUTH] Exception fetching user profile:', error)
       setUserProfile(null)
     }
   }
@@ -183,46 +180,57 @@ export const AuthProvider = ({ children }) => {
   }
 
   const signIn = async (email, password) => {
+    console.log('[AUTH] signIn called for:', email)
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
-      
+
       if (error) {
-        return { data: null, error }
+        console.log('[AUTH] Auth error:', error.message)
+        return { data: null, error, profile: null }
       }
-      
-      // Fetch user profile after signin
-      if (data?.user) {
-        await fetchUserProfile(data.user.id)
-      }
-      
-      return { data, error: null }
+
+      console.log('[AUTH] Sign in successful, user ID:', data?.user?.id)
+
+      // Don't fetch profile here - let onAuthStateChange handle it
+      // Just return success immediately for faster UX
+      return { data, error: null, profile: userProfile }
     } catch (error) {
-      return { 
-        data: null, 
-        error: { 
-          message: error.message || 'An unexpected error occurred during sign in' 
-        } 
+      console.error('[AUTH] Sign in exception:', error)
+      return {
+        data: null,
+        error: {
+          message: error.message || 'An unexpected error occurred during sign in'
+        },
+        profile: null
       }
     }
   }
 
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.error('Error signing out:', error)
-        return { error }
-      }
-      // Clear local state immediately
+      // Clear local state first to provide immediate feedback
       setUser(null)
       setUserProfile(null)
       setSession(null)
+      
+      // Then sign out from Supabase
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Error signing out from Supabase:', error)
+        // Even if Supabase sign out fails, we've cleared local state
+        return { error }
+      }
+      
       return { error: null }
     } catch (error) {
       console.error('Error signing out:', error)
+      // Clear state even on error
+      setUser(null)
+      setUserProfile(null)
+      setSession(null)
       return { error }
     }
   }
@@ -270,4 +278,14 @@ export const AuthProvider = ({ children }) => {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
+
+export const useAuth = () => {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
+
+export { AuthProvider }
 
