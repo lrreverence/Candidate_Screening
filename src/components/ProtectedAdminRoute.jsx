@@ -1,12 +1,19 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 const ProtectedAdminRoute = ({ children }) => {
-  const { user, userProfile, loading, isAdmin } = useAuth()
+  const { user, userProfile, loading, isAdmin, refreshUserProfile } = useAuth()
 
-  // Show loading state while checking authentication
-  if (loading) {
+  // Try to refresh profile if user exists but profile is missing
+  useEffect(() => {
+    if (user && !userProfile && !loading) {
+      refreshUserProfile()
+    }
+  }, [user, userProfile, loading, refreshUserProfile])
+
+  // Show loading state while checking authentication or while userProfile is being fetched
+  if (loading || (user && !userProfile)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -19,6 +26,11 @@ const ProtectedAdminRoute = ({ children }) => {
 
   // If not authenticated, redirect to home
   if (!user) {
+    return <Navigate to="/" replace />
+  }
+
+  // If userProfile is still null after loading, redirect to home
+  if (!userProfile) {
     return <Navigate to="/" replace />
   }
 
