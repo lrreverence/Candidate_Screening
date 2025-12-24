@@ -13,29 +13,18 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
     setError('')
     setLoading(true)
 
-    try {
-      const { data, error } = await signIn(email, password)
-      if (error) {
-        // Provide user-friendly error messages
-        let errorMessage = error.message || 'Failed to sign in. Please check your credentials.'
-        if (error.message?.includes('Invalid login credentials')) {
-          errorMessage = 'Invalid email or password. Please try again.'
-        } else if (error.message?.includes('Email not confirmed')) {
-          errorMessage = 'Please verify your email address before signing in. Check your inbox for a confirmation email.'
-        }
-        setError(errorMessage)
-      } else if (data?.user) {
-        onClose()
-        setEmail('')
-        setPassword('')
-      } else {
-        setError('Sign in failed. Please try again.')
-      }
-    } catch (err) {
-      setError(err.message || 'An unexpected error occurred')
-    } finally {
+    // Fire off the sign in call but don't wait for it
+    // The onAuthStateChange will handle the rest
+    signIn(email, password).catch(err => {
+      console.error('[LOGIN] Sign in error:', err)
+    })
+
+    // Close modal immediately after 1.5 seconds
+    // This gives the auth call time to start but doesn't wait for it to complete
+    setTimeout(() => {
       setLoading(false)
-    }
+      onClose()
+    }, 1500)
   }
 
   if (!isOpen) return null

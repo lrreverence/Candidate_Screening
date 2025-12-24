@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useSupabase } from '../contexts/SupabaseContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -8,11 +8,18 @@ import SignupModal from '../components/SignupModal'
 const Home = () => {
   const navigate = useNavigate()
   const { jobs: supabaseJobs, loading } = useSupabase()
-  const { user, signOut } = useAuth()
+  const { user, userProfile, signOut } = useAuth()
   const [selectedCategory, setSelectedCategory] = useState('All Jobs')
   const [searchQuery, setSearchQuery] = useState('')
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showSignupModal, setShowSignupModal] = useState(false)
+
+  // Redirect admin users to /admin after login
+  useEffect(() => {
+    if (user && userProfile?.role === 'admin') {
+      navigate('/admin')
+    }
+  }, [user, userProfile, navigate])
 
   // Fallback jobs data in case Supabase is empty or fails
   const fallbackJobs = [
@@ -160,13 +167,24 @@ const Home = () => {
                   <span>{user.email}</span>
                 </div>
                 <button
-                  onClick={async () => {
-                    const { error } = await signOut()
-                    if (error) {
-                      console.error('Failed to sign out:', error)
-                      alert('Failed to sign out. Please try again.')
+                  onClick={async (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    try {
+                      const { error } = await signOut()
+                      if (error) {
+                        console.error('Failed to sign out:', error)
+                        alert('Failed to sign out. Please try again.')
+                      } else {
+                        // Force a page reload to ensure state is cleared
+                        window.location.href = '/'
+                      }
+                    } catch (err) {
+                      console.error('Sign out error:', err)
+                      alert('An error occurred while signing out. Please try again.')
                     }
                   }}
+                  type="button"
                   className="flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#1e3a8a] transition-colors"
                 >
                   Sign Out
