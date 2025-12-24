@@ -6,7 +6,8 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [fullName, setFullName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -30,8 +31,7 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
     setLoading(true)
 
     try {
-      const [firstName, ...lastNameParts] = fullName.split(' ')
-      const lastName = lastNameParts.join(' ') || ''
+      const fullName = `${firstName} ${lastName}`.trim()
 
       const { data, error } = await signUp(email, password, {
         full_name: fullName,
@@ -60,7 +60,8 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
             setEmail('')
             setPassword('')
             setConfirmPassword('')
-            setFullName('')
+            setFirstName('')
+            setLastName('')
             setSuccess(false)
           }, 3000)
         } else if (data?.session) {
@@ -71,7 +72,8 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
             setEmail('')
             setPassword('')
             setConfirmPassword('')
-            setFullName('')
+            setFirstName('')
+            setLastName('')
             setSuccess(false)
           }, 2000)
         } else {
@@ -127,19 +129,35 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-white mb-2">
-                Full Name
-              </label>
-              <input
-                id="fullName"
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
-                placeholder="John Doe"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="firstName" className="block text-sm font-medium text-white mb-2">
+                  First Name
+                </label>
+                <input
+                  id="firstName"
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                  placeholder="John"
+                />
+              </div>
+              <div>
+                <label htmlFor="lastName" className="block text-sm font-medium text-white mb-2">
+                  Last Name
+                </label>
+                <input
+                  id="lastName"
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                  placeholder="Doe"
+                />
+              </div>
             </div>
 
             <div>

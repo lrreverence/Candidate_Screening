@@ -160,7 +160,11 @@ const Home = () => {
                 </div>
                 <button
                   onClick={async () => {
-                    await signOut()
+                    const { error } = await signOut()
+                    if (error) {
+                      console.error('Failed to sign out:', error)
+                      alert('Failed to sign out. Please try again.')
+                    }
                   }}
                   className="flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#1e3a8a] transition-colors"
                 >

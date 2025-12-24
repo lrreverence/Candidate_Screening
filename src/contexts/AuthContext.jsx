@@ -86,7 +86,7 @@ export const AuthProvider = ({ children }) => {
         return { data: null, error }
       }
       
-      // Ensure user record is created with applicant role
+      // Ensure user record is created with applicant role and create applicant record
       if (data?.user) {
         // Wait a bit for the trigger to complete, then verify/create user record
         setTimeout(async () => {
@@ -122,10 +122,51 @@ export const AuthProvider = ({ children }) => {
                 .eq('id', data.user.id)
             }
 
+            // Create applicant record in applicants table
+            const firstName = metadata.first_name || ''
+            const lastName = metadata.last_name || ''
+            
+            // Check if applicant already exists for this user
+            const { data: existingApplicant } = await supabase
+              .from('applicants')
+              .select('id')
+              .eq('user_id', data.user.id)
+              .single()
+
+            if (!existingApplicant) {
+              // Generate reference code
+              const { data: refCode, error: refError } = await supabase
+                .rpc('generate_reference_code')
+              
+              let referenceCode = refCode
+              if (refError || !refCode) {
+                // Fallback reference code
+                const year = new Date().getFullYear()
+                const timestamp = Date.now().toString().slice(-6)
+                referenceCode = `REF-${year}-${timestamp.slice(0, 3)}`
+              }
+
+              // Create applicant record
+              const { error: applicantError } = await supabase
+                .from('applicants')
+                .insert({
+                  reference_code: referenceCode,
+                  first_name: firstName,
+                  last_name: lastName,
+                  email: data.user.email || email,
+                  user_id: data.user.id,
+                  status: 'Pending'
+                })
+
+              if (applicantError) {
+                console.error('Error creating applicant record:', applicantError)
+              }
+            }
+
             // Fetch the updated profile
             await fetchUserProfile(data.user.id)
           } catch (err) {
-            console.error('Error ensuring user record:', err)
+            console.error('Error ensuring user and applicant records:', err)
           }
         }, 500)
       }
@@ -171,8 +212,17 @@ export const AuthProvider = ({ children }) => {
   const signOut = async () => {
     try {
       const { error } = await supabase.auth.signOut()
-      return { error }
+      if (error) {
+        console.error('Error signing out:', error)
+        return { error }
+      }
+      // Clear local state immediately
+      setUser(null)
+      setUserProfile(null)
+      setSession(null)
+      return { error: null }
     } catch (error) {
+      console.error('Error signing out:', error)
       return { error }
     }
   }
