@@ -12,6 +12,7 @@ import AboutUs from './pages/AboutUs'
 import OurServices from './pages/OurServices'
 import Contact from './pages/Contact'
 import JobDetail from './pages/JobDetail'
+import ProtectedAdminRoute from './components/ProtectedAdminRoute'
 
 const App = () => {
   return (
@@ -22,8 +23,22 @@ const App = () => {
       <Route path="/apply/:jobId?/qualifications" element={<QualificationsForm />} />
       <Route path="/apply/:jobId?/documents" element={<DocumentUploadForm />} />
       <Route path="/apply/:jobId?/success" element={<ApplicationSuccess />} />
-      <Route path="/admin" element={<AdminDashboard />} />
-      <Route path="/admin/applicants" element={<AdminDashboard />} />
+      <Route 
+        path="/admin" 
+        element={
+          <ProtectedAdminRoute>
+            <AdminDashboard />
+          </ProtectedAdminRoute>
+        } 
+      />
+      <Route 
+        path="/admin/applicants" 
+        element={
+          <ProtectedAdminRoute>
+            <AdminDashboard />
+          </ProtectedAdminRoute>
+        } 
+      />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/about" element={<AboutUs />} />
