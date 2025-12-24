@@ -339,7 +339,10 @@ const Home = () => {
                         </span>
                       </div>
                       <div className="mt-auto flex gap-3 pt-2">
-                        <button className="flex-1 h-10 rounded-full border border-secondary text-white text-sm font-bold hover:bg-secondary transition-colors">
+                        <button 
+                          onClick={() => navigate(`/job/${job.id}`)}
+                          className="flex-1 h-10 rounded-full border border-secondary text-white text-sm font-bold hover:bg-secondary transition-colors"
+                        >
                           View Details
                         </button>
                         <button 

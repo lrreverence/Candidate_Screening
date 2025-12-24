@@ -533,10 +533,10 @@ const ApplicationForm = () => {
         {/* Help/Info */}
         <div className="mt-8 text-center">
           <p className="text-gray-500 dark:text-gray-400 text-sm">Need assistance with your application?</p>
-          <a className="text-primary text-sm font-medium hover:underline inline-flex items-center gap-1 mt-1" href="#">
+          <Link to="/contact?subject=application-support" className="text-primary text-sm font-medium hover:underline inline-flex items-center gap-1 mt-1">
             <span className="material-symbols-outlined text-sm">support_agent</span>
             Contact Support
-          </a>
+          </Link>
         </div>
       </main>
 

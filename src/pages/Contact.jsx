@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 
 const Contact = () => {
+  const [searchParams] = useSearchParams()
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -10,6 +11,17 @@ const Contact = () => {
     message: ''
   })
   const [submitted, setSubmitted] = useState(false)
+
+  // Pre-fill subject if coming from application support
+  useEffect(() => {
+    const subjectParam = searchParams.get('subject')
+    if (subjectParam === 'application-support') {
+      setFormData(prev => ({
+        ...prev,
+        subject: 'application-support'
+      }))
+    }
+  }, [searchParams])
 
   const handleChange = (e) => {
     setFormData({
@@ -208,6 +220,7 @@ const Contact = () => {
                       className="w-full px-4 py-3 bg-background-dark border border-secondary rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     >
                       <option value="">Select a subject</option>
+                      <option value="application-support">Application Support</option>
                       <option value="security-services">Security Services Inquiry</option>
                       <option value="career">Career Opportunities</option>
                       <option value="general">General Inquiry</option>

@@ -11,11 +11,13 @@ import PrivacyPolicy from './pages/PrivacyPolicy'
 import AboutUs from './pages/AboutUs'
 import OurServices from './pages/OurServices'
 import Contact from './pages/Contact'
+import JobDetail from './pages/JobDetail'
 
 const App = () => {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/job/:jobId" element={<JobDetail />} />
       <Route path="/apply/:jobId?" element={<ApplicationForm />} />
       <Route path="/apply/:jobId?/qualifications" element={<QualificationsForm />} />
       <Route path="/apply/:jobId?/documents" element={<DocumentUploadForm />} />
