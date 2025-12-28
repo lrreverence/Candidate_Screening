@@ -19,23 +19,13 @@ const AuthProvider = ({ children }) => {
     try {
       console.log('[AUTH] Fetching user profile for:', userId)
 
-      // Try RPC function first (bypasses RLS complexity)
-      const rpcPromise = supabase.rpc('get_user_profile', { user_id: userId })
-      const { data: rpcData, error: rpcError } = await Promise.race([
-        rpcPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('RPC timeout')), 5000))
-      ])
+      // Check if we have a valid session first
+      const { data: sessionData } = await supabase.auth.getSession()
+      console.log('[AUTH] Current session valid:', !!sessionData?.session)
+      console.log('[AUTH] User email from session:', sessionData?.session?.user?.email)
 
-      if (!rpcError && rpcData && rpcData.length > 0) {
-        console.log('[AUTH] User profile loaded via RPC:', rpcData[0])
-        setUserProfile(rpcData[0])
-        return
-      }
-
-      console.log('[AUTH] RPC failed or returned no data, error:', rpcError?.message || 'No data')
-
-      // Fallback to direct query if RPC fails
-      console.log('[AUTH] Trying direct query...')
+      // Try direct query with a short timeout
+      console.log('[AUTH] Fetching user profile with direct query...')
       const directPromise = supabase
         .from('users')
         .select('*')
@@ -44,23 +34,35 @@ const AuthProvider = ({ children }) => {
 
       const { data, error } = await Promise.race([
         directPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Direct query timeout')), 5000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Query timeout')), 2000))
       ])
 
       if (error) {
-        console.error('[AUTH] Error fetching user profile:', error)
-        console.error('[AUTH] Error details:', JSON.stringify(error, null, 2))
-        if (error.code === 'PGRST116') {
-          console.log('[AUTH] No user profile found (PGRST116)')
+        console.error('[AUTH] Database query failed:', error.message)
+
+        if (error.message === 'Query timeout') {
+          console.error('[AUTH] ⚠️ DATABASE TIMEOUT - This is likely an RLS (Row Level Security) issue')
+          console.error('[AUTH] The users table RLS policy may not be allowing authenticated reads')
+          console.error('[AUTH] Check your Supabase RLS policies for the users table')
         }
-        setUserProfile(null)
+
+        // FALLBACK: Create a minimal profile from session data
+        console.warn('[AUTH] Using fallback profile from session data')
+        const fallbackProfile = {
+          id: sessionData?.session?.user?.id || userId,
+          email: sessionData?.session?.user?.email || '',
+          role: sessionData?.session?.user?.user_metadata?.role || 'applicant',
+          full_name: sessionData?.session?.user?.user_metadata?.full_name || '',
+          created_at: sessionData?.session?.user?.created_at
+        }
+        console.log('[AUTH] Fallback profile created:', fallbackProfile)
+        setUserProfile(fallbackProfile)
       } else {
-        console.log('[AUTH] User profile loaded via direct query:', data)
+        console.log('[AUTH] ✓ User profile loaded successfully from database:', data)
         setUserProfile(data)
       }
     } catch (error) {
       console.error('[AUTH] Exception fetching user profile:', error)
-      console.error('[AUTH] Exception details:', error.message, error.stack)
       setUserProfile(null)
     }
   }
@@ -220,22 +222,30 @@ const AuthProvider = ({ children }) => {
       }
 
       console.log('[AUTH] Sign in successful, user ID:', data?.user?.id)
+      console.log('[AUTH] Session:', data?.session ? 'present' : 'missing')
 
-      // Immediately update user state and fetch profile
-      // This is critical for cookie-based storage where onAuthStateChange might be delayed
+      // Update user state immediately
       setUser(data.user)
       setSession(data.session)
-      setLoading(false) // Clear loading immediately after successful auth
+      setLoading(false)
 
-      // Fetch profile immediately to ensure it's available for redirect logic
+      // Wait a moment for cookies to be written
+      console.log('[AUTH] Waiting for cookie storage to settle...')
+      await new Promise(resolve => setTimeout(resolve, 300))
+
+      // Verify session is in storage
+      const { data: verifySession } = await supabase.auth.getSession()
+      console.log('[AUTH] Session verified in storage:', !!verifySession?.session)
+
+      // Fetch profile with authenticated session
       if (data?.user?.id) {
-        console.log('[AUTH] Fetching profile immediately after sign-in...')
+        console.log('[AUTH] Fetching profile after cookie storage settled...')
         try {
           await fetchUserProfile(data.user.id)
           console.log('[AUTH] Profile fetch completed')
         } catch (profileError) {
           console.error('[AUTH] Profile fetch failed:', profileError)
-          // Continue anyway - onAuthStateChange will retry
+          // Continue anyway - user can still be logged in
         }
       }
 

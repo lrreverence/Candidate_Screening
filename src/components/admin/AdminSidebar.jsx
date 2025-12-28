@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 const AdminSidebar = () => {
   const location = useLocation()
   const navigate = useNavigate()
-  const { signOut } = useAuth()
+  const { signOut, userProfile, user } = useAuth()
 
   const handleLogout = async () => {
     const { error } = await signOut()
@@ -78,11 +78,20 @@ const AdminSidebar = () => {
       <div className="border-t border-navy-light p-4">
         <div className="flex items-center gap-3 mb-3">
           <div className="size-9 rounded-full bg-gray-600 flex items-center justify-center text-white font-bold">
-            JD
+            {userProfile?.full_name 
+              ? userProfile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+              : user?.email?.[0].toUpperCase() || 'A'}
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-white">Officer J. Doe</span>
-            <span className="text-xs text-gray-400">Human Resources</span>
+            <span className="text-sm font-medium text-white">
+              {userProfile?.full_name || 
+               (userProfile?.first_name && userProfile?.last_name 
+                 ? `${userProfile.first_name} ${userProfile.last_name}`
+                 : user?.email || 'Admin User')}
+            </span>
+            <span className="text-xs text-gray-400">
+              {userProfile?.role === 'admin' ? 'Administrator' : 'User'}
+            </span>
           </div>
         </div>
         <button

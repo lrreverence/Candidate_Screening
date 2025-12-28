@@ -23,21 +23,13 @@ const App = () => {
       <Route path="/apply/:jobId?/qualifications" element={<QualificationsForm />} />
       <Route path="/apply/:jobId?/documents" element={<DocumentUploadForm />} />
       <Route path="/apply/:jobId?/success" element={<ApplicationSuccess />} />
-      <Route 
-        path="/admin" 
+      <Route
+        path="/admin/*"
         element={
           <ProtectedAdminRoute>
             <AdminDashboard />
           </ProtectedAdminRoute>
-        } 
-      />
-      <Route 
-        path="/admin/applicants" 
-        element={
-          <ProtectedAdminRoute>
-            <AdminDashboard />
-          </ProtectedAdminRoute>
-        } 
+        }
       />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />

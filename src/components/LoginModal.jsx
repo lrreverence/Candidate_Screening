@@ -48,20 +48,21 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
     }
   }, [user, userProfile, authLoading, navigate, onClose])
 
-  // Fallback: If user exists but profile hasn't loaded, wait a bit then close modal
+  // Fallback: If user exists but profile hasn't loaded, wait a bit then close modal anyway
   useEffect(() => {
-    if (signInAttempted.current && user && !userProfile && !authLoading && !hasRedirected.current && loading) {
+    if (signInAttempted.current && user && !userProfile && !authLoading && !hasRedirected.current) {
       const fallbackTimeout = setTimeout(() => {
         if (!hasRedirected.current) {
-          console.log('[LOGIN] Profile taking too long, closing modal and letting Home page handle redirect')
+          console.log('[LOGIN] Profile not loaded, but closing modal - user is authenticated')
           setLoading(false)
+          hasRedirected.current = true
           onClose()
         }
-      }, 5000)
+      }, 2000)
 
       return () => clearTimeout(fallbackTimeout)
     }
-  }, [user, userProfile, authLoading, loading, onClose])
+  }, [user, userProfile, authLoading, onClose])
 
   // Reset flags when modal closes
   useEffect(() => {
