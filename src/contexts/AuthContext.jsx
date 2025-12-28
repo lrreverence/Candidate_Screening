@@ -18,10 +18,13 @@ const AuthProvider = ({ children }) => {
 
     try {
       console.log('[AUTH] Fetching user profile for:', userId)
-      
+
       // Try RPC function first (bypasses RLS complexity)
-      const { data: rpcData, error: rpcError } = await supabase
-        .rpc('get_user_profile', { user_id: userId })
+      const rpcPromise = supabase.rpc('get_user_profile', { user_id: userId })
+      const { data: rpcData, error: rpcError } = await Promise.race([
+        rpcPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('RPC timeout')), 5000))
+      ])
 
       if (!rpcError && rpcData && rpcData.length > 0) {
         console.log('[AUTH] User profile loaded via RPC:', rpcData[0])
@@ -29,13 +32,20 @@ const AuthProvider = ({ children }) => {
         return
       }
 
+      console.log('[AUTH] RPC failed or returned no data, error:', rpcError?.message || 'No data')
+
       // Fallback to direct query if RPC fails
-      console.log('[AUTH] RPC failed, trying direct query...')
-      const { data, error } = await supabase
+      console.log('[AUTH] Trying direct query...')
+      const directPromise = supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single()
+
+      const { data, error } = await Promise.race([
+        directPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Direct query timeout')), 5000))
+      ])
 
       if (error) {
         console.error('[AUTH] Error fetching user profile:', error)
@@ -211,8 +221,24 @@ const AuthProvider = ({ children }) => {
 
       console.log('[AUTH] Sign in successful, user ID:', data?.user?.id)
 
-      // Don't fetch profile here - let onAuthStateChange handle it
-      // Just return success immediately for faster UX
+      // Immediately update user state and fetch profile
+      // This is critical for cookie-based storage where onAuthStateChange might be delayed
+      setUser(data.user)
+      setSession(data.session)
+      setLoading(false) // Clear loading immediately after successful auth
+
+      // Fetch profile immediately to ensure it's available for redirect logic
+      if (data?.user?.id) {
+        console.log('[AUTH] Fetching profile immediately after sign-in...')
+        try {
+          await fetchUserProfile(data.user.id)
+          console.log('[AUTH] Profile fetch completed')
+        } catch (profileError) {
+          console.error('[AUTH] Profile fetch failed:', profileError)
+          // Continue anyway - onAuthStateChange will retry
+        }
+      }
+
       return { data, error: null, profile: userProfile }
     } catch (error) {
       console.error('[AUTH] Sign in exception:', error)

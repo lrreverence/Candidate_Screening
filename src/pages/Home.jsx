@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { useSupabase } from '../contexts/SupabaseContext'
 import { useAuth } from '../contexts/AuthContext'
 import LoginModal from '../components/LoginModal'
@@ -7,6 +7,7 @@ import SignupModal from '../components/SignupModal'
 
 const Home = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { jobs: supabaseJobs, loading } = useSupabase()
   const { user, userProfile, signOut } = useAuth()
   const [selectedCategory, setSelectedCategory] = useState('All Jobs')
@@ -14,12 +15,12 @@ const Home = () => {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showSignupModal, setShowSignupModal] = useState(false)
 
-  // Redirect admin users to /admin after login
+  // Redirect admin users to /admin after login (only if not already there)
   useEffect(() => {
-    if (user && userProfile?.role === 'admin') {
+    if (user && userProfile?.role === 'admin' && !location.pathname.startsWith('/admin')) {
       navigate('/admin')
     }
-  }, [user, userProfile, navigate])
+  }, [user, userProfile, navigate, location.pathname])
 
   // Fallback jobs data in case Supabase is empty or fails
   const fallbackJobs = [

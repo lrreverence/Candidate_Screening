@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
@@ -6,25 +7,126 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signIn } = useAuth()
+  const { signIn, user, userProfile, loading: authLoading } = useAuth()
+  const navigate = useNavigate()
+  const hasRedirected = useRef(false)
+  const signInAttempted = useRef(false)
+  const timeoutRef = useRef(null)
+
+  // Redirect admin users after profile loads
+  useEffect(() => {
+    console.log('[LOGIN] Redirect check:', {
+      signInAttempted: signInAttempted.current,
+      hasUser: !!user,
+      hasProfile: !!userProfile,
+      userRole: userProfile?.role,
+      authLoading,
+      hasRedirected: hasRedirected.current
+    })
+
+    if (signInAttempted.current && user && userProfile && !authLoading && !hasRedirected.current) {
+      // Clear any pending timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+
+      hasRedirected.current = true
+      setLoading(false)
+
+      console.log('[LOGIN] Redirecting user with role:', userProfile.role)
+
+      if (userProfile.role === 'admin') {
+        console.log('[LOGIN] Admin detected, navigating to /admin')
+        onClose()
+        navigate('/admin')
+      } else {
+        // User is logged in but not admin, just close modal
+        console.log('[LOGIN] Non-admin user, closing modal')
+        onClose()
+      }
+    }
+  }, [user, userProfile, authLoading, navigate, onClose])
+
+  // Fallback: If user exists but profile hasn't loaded, wait a bit then close modal
+  useEffect(() => {
+    if (signInAttempted.current && user && !userProfile && !authLoading && !hasRedirected.current && loading) {
+      const fallbackTimeout = setTimeout(() => {
+        if (!hasRedirected.current) {
+          console.log('[LOGIN] Profile taking too long, closing modal and letting Home page handle redirect')
+          setLoading(false)
+          onClose()
+        }
+      }, 5000)
+
+      return () => clearTimeout(fallbackTimeout)
+    }
+  }, [user, userProfile, authLoading, loading, onClose])
+
+  // Reset flags when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      hasRedirected.current = false
+      signInAttempted.current = false
+      setError('')
+      setLoading(false)
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+  }, [isOpen])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
+    hasRedirected.current = false
+    signInAttempted.current = true
 
-    // Fire off the sign in call but don't wait for it
-    // The onAuthStateChange will handle the rest
-    signIn(email, password).catch(err => {
-      console.error('[LOGIN] Sign in error:', err)
-    })
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
 
-    // Close modal immediately after 1.5 seconds
-    // This gives the auth call time to start but doesn't wait for it to complete
-    setTimeout(() => {
+    try {
+      console.log('[LOGIN] Starting sign-in...')
+      const { data, error: signInError } = await signIn(email, password)
+
+      if (signInError) {
+        console.error('[LOGIN] Sign-in error:', signInError)
+        setError(signInError.message || 'Failed to sign in. Please check your credentials.')
+        setLoading(false)
+        signInAttempted.current = false
+        return
+      }
+
+      console.log('[LOGIN] Sign-in successful, data:', data)
+
+      // Sign in succeeded - the useEffect will handle redirect when profile loads
+      // Clear loading after a short delay to let the profile load
+      setTimeout(() => {
+        if (!hasRedirected.current) {
+          console.log('[LOGIN] Clearing loading state')
+          setLoading(false)
+        }
+      }, 500)
+    } catch (err) {
+      console.error('[LOGIN] Sign in exception:', err)
+      setError(err.message || 'An unexpected error occurred. Please try again.')
       setLoading(false)
-      onClose()
-    }, 1500)
+      signInAttempted.current = false
+    }
   }
 
   if (!isOpen) return null

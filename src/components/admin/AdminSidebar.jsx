@@ -1,8 +1,18 @@
 import React from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
 
 const AdminSidebar = () => {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { signOut } = useAuth()
+
+  const handleLogout = async () => {
+    const { error } = await signOut()
+    if (!error) {
+      navigate('/')
+    }
+  }
 
   const menuItems = [
     { path: '/admin', icon: 'dashboard', label: 'Dashboard' },
@@ -66,7 +76,7 @@ const AdminSidebar = () => {
         </nav>
       </div>
       <div className="border-t border-navy-light p-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mb-3">
           <div className="size-9 rounded-full bg-gray-600 flex items-center justify-center text-white font-bold">
             JD
           </div>
@@ -75,6 +85,13 @@ const AdminSidebar = () => {
             <span className="text-xs text-gray-400">Human Resources</span>
           </div>
         </div>
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-gray-300 hover:bg-navy-light hover:text-white transition-colors"
+        >
+          <span className="material-symbols-outlined">logout</span>
+          <span>Logout</span>
+        </button>
       </div>
     </aside>
   )
