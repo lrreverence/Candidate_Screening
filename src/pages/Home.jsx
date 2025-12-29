@@ -14,6 +14,7 @@ const Home = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showSignupModal, setShowSignupModal] = useState(false)
+  const [pendingJobId, setPendingJobId] = useState(null)
 
   // Redirect admin users to /admin after login (only if not already there)
   useEffect(() => {
@@ -146,7 +147,15 @@ const Home = () => {
   const heroBackgroundImage = "https://lh3.googleusercontent.com/aida-public/AB6AXuC_DSGl8UHGzg-xPl2w31czO6qPheyw8EMa-WotbRv0qXnmFXejrAsgS2igrhE7Rzou4hhCPplfqlF5LqfJxFDkjWlsbpDSUDohR8RAcvglG-FETdSxn45ADPHDOIgtYnTLe0e1nXNH2V92pV1SttPsvW5df06LOGhQg2c51rCri3rMYzTiJY4fTYsREmP-3ZMwwpYvwtTVgpyWuFISt_yoezafLjSFFHgKrflo2ckTmhs9J2s750PzOWqSdlW75ryXOC00YBY2wJ4"
 
   const handleApply = (jobId) => {
-    navigate(`/apply/${jobId}`)
+    if (!user) {
+      // Store the jobId to redirect after login
+      setPendingJobId(jobId)
+      // Show login modal if not logged in
+      setShowLoginModal(true)
+      return
+    }
+    // Navigate to application form if logged in
+    navigate(`/apply/${jobId || ''}`)
   }
 
   return (
@@ -365,6 +374,7 @@ const Home = () => {
                           View Details
                         </button>
                         <button 
+                          type="button"
                           onClick={() => handleApply(job.id)}
                           className="flex-1 h-10 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-1"
                         >
@@ -383,6 +393,7 @@ const Home = () => {
                   <h3 className="text-xl font-bold text-white mb-2">Don't see a fit?</h3>
                   <p className="text-text-muted mb-6">Join our talent pool. We are always looking for qualified professionals.</p>
                   <button 
+                    type="button"
                     onClick={() => handleApply(null)}
                     className="h-10 px-6 rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#1e3a8a] transition-colors"
                   >
@@ -470,11 +481,15 @@ const Home = () => {
       {/* Auth Modals */}
       <LoginModal
         isOpen={showLoginModal}
-        onClose={() => setShowLoginModal(false)}
+        onClose={() => {
+          setShowLoginModal(false)
+          setPendingJobId(null)
+        }}
         onSwitchToSignup={() => {
           setShowLoginModal(false)
           setShowSignupModal(true)
         }}
+        redirectTo={pendingJobId ? `/apply/${pendingJobId}` : null}
       />
       <SignupModal
         isOpen={showSignupModal}

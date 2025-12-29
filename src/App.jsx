@@ -13,16 +13,53 @@ import OurServices from './pages/OurServices'
 import Contact from './pages/Contact'
 import JobDetail from './pages/JobDetail'
 import ProtectedAdminRoute from './components/ProtectedAdminRoute'
+import ProtectedRoute from './components/ProtectedRoute'
 
 const App = () => {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/job/:jobId" element={<JobDetail />} />
-      <Route path="/apply/:jobId?" element={<ApplicationForm />} />
-      <Route path="/apply/:jobId?/qualifications" element={<QualificationsForm />} />
-      <Route path="/apply/:jobId?/documents" element={<DocumentUploadForm />} />
-      <Route path="/apply/:jobId?/success" element={<ApplicationSuccess />} />
+      <Route
+        path="/apply"
+        element={
+          <ProtectedRoute>
+            <ApplicationForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/apply/:jobId"
+        element={
+          <ProtectedRoute>
+            <ApplicationForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/apply/:jobId/qualifications"
+        element={
+          <ProtectedRoute>
+            <QualificationsForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/apply/:jobId/documents"
+        element={
+          <ProtectedRoute>
+            <DocumentUploadForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/apply/:jobId/success"
+        element={
+          <ProtectedRoute>
+            <ApplicationSuccess />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/admin/*"
         element={

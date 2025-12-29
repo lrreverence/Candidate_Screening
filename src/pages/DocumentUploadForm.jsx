@@ -16,62 +16,18 @@ const DocumentUploadForm = () => {
     idPhoto: null
   })
 
-  // Load existing documents
+  // Load existing documents from localStorage (if any were uploaded previously in this session)
   useEffect(() => {
-    const loadDocuments = async () => {
-      if (!user?.id) return
-
+    const savedDocs = localStorage.getItem(`application_documents_${jobId || 'general'}`)
+    if (savedDocs) {
       try {
-        // Get applicant
-        const { data: applicant } = await supabase
-          .from('applicants')
-          .select('id')
-          .eq('user_id', user.id)
-          .single()
-
-        if (!applicant) return
-
-        // Load documents for this applicant
-        const { data: docs } = await supabase
-          .from('documents')
-          .select('*')
-          .eq('applicant_id', applicant.id)
-
-        if (docs) {
-          const docsMap = {}
-          docs.forEach(doc => {
-            if (doc.file_type === 'Resume') {
-              docsMap.resume = {
-                url: doc.file_path,
-                name: doc.file_name,
-                size: doc.file_size,
-                id: doc.id
-              }
-            } else if (doc.file_type === '201File') {
-              docsMap.file201 = {
-                url: doc.file_path,
-                name: doc.file_name,
-                size: doc.file_size,
-                id: doc.id
-              }
-            } else if (doc.file_type === 'IDPhoto') {
-              docsMap.idPhoto = {
-                url: doc.file_path,
-                name: doc.file_name,
-                size: doc.file_size,
-                id: doc.id
-              }
-            }
-          })
-          setDocuments(docsMap)
-        }
-      } catch (error) {
-        console.error('Error loading documents:', error)
+        const parsed = JSON.parse(savedDocs)
+        setDocuments(parsed)
+      } catch (e) {
+        console.error('Error loading saved documents:', e)
       }
     }
-
-    loadDocuments()
-  }, [user, jobId])
+  }, [jobId])
 
   const handleFileUpload = async (file, type) => {
     // Validate file
@@ -104,21 +60,17 @@ const DocumentUploadForm = () => {
     setUploading(prev => ({ ...prev, [type]: true }))
 
     try {
-      // Get applicant
-      const { data: applicant } = await supabase
-        .from('applicants')
-        .select('id')
-        .eq('user_id', user?.id || null)
-        .single()
-
-      if (!applicant) {
-        alert('Please complete previous steps first')
+      // Check if personal info exists in localStorage (from step 1)
+      const personalInfo = localStorage.getItem(`application_form_${jobId || 'general'}`)
+      if (!personalInfo) {
+        alert('Please complete Step 1 first')
         return
       }
 
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage using temporary path (will be moved/updated when applicant is created)
       const fileExt = file.name.split('.').pop()
-      const fileName = `${applicant.id}/${type}_${Date.now()}.${fileExt}`
+      const tempId = user?.id || `temp_${Date.now()}`
+      const fileName = `${tempId}/${type}_${Date.now()}.${fileExt}`
       const filePath = fileName
 
       const { error: uploadError } = await supabase.storage
@@ -146,53 +98,22 @@ const DocumentUploadForm = () => {
         idPhoto: 'IDPhoto'
       }
 
-      // Check if document already exists for this type
-      const { data: existingDoc } = await supabase
-        .from('documents')
-        .select('id')
-        .eq('applicant_id', applicant.id)
-        .eq('file_type', fileTypeMap[type])
-        .single()
-
-      if (existingDoc) {
-        // Update existing document
-        const { error: updateError } = await supabase
-          .from('documents')
-          .update({
-            file_path: filePath,
-            file_name: file.name,
-            file_size: file.size,
-            mime_type: file.type
-          })
-          .eq('id', existingDoc.id)
-
-        if (updateError) throw updateError
-      } else {
-        // Create new document record
-        const { error: insertError } = await supabase
-          .from('documents')
-          .insert({
-            applicant_id: applicant.id,
-            file_path: filePath,
-            file_name: file.name,
-            file_type: fileTypeMap[type],
-            file_size: file.size,
-            mime_type: file.type
-          })
-
-        if (insertError) throw insertError
-      }
-
       const fileData = {
         url: signedUrl || filePath,
         path: filePath,
         name: file.name,
         size: file.size,
         type: file.type,
+        file_type: fileTypeMap[type],
         uploaded_at: new Date().toISOString()
       }
 
       setDocuments(prev => ({ ...prev, [type]: fileData }))
+      
+      // Save document info to localStorage
+      const savedDocs = { ...documents, [type]: fileData }
+      localStorage.setItem(`application_documents_${jobId || 'general'}`, JSON.stringify(savedDocs))
+      
       alert('File uploaded successfully!')
     } catch (error) {
       console.error('Error uploading file:', error)
@@ -207,45 +128,21 @@ const DocumentUploadForm = () => {
     if (!confirm('Are you sure you want to remove this file?')) return
 
     try {
-      // Get applicant
-      const { data: applicant } = await supabase
-        .from('applicants')
-        .select('id')
-        .eq('user_id', user?.id || null)
-        .single()
-
-      if (!applicant) return
-
-      const fileTypeMap = {
-        resume: 'Resume',
-        file201: '201File',
-        idPhoto: 'IDPhoto'
-      }
-
-      // Get document record
-      const { data: doc } = await supabase
-        .from('documents')
-        .select('id, file_path')
-        .eq('applicant_id', applicant.id)
-        .eq('file_type', fileTypeMap[type])
-        .single()
-
-      if (doc) {
+      const fileToRemove = documents[type]
+      
+      if (fileToRemove?.path) {
         // Remove from storage
-        if (doc.file_path) {
-          await supabase.storage
-            .from('resumes')
-            .remove([doc.file_path])
-        }
-
-        // Delete document record
-        await supabase
-          .from('documents')
-          .delete()
-          .eq('id', doc.id)
+        await supabase.storage
+          .from('resumes')
+          .remove([fileToRemove.path])
       }
 
-      setDocuments(prev => ({ ...prev, [type]: null }))
+      // Remove from state and localStorage
+      const updatedDocs = { ...documents }
+      delete updatedDocs[type]
+      setDocuments(updatedDocs)
+      
+      localStorage.setItem(`application_documents_${jobId || 'general'}`, JSON.stringify(updatedDocs))
     } catch (error) {
       console.error('Error removing file:', error)
       alert('Failed to remove file. Please try again.')
@@ -261,36 +158,115 @@ const DocumentUploadForm = () => {
     setLoading(true)
 
     try {
-      // Get applicant
-      const { data: applicant } = await supabase
-        .from('applicants')
-        .select('id')
-        .eq('user_id', user?.id || null)
-        .single()
+      // Get applicant by user_id or email
+      let applicantId = null
+      
+      if (user?.id) {
+        const { data: applicant } = await supabase
+          .from('applicants')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle()
 
-      if (!applicant) {
+        if (applicant) {
+          applicantId = applicant.id
+        }
+      }
+
+      // If no applicant found by user_id, try by email
+      if (!applicantId && user?.email) {
+        const { data: applicant } = await supabase
+          .from('applicants')
+          .select('id')
+          .eq('email', user.email)
+          .maybeSingle()
+
+        if (applicant) {
+          applicantId = applicant.id
+        }
+      }
+
+      if (!applicantId) {
         alert('Please complete previous steps first')
+        navigate(`/apply/${jobId || ''}`)
         return
+      }
+
+      // Save document records to database
+      if (Object.keys(documents).length > 0) {
+        const documentRecords = []
+        
+        Object.keys(documents).forEach(type => {
+          const doc = documents[type]
+          if (doc && doc.path) {
+            documentRecords.push({
+              applicant_id: applicantId,
+              file_path: doc.path,
+              file_name: doc.name,
+              file_type: doc.file_type,
+              file_size: doc.size,
+              mime_type: doc.type
+            })
+          }
+        })
+        
+        if (documentRecords.length > 0) {
+          // Check for existing documents and update/insert accordingly
+          for (const docRecord of documentRecords) {
+            const { data: existingDoc } = await supabase
+              .from('documents')
+              .select('id')
+              .eq('applicant_id', applicantId)
+              .eq('file_type', docRecord.file_type)
+              .maybeSingle()
+
+            if (existingDoc) {
+              // Update existing document
+              const { error: updateError } = await supabase
+                .from('documents')
+                .update({
+                  file_path: docRecord.file_path,
+                  file_name: docRecord.file_name,
+                  file_size: docRecord.file_size,
+                  mime_type: docRecord.mime_type
+                })
+                .eq('id', existingDoc.id)
+
+              if (updateError) throw updateError
+            } else {
+              // Create new document record
+              const { error: insertError } = await supabase
+                .from('documents')
+                .insert(docRecord)
+
+              if (insertError) throw insertError
+            }
+          }
+        }
       }
 
       // Update application current_step
       if (jobId) {
-        const { error } = await supabase
-          .from('applications')
-          .update({
-            current_step: 3
-          })
-          .eq('applicant_id', applicant.id)
-          .eq('job_id', jobId)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (uuidRegex.test(jobId)) {
+          const { error } = await supabase
+            .from('applications')
+            .update({
+              current_step: 3
+            })
+            .eq('applicant_id', applicantId)
+            .eq('job_id', jobId)
 
-        if (error) throw error
+          if (error) throw error
+        }
       }
 
       // Navigate to success page (Step 4)
       navigate(`/apply/${jobId || ''}/success`)
     } catch (error) {
       console.error('Error saving step 3:', error)
-      alert('Failed to save. Please try again.')
+      const errorMessage = error?.message || error?.error_description || 'Unknown error occurred'
+      alert(`Failed to save: ${errorMessage}. Please try again.`)
     } finally {
       setLoading(false)
     }

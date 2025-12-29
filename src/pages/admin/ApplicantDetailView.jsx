@@ -408,9 +408,15 @@ const ApplicantDetailView = () => {
                     <div>
                       <p className="text-[#92a4c9] text-xs uppercase font-bold">Residence</p>
                       <p className="text-white text-sm font-medium">
-                        {applicant?.city && applicant?.state
-                          ? `${applicant.city}, ${applicant.state} ${applicant.zip_code || ''}`
-                          : applicant?.street_address || 'N/A'}
+                        {applicant?.street_address && (
+                          <>
+                            {applicant.street_address}
+                            {applicant.barangay && `, ${applicant.barangay}`}
+                            {applicant.city && `, ${applicant.city}`}
+                            {applicant.province && `, ${applicant.province}`}
+                            {applicant.zip_code && ` ${applicant.zip_code}`}
+                          </>
+                        ) || 'N/A'}
                       </p>
                     </div>
                   </div>

@@ -17,42 +17,29 @@ const QualificationsForm = () => {
   const [uploading, setUploading] = useState(false)
 
   const licenseOptions = [
-    { id: 'security_1a', label: 'Security License Class 1A', subtitle: 'Unarmed Guard' },
-    { id: 'security_1c', label: 'Security License Class 1C', subtitle: 'Cash-in-Transit' },
-    { id: 'first_aid', label: 'First Aid Certificate', subtitle: 'HLTAID011 or equivalent' },
-    { id: 'rsa', label: 'RSA Competency Card', subtitle: 'Responsible Service of Alcohol' },
-    { id: 'white_card', label: 'White Card', subtitle: 'Construction Induction' },
-    { id: 'drivers_license', label: "Driver's License (Class C)", subtitle: 'Full Unrestricted' }
+    { id: 'psa_birth_certificate', label: 'PSA Birth Certificate', subtitle: 'Philippine Statistics Authority' },
+    { id: 'nbi_clearance', label: 'NBI Clearance', subtitle: 'National Bureau of Investigation' },
+    { id: 'sss_id', label: 'SSS ID / E-1 Form', subtitle: 'Social Security System' },
+    { id: 'philhealth_id', label: 'PhilHealth ID', subtitle: 'Philippine Health Insurance Corporation' },
+    { id: 'pagibig_id', label: 'Pag-IBIG ID', subtitle: 'Home Development Mutual Fund' },
+    { id: 'tin_id', label: 'TIN ID', subtitle: 'Tax Identification Number' },
+    { id: 'drivers_license', label: "Driver's License", subtitle: 'Land Transportation Office (LTO)' },
+    { id: 'first_aid', label: 'First Aid Certificate', subtitle: 'BLS/CPR Training' },
+    { id: 'security_guard_license', label: 'Security Guard License', subtitle: 'PASCO / PNP Security Agency' }
   ]
 
-  // Load existing data if available
+  // Load existing data from localStorage
   useEffect(() => {
-    const loadApplication = async () => {
-      if (!user?.id) return
-
+    const savedData = localStorage.getItem(`application_qualifications_${jobId || 'general'}`)
+    if (savedData) {
       try {
-        // Get applicant by user_id
-        const { data: applicant } = await supabase
-          .from('applicants')
-          .select('*')
-          .eq('user_id', user.id)
-          .single()
-
-        if (applicant) {
-          setFormData({
-            licenses: Array.isArray(applicant.licenses) ? applicant.licenses : [],
-            height_cm: applicant.height_cm || '',
-            weight_kg: applicant.weight_kg || '',
-            documents: []
-          })
-        }
-      } catch (error) {
-        console.error('Error loading application:', error)
+        const parsed = JSON.parse(savedData)
+        setFormData(prev => ({ ...prev, ...parsed }))
+      } catch (e) {
+        console.error('Error loading saved qualifications:', e)
       }
     }
-
-    loadApplication()
-  }, [user, jobId])
+  }, [jobId])
 
   const handleLicenseChange = (licenseId) => {
     setFormData(prev => ({
@@ -159,14 +146,35 @@ const QualificationsForm = () => {
     setLoading(true)
 
     try {
-      // Get applicant by email (from step 1)
-      const { data: applicant } = await supabase
-        .from('applicants')
-        .select('id')
-        .eq('user_id', user?.id || null)
-        .single()
+      // Get applicant by user_id or email
+      let applicantId = null
+      
+      if (user?.id) {
+        const { data: applicant } = await supabase
+          .from('applicants')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle()
 
-      if (!applicant) {
+        if (applicant) {
+          applicantId = applicant.id
+        }
+      }
+
+      // If no applicant found by user_id, try by email from step 1
+      if (!applicantId && user?.email) {
+        const { data: applicant } = await supabase
+          .from('applicants')
+          .select('id')
+          .eq('email', user.email)
+          .maybeSingle()
+
+        if (applicant) {
+          applicantId = applicant.id
+        }
+      }
+
+      if (!applicantId) {
         alert('Please complete Step 1 first')
         navigate(`/apply/${jobId || ''}`)
         return
@@ -181,28 +189,32 @@ const QualificationsForm = () => {
           weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
           training_level: formData.training_level || null
         })
-        .eq('id', applicant.id)
+        .eq('id', applicantId)
 
       if (applicantError) throw applicantError
 
       // Update application current_step
       if (jobId) {
-        const { error: appError } = await supabase
-          .from('applications')
-          .update({
-            current_step: 2
-          })
-          .eq('applicant_id', applicant.id)
-          .eq('job_id', jobId)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (uuidRegex.test(jobId)) {
+          const { error: appError } = await supabase
+            .from('applications')
+            .update({
+              current_step: 2
+            })
+            .eq('applicant_id', applicantId)
+            .eq('job_id', jobId)
 
-        if (appError) throw appError
+          if (appError) throw appError
+        }
       }
 
       // Navigate to step 3 (Document Upload)
       navigate(`/apply/${jobId || ''}/documents`)
     } catch (error) {
       console.error('Error saving qualifications:', error)
-      alert('Failed to save qualifications. Please try again.')
+      const errorMessage = error?.message || error?.error_description || 'Unknown error occurred'
+      alert(`Failed to save qualifications: ${errorMessage}. Please try again.`)
     } finally {
       setLoading(false)
     }

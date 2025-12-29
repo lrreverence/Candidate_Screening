@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useSupabase } from '../contexts/SupabaseContext'
 import { useAuth } from '../contexts/AuthContext'
+import LoginModal from '../components/LoginModal'
 
 const JobDetail = () => {
   const { jobId } = useParams()
@@ -10,6 +11,7 @@ const JobDetail = () => {
   const { user } = useAuth()
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showLoginModal, setShowLoginModal] = useState(false)
 
   // Fallback jobs data
   const fallbackJobs = [
@@ -250,6 +252,12 @@ const JobDetail = () => {
   }, [jobId, supabaseJobs, supabaseLoading])
 
   const handleApply = () => {
+    if (!user) {
+      // Show login modal if not logged in
+      setShowLoginModal(true)
+      return
+    }
+    // Navigate to application form if logged in
     navigate(`/apply/${jobId}`)
   }
 
@@ -415,6 +423,7 @@ const JobDetail = () => {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={handleApply}
                   className="w-full h-12 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-2"
                 >
@@ -454,6 +463,17 @@ const JobDetail = () => {
           </div>
         </div>
       </footer>
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSwitchToSignup={() => {
+          setShowLoginModal(false)
+          // Could add signup modal here if needed
+        }}
+        redirectTo={jobId ? `/apply/${jobId}` : null}
+      />
     </div>
   )
 }

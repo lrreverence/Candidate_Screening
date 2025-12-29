@@ -17,8 +17,9 @@ const ApplicationForm = () => {
     email: '',
     phone_number: '',
     street_address: '',
+    barangay: '',
     city: '',
-    state: '',
+    province: '',
     zip_code: '',
   })
 
@@ -27,7 +28,18 @@ const ApplicationForm = () => {
     if (user?.email) {
       setFormData(prev => ({ ...prev, email: user.email }))
     }
-  }, [user])
+    
+    // Load saved form data from localStorage
+    const savedData = localStorage.getItem(`application_form_${jobId || 'general'}`)
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData)
+        setFormData(prev => ({ ...parsed, ...prev }))
+      } catch (e) {
+        console.error('Error loading saved form data:', e)
+      }
+    }
+  }, [user, jobId])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -40,11 +52,15 @@ const ApplicationForm = () => {
       // Check if applicant exists
       let applicantId = null
       if (user?.id) {
-        const { data: existingApplicant } = await supabase
+        const { data: existingApplicant, error: checkError } = await supabase
           .from('applicants')
           .select('id')
           .eq('email', formData.email)
-          .single()
+          .maybeSingle()
+        
+        if (checkError && checkError.code !== 'PGRST116') {
+          throw checkError
+        }
         
         if (existingApplicant) {
           applicantId = existingApplicant.id
@@ -58,8 +74,9 @@ const ApplicationForm = () => {
               date_of_birth: formData.date_of_birth || null,
               gender: formData.gender || null,
               street_address: formData.street_address || null,
+              barangay: formData.barangay || null,
               city: formData.city || null,
-              state: formData.state || null,
+              province: formData.province || null,
               zip_code: formData.zip_code || null,
             })
             .eq('id', applicantId)
@@ -77,8 +94,9 @@ const ApplicationForm = () => {
               date_of_birth: formData.date_of_birth || null,
               gender: formData.gender || null,
               street_address: formData.street_address || null,
+              barangay: formData.barangay || null,
               city: formData.city || null,
-              state: formData.state || null,
+              province: formData.province || null,
               zip_code: formData.zip_code || null,
               user_id: user.id,
               status: 'Pending'
@@ -93,12 +111,16 @@ const ApplicationForm = () => {
 
       if (applicantId && jobId) {
         // Check if application exists
-        const { data: existingApp } = await supabase
+        const { data: existingApp, error: appCheckError } = await supabase
           .from('applications')
           .select('id')
           .eq('applicant_id', applicantId)
           .eq('job_id', jobId)
-          .single()
+          .maybeSingle()
+
+        if (appCheckError && appCheckError.code !== 'PGRST116') {
+          throw appCheckError
+        }
 
         if (existingApp) {
           // Update existing application
@@ -125,7 +147,14 @@ const ApplicationForm = () => {
       alert('Draft saved successfully!')
     } catch (error) {
       console.error('Error saving draft:', error)
-      alert('Failed to save draft. Please try again.')
+      const errorMessage = error?.message || error?.error_description || 'Unknown error occurred'
+      console.error('Error details:', {
+        message: errorMessage,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint
+      })
+      alert(`Failed to save draft: ${errorMessage}. Please try again.`)
     } finally {
       setSaving(false)
     }
@@ -133,27 +162,40 @@ const ApplicationForm = () => {
 
   const handleNextStep = async (e) => {
     e.preventDefault()
-    
+
     // Basic validation
     if (!formData.first_name || !formData.last_name || !formData.email) {
       alert('Please fill in all required fields (First Name, Last Name, Email)')
       return
     }
 
+    console.log('[FORM] Starting handleNextStep')
+    console.log('[FORM] User:', user)
+    console.log('[FORM] JobId:', jobId)
+    console.log('[FORM] Form data:', formData)
+
     setLoading(true)
     try {
       // Step 1: Create or update applicant
       let applicantId = null
-      
+
+      console.log('[FORM] Checking if applicant exists...')
       // Check if applicant exists by email
-      const { data: existingApplicant } = await supabase
+      const { data: existingApplicant, error: checkError } = await supabase
         .from('applicants')
         .select('id')
         .eq('email', formData.email)
-        .single()
+        .maybeSingle()
+
+      console.log('[FORM] Existing applicant check result:', { existingApplicant, checkError })
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError
+      }
 
       if (existingApplicant) {
         applicantId = existingApplicant.id
+        console.log('[FORM] Updating existing applicant:', applicantId)
         // Update applicant
         const { error: updateError } = await supabase
           .from('applicants')
@@ -164,18 +206,24 @@ const ApplicationForm = () => {
             date_of_birth: formData.date_of_birth || null,
             gender: formData.gender || null,
             street_address: formData.street_address || null,
+            barangay: formData.barangay || null,
             city: formData.city || null,
-            state: formData.state || null,
+            province: formData.province || null,
             zip_code: formData.zip_code || null,
             user_id: user?.id || null
           })
           .eq('id', applicantId)
-        
+
+        console.log('[FORM] Update result:', updateError)
         if (updateError) throw updateError
       } else {
+        console.log('[FORM] Creating new applicant...')
         // Generate reference code
+        console.log('[FORM] Calling generate_reference_code RPC...')
         const { data: refCode, error: refError } = await supabase
           .rpc('generate_reference_code')
+
+        console.log('[FORM] RPC result:', { refCode, refError })
         
         let referenceCode = refCode
         if (refError || !refCode) {
@@ -183,9 +231,13 @@ const ApplicationForm = () => {
           const year = new Date().getFullYear()
           const timestamp = Date.now().toString().slice(-6)
           referenceCode = `REF-${year}-${timestamp.slice(0, 3)}`
+          console.log('[FORM] Using fallback reference code:', referenceCode)
+        } else {
+          console.log('[FORM] Using generated reference code:', referenceCode)
         }
 
         // Create new applicant
+        console.log('[FORM] Inserting new applicant...')
         const { data: newApplicant, error: applicantError } = await supabase
           .from('applicants')
           .insert({
@@ -197,29 +249,43 @@ const ApplicationForm = () => {
             date_of_birth: formData.date_of_birth || null,
             gender: formData.gender || null,
             street_address: formData.street_address || null,
+            barangay: formData.barangay || null,
             city: formData.city || null,
-            state: formData.state || null,
+            province: formData.province || null,
             zip_code: formData.zip_code || null,
             user_id: user?.id || null,
             status: 'Pending'
           })
           .select()
           .single()
-        
+
+        console.log('[FORM] Insert result:', { newApplicant, applicantError })
         if (applicantError) throw applicantError
         applicantId = newApplicant.id
+        console.log('[FORM] New applicant ID:', applicantId)
       }
 
       // Step 2: Create or update application
-      if (applicantId) {
-        if (jobId) {
-          // Check if application already exists
-          const { data: existingApp } = await supabase
+      console.log('[FORM] Step 2: Creating/updating application...')
+      console.log('[FORM] JobId:', jobId, 'ApplicantId:', applicantId)
+      if (jobId && applicantId) {
+        // Check if jobId is a valid UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        const isValidUUID = uuidRegex.test(jobId)
+        console.log('[FORM] Is jobId valid UUID?', isValidUUID)
+        
+        // Only proceed if jobId is a valid UUID (since job_id is a UUID foreign key)
+        if (isValidUUID) {
+          const { data: existingApp, error: appCheckError } = await supabase
             .from('applications')
             .select('id')
             .eq('applicant_id', applicantId)
             .eq('job_id', jobId)
-            .single()
+            .maybeSingle()
+
+          if (appCheckError && appCheckError.code !== 'PGRST116') {
+            throw appCheckError
+          }
 
           if (existingApp) {
             // Update existing application
@@ -245,26 +311,65 @@ const ApplicationForm = () => {
             
             if (insertError) throw insertError
           }
+        } else {
+          // jobId is not a valid UUID - create application without job_id (since it's nullable)
+          // This allows applicants to apply without a specific job posting
+          const { data: existingApp, error: appCheckError } = await supabase
+            .from('applications')
+            .select('id')
+            .eq('applicant_id', applicantId)
+            .is('job_id', null)
+            .maybeSingle()
+
+          if (appCheckError && appCheckError.code !== 'PGRST116') {
+            throw appCheckError
+          }
+
+          if (existingApp) {
+            // Update existing application
+            const { error: updateError } = await supabase
+              .from('applications')
+              .update({
+                current_step: 1,
+                status: 'Pending'
+              })
+              .eq('id', existingApp.id)
+            
+            if (updateError) throw updateError
+          } else {
+            // Create new application without job_id
+            const { error: insertError } = await supabase
+              .from('applications')
+              .insert({
+                job_id: null,
+                applicant_id: applicantId,
+                status: 'Pending',
+                current_step: 1
+              })
+            
+            if (insertError) throw insertError
+          }
         }
       }
 
       // Navigate to step 2 (Qualifications)
+      console.log('[FORM] Success! Navigating to qualifications page...')
       navigate(`/apply/${jobId || ''}/qualifications`)
     } catch (error) {
       console.error('Error saving application:', error)
-      alert('Failed to save application. Please try again.')
+      const errorMessage = error?.message || error?.error_description || 'Unknown error occurred'
+      console.error('Error details:', {
+        message: errorMessage,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint
+      })
+      alert(`Failed to save application: ${errorMessage}. Please try again.`)
     } finally {
       setLoading(false)
     }
   }
 
-  const usStates = [
-    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
-  ]
 
   return (
     <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display transition-colors duration-200">
@@ -432,7 +537,7 @@ const ApplicationForm = () => {
                   name="phone_number"
                   value={formData.phone_number}
                   onChange={handleChange}
-                  placeholder="(555) 123-4567"
+                  placeholder="0912 345 6789"
                   type="tel"
                 />
               </div>
@@ -441,7 +546,7 @@ const ApplicationForm = () => {
             {/* Address */}
             <div className="flex flex-col gap-2">
               <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="address">
-                Street Address
+                House/Unit No., Street Name
               </label>
               <input
                 className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
@@ -449,14 +554,28 @@ const ApplicationForm = () => {
                 name="street_address"
                 value={formData.street_address}
                 onChange={handleChange}
-                placeholder="123 Security Blvd, Apt 4B"
+                placeholder="e.g. Unit 4B, 123 Main Street"
                 type="text"
               />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="barangay">
+                Barangay
+              </label>
+              <input
+                className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
+                id="barangay"
+                name="barangay"
+                value={formData.barangay}
+                onChange={handleChange}
+                placeholder="e.g. Barangay 123"
+                type="text"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="city">
-                  City
+                  City / Municipality
                 </label>
                 <input
                   className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
@@ -464,44 +583,38 @@ const ApplicationForm = () => {
                   name="city"
                   value={formData.city}
                   onChange={handleChange}
-                  placeholder="Metropolis"
+                  placeholder="e.g. Manila"
                   type="text"
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="state">
-                  State
-                </label>
-                <div className="relative">
-                  <select
-                    className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 text-gray-500 dark:text-gray-400 dark:text-white text-base outline-none appearance-none"
-                    id="state"
-                    name="state"
-                    value={formData.state}
-                    onChange={handleChange}
-                  >
-                    <option disabled value="">Select</option>
-                    {usStates.map(state => (
-                      <option key={state} value={state}>{state}</option>
-                    ))}
-                  </select>
-                  <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="zip">
-                  Zip Code
+                <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="province">
+                  Province
                 </label>
                 <input
                   className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
-                  id="zip"
-                  name="zip_code"
-                  value={formData.zip_code}
+                  id="province"
+                  name="province"
+                  value={formData.province}
                   onChange={handleChange}
-                  placeholder="12345"
+                  placeholder="e.g. Metro Manila"
                   type="text"
                 />
               </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="zip">
+                Postal Code
+              </label>
+              <input
+                className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
+                id="zip"
+                name="zip_code"
+                value={formData.zip_code}
+                onChange={handleChange}
+                placeholder="e.g. 1000"
+                type="text"
+              />
             </div>
 
             {/* Actions */}

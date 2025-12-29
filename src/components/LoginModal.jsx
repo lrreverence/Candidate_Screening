@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
-const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
+const LoginModal = ({ isOpen, onClose, onSwitchToSignup, redirectTo }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -41,9 +41,14 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
         onClose()
         navigate('/admin')
       } else {
-        // User is logged in but not admin, just close modal
+        // User is logged in but not admin
         console.log('[LOGIN] Non-admin user, closing modal')
         onClose()
+        // Redirect to intended destination if provided
+        if (redirectTo) {
+          console.log('[LOGIN] Redirecting to:', redirectTo)
+          navigate(redirectTo)
+        }
       }
     }
   }, [user, userProfile, authLoading, navigate, onClose])

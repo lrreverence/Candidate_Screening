@@ -19,20 +19,29 @@ const ApplicationSuccess = () => {
       }
 
       try {
-        // Get the applicant
+        // Get applicant by user_id (data already saved in previous steps)
         const { data: applicant, error: applicantError } = await supabase
           .from('applicants')
           .select('id, reference_code')
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle()
 
-        if (applicantError) throw applicantError
+        if (applicantError) {
+          console.error('Error fetching applicant:', applicantError)
+          throw applicantError
+        }
 
-        // If already has reference code, use it
-        if (applicant.reference_code && !applicant.reference_code.startsWith('TEMP-')) {
+        if (!applicant) {
+          alert('No applicant record found. Please complete the application form first.')
+          navigate(`/apply/${jobId || ''}`)
+          return
+        }
+
+        // Set reference code
+        if (applicant.reference_code) {
           setReferenceId(applicant.reference_code)
         } else {
-          // Generate reference code using RPC function
+          // Generate reference code if missing
           const { data: refData, error: refError } = await supabase
             .rpc('generate_reference_code')
 
@@ -46,39 +55,59 @@ const ApplicationSuccess = () => {
             finalRefCode = refData
           }
 
-          setReferenceId(finalRefCode)
-
           // Update applicant with reference code
-          const { error: updateApplicantError } = await supabase
+          await supabase
             .from('applicants')
-            .update({
-              reference_code: finalRefCode
-            })
+            .update({ reference_code: finalRefCode })
             .eq('id', applicant.id)
 
-          if (updateApplicantError) {
-            console.error('Error updating applicant:', updateApplicantError)
-          }
+          setReferenceId(finalRefCode)
         }
 
-        // Update application status and mark as submitted
+        // Mark application as submitted (only if jobId is provided and is a valid UUID)
         if (jobId) {
-          const { error: updateAppError } = await supabase
-            .from('applications')
-            .update({
-              status: 'submitted',
-              current_step: 4,
-              submitted_at: new Date().toISOString()
-            })
-            .eq('applicant_id', applicant.id)
-            .eq('job_id', jobId)
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          const isValidUUID = uuidRegex.test(jobId)
+          
+          if (isValidUUID) {
+            const { data: existingApp } = await supabase
+              .from('applications')
+              .select('id')
+              .eq('applicant_id', applicant.id)
+              .eq('job_id', jobId)
+              .maybeSingle()
 
-          if (updateAppError) {
-            console.error('Error updating application:', updateAppError)
+            if (existingApp) {
+              // Update existing application to submitted
+              const { error: updateAppError } = await supabase
+                .from('applications')
+                .update({
+                  status: 'submitted',
+                  current_step: 4,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', existingApp.id)
+
+              if (updateAppError) {
+                console.error('Error updating application:', updateAppError)
+                // Don't throw - application data is already saved
+              }
+            }
           }
         }
+
+        // Clear localStorage after successful finalization
+        localStorage.removeItem(`application_form_${jobId || 'general'}`)
+        localStorage.removeItem(`application_qualifications_${jobId || 'general'}`)
+        localStorage.removeItem(`application_documents_${jobId || 'general'}`)
       } catch (error) {
         console.error('Error finalizing application:', error)
+        console.error('Error details:', {
+          message: error?.message,
+          code: error?.code,
+          details: error?.details,
+          hint: error?.hint
+        })
         // Still show success page with a fallback reference
         const year = new Date().getFullYear()
         const timestamp = Date.now().toString().slice(-6)
