@@ -176,193 +176,62 @@ const ApplicationForm = () => {
 
     setLoading(true)
     try {
-      // Step 1: Create or update applicant
-      let applicantId = null
+      // Get Supabase URL from environment or use default
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sbmwzgtlqmwtbrgdehuw.supabase.co'
+      const apiUrl = `${supabaseUrl}/functions/v1/save-applicant`
 
-      console.log('[FORM] Checking if applicant exists...')
-      // Check if applicant exists by email
-      const { data: existingApplicant, error: checkError } = await supabase
-        .from('applicants')
-        .select('id')
-        .eq('email', formData.email)
-        .maybeSingle()
+      console.log('[FORM] Calling API endpoint:', apiUrl)
 
-      console.log('[FORM] Existing applicant check result:', { existingApplicant, checkError })
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        throw checkError
-      }
-
-      if (existingApplicant) {
-        applicantId = existingApplicant.id
-        console.log('[FORM] Updating existing applicant:', applicantId)
-        // Update applicant
-        const { error: updateError } = await supabase
-          .from('applicants')
-          .update({
-            first_name: formData.first_name,
-            last_name: formData.last_name,
-            phone: formData.phone_number || null,
-            date_of_birth: formData.date_of_birth || null,
-            gender: formData.gender || null,
-            street_address: formData.street_address || null,
-            barangay: formData.barangay || null,
-            city: formData.city || null,
-            province: formData.province || null,
-            zip_code: formData.zip_code || null,
-            user_id: user?.id || null
-          })
-          .eq('id', applicantId)
-
-        console.log('[FORM] Update result:', updateError)
-        if (updateError) throw updateError
-      } else {
-        console.log('[FORM] Creating new applicant...')
-        // Generate reference code
-        console.log('[FORM] Calling generate_reference_code RPC...')
-        const { data: refCode, error: refError } = await supabase
-          .rpc('generate_reference_code')
-
-        console.log('[FORM] RPC result:', { refCode, refError })
-        
-        let referenceCode = refCode
-        if (refError || !refCode) {
-          // Fallback reference code
-          const year = new Date().getFullYear()
-          const timestamp = Date.now().toString().slice(-6)
-          referenceCode = `REF-${year}-${timestamp.slice(0, 3)}`
-          console.log('[FORM] Using fallback reference code:', referenceCode)
-        } else {
-          console.log('[FORM] Using generated reference code:', referenceCode)
-        }
-
-        // Create new applicant
-        console.log('[FORM] Inserting new applicant...')
-        const { data: newApplicant, error: applicantError } = await supabase
-          .from('applicants')
-          .insert({
-            reference_code: referenceCode,
+      // Call the Edge Function API
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNibXd6Z3RscW13dGJyZ2RlaHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDUyMDMsImV4cCI6MjA3ODY4MTIwM30.LaXLtSuHVnY0JbN5YTa-2JlbrN2_cLAbAd6NfXtdyJY'}`
+        },
+        body: JSON.stringify({
+          formData: {
             first_name: formData.first_name,
             last_name: formData.last_name,
             email: formData.email,
-            phone: formData.phone_number || null,
-            date_of_birth: formData.date_of_birth || null,
-            gender: formData.gender || null,
-            street_address: formData.street_address || null,
-            barangay: formData.barangay || null,
-            city: formData.city || null,
-            province: formData.province || null,
-            zip_code: formData.zip_code || null,
-            user_id: user?.id || null,
-            status: 'Pending'
-          })
-          .select()
-          .single()
+            phone_number: formData.phone_number,
+            date_of_birth: formData.date_of_birth,
+            gender: formData.gender,
+            street_address: formData.street_address,
+            barangay: formData.barangay,
+            city: formData.city,
+            province: formData.province,
+            zip_code: formData.zip_code
+          },
+          jobId: jobId || null,
+          userId: user?.id || null
+        })
+      })
 
-        console.log('[FORM] Insert result:', { newApplicant, applicantError })
-        if (applicantError) throw applicantError
-        applicantId = newApplicant.id
-        console.log('[FORM] New applicant ID:', applicantId)
+      console.log('[FORM] API Response status:', response.status)
+
+      const result = await response.json()
+      console.log('[FORM] API Response:', result)
+
+      if (!response.ok) {
+        throw new Error(result.error || `API error: ${response.status}`)
       }
 
-      // Step 2: Create or update application
-      console.log('[FORM] Step 2: Creating/updating application...')
-      console.log('[FORM] JobId:', jobId, 'ApplicantId:', applicantId)
-      if (jobId && applicantId) {
-        // Check if jobId is a valid UUID
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-        const isValidUUID = uuidRegex.test(jobId)
-        console.log('[FORM] Is jobId valid UUID?', isValidUUID)
-        
-        // Only proceed if jobId is a valid UUID (since job_id is a UUID foreign key)
-        if (isValidUUID) {
-          const { data: existingApp, error: appCheckError } = await supabase
-            .from('applications')
-            .select('id')
-            .eq('applicant_id', applicantId)
-            .eq('job_id', jobId)
-            .maybeSingle()
-
-          if (appCheckError && appCheckError.code !== 'PGRST116') {
-            throw appCheckError
-          }
-
-          if (existingApp) {
-            // Update existing application
-            const { error: updateError } = await supabase
-              .from('applications')
-              .update({
-                current_step: 1,
-                status: 'Pending'
-              })
-              .eq('id', existingApp.id)
-            
-            if (updateError) throw updateError
-          } else {
-            // Create new application
-            const { error: insertError } = await supabase
-              .from('applications')
-              .insert({
-                job_id: jobId,
-                applicant_id: applicantId,
-                status: 'Pending',
-                current_step: 1
-              })
-            
-            if (insertError) throw insertError
-          }
-        } else {
-          // jobId is not a valid UUID - create application without job_id (since it's nullable)
-          // This allows applicants to apply without a specific job posting
-          const { data: existingApp, error: appCheckError } = await supabase
-            .from('applications')
-            .select('id')
-            .eq('applicant_id', applicantId)
-            .is('job_id', null)
-            .maybeSingle()
-
-          if (appCheckError && appCheckError.code !== 'PGRST116') {
-            throw appCheckError
-          }
-
-          if (existingApp) {
-            // Update existing application
-            const { error: updateError } = await supabase
-              .from('applications')
-              .update({
-                current_step: 1,
-                status: 'Pending'
-              })
-              .eq('id', existingApp.id)
-            
-            if (updateError) throw updateError
-          } else {
-            // Create new application without job_id
-            const { error: insertError } = await supabase
-              .from('applications')
-              .insert({
-                job_id: null,
-                applicant_id: applicantId,
-                status: 'Pending',
-                current_step: 1
-              })
-            
-            if (insertError) throw insertError
-          }
-        }
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save applicant')
       }
+
+      console.log('[FORM] Success! Applicant ID:', result.applicantId)
 
       // Navigate to step 2 (Qualifications)
-      console.log('[FORM] Success! Navigating to qualifications page...')
+      console.log('[FORM] Navigating to qualifications page...')
       navigate(`/apply/${jobId || ''}/qualifications`)
     } catch (error) {
-      console.error('Error saving application:', error)
-      const errorMessage = error?.message || error?.error_description || 'Unknown error occurred'
-      console.error('Error details:', {
+      console.error('[FORM] Error saving application:', error)
+      const errorMessage = error?.message || 'Unknown error occurred'
+      console.error('[FORM] Error details:', {
         message: errorMessage,
-        code: error?.code,
-        details: error?.details,
-        hint: error?.hint
+        error: error
       })
       alert(`Failed to save application: ${errorMessage}. Please try again.`)
     } finally {
