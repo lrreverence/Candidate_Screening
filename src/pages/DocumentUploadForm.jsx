@@ -8,13 +8,9 @@ const DocumentUploadForm = () => {
   const { jobId } = useParams()
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState({ resume: false, file201: false, idPhoto: false })
+  const [uploading, setUploading] = useState(false)
   
-  const [documents, setDocuments] = useState({
-    resume: null,
-    file201: null,
-    idPhoto: null
-  })
+  const [documents, setDocuments] = useState([])
 
   // Load existing documents from localStorage (if any were uploaded previously in this session)
   useEffect(() => {
@@ -22,42 +18,41 @@ const DocumentUploadForm = () => {
     if (savedDocs) {
       try {
         const parsed = JSON.parse(savedDocs)
-        setDocuments(parsed)
+        // Handle both old format (object) and new format (array)
+        if (Array.isArray(parsed)) {
+          setDocuments(parsed)
+        } else {
+          // Convert old format to new format
+          const docsArray = Object.values(parsed).filter(doc => doc !== null)
+          setDocuments(docsArray)
+        }
       } catch (e) {
         console.error('Error loading saved documents:', e)
       }
     }
   }, [jobId])
 
-  const handleFileUpload = async (file, type) => {
-    // Validate file
+  const handleMultipleFileUpload = async (files) => {
+    // Validate all files are PDFs
     const maxSize = 10 * 1024 * 1024 // 10MB
-    let allowedTypes = []
-
-    if (type === 'resume') {
-      allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-    } else if (type === 'file201') {
-      allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
-    } else if (type === 'idPhoto') {
-      allowedTypes = ['image/jpeg', 'image/jpg', 'image/png']
-    }
-
-    if (file.size > maxSize) {
-      alert('File size must be less than 10MB')
-      return
-    }
-
-    if (!allowedTypes.includes(file.type)) {
-      const typeNames = {
-        resume: 'PDF or DOCX',
-        file201: 'PDF, JPG, or PNG',
-        idPhoto: 'JPG or PNG'
+    const allowedType = 'application/pdf'
+    
+    const invalidFiles = []
+    Array.from(files).forEach((file, index) => {
+      if (file.size > maxSize) {
+        invalidFiles.push(`${file.name} (exceeds 10MB)`)
       }
-      alert(`File must be ${typeNames[type]}`)
+      if (file.type !== allowedType) {
+        invalidFiles.push(`${file.name} (not a PDF)`)
+      }
+    })
+
+    if (invalidFiles.length > 0) {
+      alert(`Invalid files:\n${invalidFiles.join('\n')}\n\nPlease upload PDF files only, max 10MB each.`)
       return
     }
 
-    setUploading(prev => ({ ...prev, [type]: true }))
+    setUploading(true)
 
     try {
       // Check if personal info exists in localStorage (from step 1)
@@ -67,68 +62,94 @@ const DocumentUploadForm = () => {
         return
       }
 
-      // Upload to Supabase Storage using temporary path (will be moved/updated when applicant is created)
-      const fileExt = file.name.split('.').pop()
+      const uploadedFiles = []
       const tempId = user?.id || `temp_${Date.now()}`
-      const fileName = `${tempId}/${type}_${Date.now()}.${fileExt}`
-      const filePath = fileName
 
-      const { error: uploadError } = await supabase.storage
-        .from('resumes')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        })
+      // Upload all files
+      for (const file of Array.from(files)) {
+        const fileExt = file.name.split('.').pop()
+        const timestamp = Date.now() + Math.random().toString(36).substring(7)
+        const fileName = `${tempId}/${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+        const filePath = fileName
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError)
-        alert('Failed to upload file. Please ensure the storage bucket is set up.')
+        const { error: uploadError } = await supabase.storage
+          .from('resumes')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          })
+
+        if (uploadError) {
+          console.error('Upload error for', file.name, ':', uploadError)
+          continue // Skip this file and continue with others
+        }
+
+        // Get signed URL (for private bucket access)
+        const { data: { signedUrl } } = await supabase.storage
+          .from('resumes')
+          .createSignedUrl(filePath, 3600)
+
+        const fileData = {
+          id: `${timestamp}_${file.name}`,
+          url: signedUrl || filePath,
+          path: filePath,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          file_type: 'Document', // Generic type for multiple PDFs
+          uploaded_at: new Date().toISOString()
+        }
+
+        uploadedFiles.push(fileData)
+      }
+
+      if (uploadedFiles.length === 0) {
+        alert('No files were uploaded. Please check the storage bucket is set up correctly.')
         return
       }
 
-      // Get signed URL (for private bucket access)
-      const { data: { signedUrl } } = await supabase.storage
-        .from('resumes')
-        .createSignedUrl(filePath, 3600)
-
-      // Map file type
-      const fileTypeMap = {
-        resume: 'Resume',
-        file201: '201File',
-        idPhoto: 'IDPhoto'
-      }
-
-      const fileData = {
-        url: signedUrl || filePath,
-        path: filePath,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        file_type: fileTypeMap[type],
-        uploaded_at: new Date().toISOString()
-      }
-
-      setDocuments(prev => ({ ...prev, [type]: fileData }))
+      // Add to existing documents
+      setDocuments(prev => [...prev, ...uploadedFiles])
       
       // Save document info to localStorage
-      const savedDocs = { ...documents, [type]: fileData }
-      localStorage.setItem(`application_documents_${jobId || 'general'}`, JSON.stringify(savedDocs))
+      const allDocs = [...documents, ...uploadedFiles]
+      localStorage.setItem(`application_documents_${jobId || 'general'}`, JSON.stringify(allDocs))
       
-      alert('File uploaded successfully!')
+      alert(`${uploadedFiles.length} file(s) uploaded successfully!`)
     } catch (error) {
-      console.error('Error uploading file:', error)
-      alert('Failed to upload file. Please try again.')
+      console.error('Error uploading files:', error)
+      alert('Failed to upload files. Please try again.')
     } finally {
-      setUploading(prev => ({ ...prev, [type]: false }))
+      setUploading(false)
+    }
+  }
+
+  const handleFileUpload = async (e) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    await handleMultipleFileUpload(files)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      handleMultipleFileUpload(files)
     }
   }
 
 
-  const handleRemoveFile = async (type) => {
+  const handleRemoveFile = async (fileId) => {
     if (!confirm('Are you sure you want to remove this file?')) return
 
     try {
-      const fileToRemove = documents[type]
+      const fileToRemove = documents.find(doc => doc.id === fileId)
       
       if (fileToRemove?.path) {
         // Remove from storage
@@ -138,8 +159,7 @@ const DocumentUploadForm = () => {
       }
 
       // Remove from state and localStorage
-      const updatedDocs = { ...documents }
-      delete updatedDocs[type]
+      const updatedDocs = documents.filter(doc => doc.id !== fileId)
       setDocuments(updatedDocs)
       
       localStorage.setItem(`application_documents_${jobId || 'general'}`, JSON.stringify(updatedDocs))
@@ -193,53 +213,36 @@ const DocumentUploadForm = () => {
       }
 
       // Save document records to database
-      if (Object.keys(documents).length > 0) {
-        const documentRecords = []
-        
-        Object.keys(documents).forEach(type => {
-          const doc = documents[type]
-          if (doc && doc.path) {
-            documentRecords.push({
-              applicant_id: applicantId,
-              file_path: doc.path,
-              file_name: doc.name,
-              file_type: doc.file_type,
-              file_size: doc.size,
-              mime_type: doc.type
-            })
-          }
-        })
+      if (documents.length > 0) {
+        const documentRecords = documents
+          .filter(doc => doc && doc.path)
+          .map(doc => ({
+            applicant_id: applicantId,
+            file_path: doc.path,
+            file_name: doc.name,
+            file_type: doc.file_type || 'Document',
+            file_size: doc.size,
+            mime_type: doc.type
+          }))
         
         if (documentRecords.length > 0) {
-          // Check for existing documents and update/insert accordingly
-          for (const docRecord of documentRecords) {
-            const { data: existingDoc } = await supabase
-              .from('documents')
-              .select('id')
-              .eq('applicant_id', applicantId)
-              .eq('file_type', docRecord.file_type)
-              .maybeSingle()
+          // Insert all documents (allow multiple documents per applicant)
+          const { error: insertError } = await supabase
+            .from('documents')
+            .insert(documentRecords)
 
-            if (existingDoc) {
-              // Update existing document
-              const { error: updateError } = await supabase
-                .from('documents')
-                .update({
-                  file_path: docRecord.file_path,
-                  file_name: docRecord.file_name,
-                  file_size: docRecord.file_size,
-                  mime_type: docRecord.mime_type
-                })
-                .eq('id', existingDoc.id)
-
-              if (updateError) throw updateError
-            } else {
-              // Create new document record
-              const { error: insertError } = await supabase
+          if (insertError) {
+            // If bulk insert fails, try inserting one by one
+            console.warn('Bulk insert failed, trying individual inserts:', insertError)
+            for (const docRecord of documentRecords) {
+              const { error: singleInsertError } = await supabase
                 .from('documents')
                 .insert(docRecord)
-
-              if (insertError) throw insertError
+              
+              if (singleInsertError) {
+                console.error('Error inserting document:', singleInsertError)
+                // Continue with other documents even if one fails
+              }
             }
           }
         }
@@ -275,100 +278,6 @@ const DocumentUploadForm = () => {
   const formatFileSize = (bytes) => {
     if (!bytes) return ''
     return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-  }
-
-  const DocumentCard = ({ type, title, acceptedFormats, icon, file, onUpload, onRemove, uploading }) => {
-    const hasFile = file !== null
-    const isUploading = uploading
-
-    return (
-      <div className="flex flex-col">
-        <div
-          className={`flex flex-col h-full items-center justify-center gap-6 rounded-2xl border-2 ${
-            hasFile
-              ? 'border-solid border-primary bg-surface-dark'
-              : 'border-dashed border-accent-green bg-surface-dark/50 hover:bg-surface-dark/80 hover:border-primary/50'
-          } transition-all p-6 py-10 group cursor-pointer relative overflow-hidden`}
-        >
-          {/* Success Badge */}
-          {hasFile && (
-            <div className="absolute top-4 right-4">
-              <span className="material-symbols-outlined text-primary">check_circle</span>
-            </div>
-          )}
-
-          {/* Icon Circle */}
-          <div className={`flex h-16 w-16 items-center justify-center rounded-full ${
-            hasFile ? 'bg-primary/20' : 'bg-border-dark group-hover:bg-primary/20'
-          } transition-colors`}>
-            <span className={`material-symbols-outlined text-3xl text-primary ${
-              !hasFile && 'group-hover:scale-110'
-            } transition-transform`}>
-              {icon}
-            </span>
-          </div>
-
-          {/* Content */}
-          <div className="flex flex-col items-center gap-1 text-center">
-            <h3 className="text-white text-lg font-bold">{title}</h3>
-            {hasFile ? (
-              <>
-                <p className="text-primary text-sm font-medium break-all px-4">{file.name}</p>
-                <p className="text-[#93c5fd] text-xs">{formatFileSize(file.size)}</p>
-              </>
-            ) : (
-              <p className="text-[#93c5fd] text-xs">{acceptedFormats}</p>
-            )}
-          </div>
-
-          {/* Actions */}
-          {hasFile ? (
-            <div className="mt-2 flex gap-3">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onRemove(type)
-                }}
-                className="flex items-center justify-center rounded-full h-10 w-10 bg-border-dark text-[#93c5fd] hover:text-white hover:bg-red-500/20 hover:text-red-400 transition-colors"
-                title="Remove file"
-              >
-                <span className="material-symbols-outlined text-xl">delete</span>
-              </button>
-              <label className="flex items-center justify-center rounded-full h-10 px-6 bg-border-dark text-white text-sm font-bold tracking-wide hover:bg-accent-green transition-colors cursor-pointer">
-                {isUploading ? 'Uploading...' : 'Replace'}
-                <input
-                  type="file"
-                  className="hidden"
-                  accept={type === 'resume' ? '.pdf,.doc,.docx' : type === 'file201' ? '.pdf,.jpg,.jpeg,.png' : '.jpg,.jpeg,.png'}
-                  onChange={(e) => {
-                    if (e.target.files[0]) {
-                      onUpload(e.target.files[0], type)
-                    }
-                  }}
-                  disabled={isUploading}
-                />
-              </label>
-            </div>
-          ) : (
-            <label className="mt-2 flex items-center justify-center rounded-full h-10 px-6 bg-border-dark text-white text-sm font-bold tracking-wide group-hover:bg-primary group-hover:text-background-dark transition-all shadow-lg cursor-pointer">
-              {isUploading ? 'Uploading...' : 'Upload'}
-              <input
-                type="file"
-                className="hidden"
-                accept={type === 'resume' ? '.pdf,.doc,.docx' : type === 'file201' ? '.pdf,.jpg,.jpeg,.png' : '.jpg,.jpeg,.png'}
-                onChange={(e) => {
-                  if (e.target.files[0]) {
-                    onUpload(e.target.files[0], type)
-                  }
-                }}
-                disabled={isUploading}
-              />
-            </label>
-          )}
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -408,52 +317,87 @@ const DocumentUploadForm = () => {
               Upload Your Documents
             </h1>
             <p className="text-[#93c5fd] text-sm md:text-base font-normal leading-relaxed max-w-2xl">
-              Please provide your Resume, 201 File, and ID Photo. Ensure all text is legible.
+              Upload your documents. You can upload multiple PDF files at once.
               <br className="hidden md:block" />
-              Accepted formats: PDF, JPG, PNG. Max file size: 10MB.
+              Accepted format: PDF only. Max file size: 10MB per file.
             </p>
           </div>
 
-          {/* Upload Grid */}
+          {/* Upload Area */}
           <form onSubmit={handleNext} className="flex flex-col gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <DocumentCard
-                type="resume"
-                title="Resume / CV"
-                acceptedFormats="PDF or DOCX"
-                icon="description"
-                file={documents.resume}
-                onUpload={handleFileUpload}
-                onRemove={handleRemoveFile}
-                uploading={uploading.resume}
-              />
-              <DocumentCard
-                type="file201"
-                title="201 File"
-                acceptedFormats="PDF, JPG, or PNG"
-                icon="folder_shared"
-                file={documents.file201}
-                onUpload={handleFileUpload}
-                onRemove={handleRemoveFile}
-                uploading={uploading.file201}
-              />
-              <DocumentCard
-                type="idPhoto"
-                title="ID Photo"
-                acceptedFormats="JPG or PNG (2x2)"
-                icon="badge"
-                file={documents.idPhoto}
-                onUpload={handleFileUpload}
-                onRemove={handleRemoveFile}
-                uploading={uploading.idPhoto}
-              />
+            {/* Drag and Drop Upload Area */}
+            <div
+              className="rounded-xl border-2 border-dashed border-[#2563eb] bg-[#1e293b] p-8 hover:border-primary hover:bg-[#1e293b]/80 transition-all cursor-pointer relative"
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('file-upload').click()}
+            >
+              <div className="flex flex-col items-center justify-center gap-4 text-center">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/20">
+                  <span className="material-symbols-outlined text-4xl text-primary">cloud_upload</span>
+                </div>
+                <div>
+                  <h3 className="text-white text-lg font-bold mb-2">
+                    {uploading ? 'Uploading files...' : 'Click to upload or drag and drop'}
+                  </h3>
+                  <p className="text-[#93c5fd] text-sm">
+                    PDF files only • Max 10MB per file • Multiple files allowed
+                  </p>
+                </div>
+                <input
+                  id="file-upload"
+                  type="file"
+                  className="hidden"
+                  accept=".pdf"
+                  multiple
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                />
+              </div>
             </div>
 
+            {/* Uploaded Files List */}
+            {documents.length > 0 && (
+              <div className="rounded-xl bg-[#1e293b] p-6 border border-[#2563eb]">
+                <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">description</span>
+                  Uploaded Documents ({documents.length})
+                </h3>
+                <div className="space-y-3">
+                  {documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-4 rounded-lg bg-[#0f172a] border border-[#2563eb] hover:border-primary transition-colors"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <span className="material-symbols-outlined text-primary flex-shrink-0">picture_as_pdf</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white font-medium truncate">{doc.name}</p>
+                          <p className="text-[#93c5fd] text-xs">{formatFileSize(doc.size)}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRemoveFile(doc.id)
+                        }}
+                        className="flex items-center justify-center rounded-full h-10 w-10 bg-[#2563eb] text-white hover:bg-red-500/20 hover:text-red-400 transition-colors flex-shrink-0 ml-4"
+                        title="Remove file"
+                      >
+                        <span className="material-symbols-outlined text-xl">delete</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Additional Info / Help */}
-            <div className="rounded-xl bg-[#1e293b] p-4 flex items-start gap-3 border border-border-dark">
+            <div className="rounded-xl bg-[#1e293b] p-4 flex items-start gap-3 border border-[#2563eb]">
               <span className="material-symbols-outlined text-[#93c5fd] mt-0.5">info</span>
               <p className="text-sm text-[#93c5fd] leading-relaxed">
-                <strong>Note:</strong> The 201 File must include your NBI Clearance, Birth Certificate, and Government Numbers (SSS, PhilHealth, Pag-IBIG). If you don't have all documents ready, you can save your progress and return later.
+                <strong>Note:</strong> You can upload multiple PDF files at once. Accepted documents include Resume, NBI Clearance, Birth Certificate, Government IDs (SSS, PhilHealth, Pag-IBIG), and other supporting documents. Each file must be a PDF and under 10MB.
               </p>
             </div>
 
