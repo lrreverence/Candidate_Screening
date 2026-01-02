@@ -24,26 +24,44 @@ export const SupabaseProvider = ({ children }) => {
     try {
       setLoading(true)
       setError(null)
-      
-      // Try to fetch from Supabase, fallback to empty array if table doesn't exist
-      const { data, error: fetchError } = await supabase
+
+      console.log('[SUPABASE] Fetching jobs...')
+
+      // Simple direct query without timeout nonsense
+      const { data, error } = await supabase
         .from('jobs')
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (fetchError) {
-        // If table doesn't exist or there's an error, that's okay - we'll use fallback data
-        console.log('Jobs table error, using fallback data:', fetchError.message)
+      if (error) {
+        console.error('[SUPABASE] Error fetching jobs:', error)
+
+        // Check if it's an RLS/permissions issue
+        if (error.message?.includes('permission') || error.code === 'PGRST301') {
+          setError('Permission denied. Please check RLS policies for the jobs table.')
+        } else {
+          setError(error.message || 'Failed to fetch jobs')
+        }
+
         setJobs([])
-      } else {
-        setJobs(data || [])
+        return
       }
+
+      console.log('[SUPABASE] Fetched jobs successfully:', data?.length || 0)
+      setJobs(data || [])
+
     } catch (err) {
-      console.error('Error fetching jobs:', err)
-      setError(err.message)
+      console.error('[SUPABASE] Exception fetching jobs:', err)
+
+      // Check if it's a network/timeout error
+      if (err.message?.includes('fetch') || err.name === 'TypeError') {
+        setError('Network error. Check if your Supabase project is active (free tier projects pause after 7 days of inactivity).')
+      } else {
+        setError(err.message || 'Failed to fetch jobs')
+      }
+
       setJobs([])
     } finally {
-      // Always set loading to false, even if there's an error
       setLoading(false)
     }
   }

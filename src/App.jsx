@@ -2,7 +2,6 @@ import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import ApplicationForm from './pages/ApplicationForm'
-import QualificationsForm from './pages/QualificationsForm'
 import DocumentsForm from './pages/DocumentsForm'
 import ApplicationSuccess from './pages/ApplicationSuccess'
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -33,14 +32,6 @@ const App = () => {
         element={
           <ProtectedRoute>
             <ApplicationForm />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/apply/:jobId/qualifications"
-        element={
-          <ProtectedRoute>
-            <QualificationsForm />
           </ProtectedRoute>
         }
       />

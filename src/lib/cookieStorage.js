@@ -6,7 +6,7 @@
 
 class CookieStorage {
   constructor() {
-    this.prefix = 'sb-'
+    this.prefix = '' // Remove prefix since Supabase handles it
     this.maxCookieSize = 4000 // 4KB limit (leaving some buffer)
     this.chunkSize = 3800 // Safe chunk size after encoding overhead
   }
@@ -55,8 +55,18 @@ class CookieStorage {
    * Remove a cookie
    */
   removeCookie(name) {
-    // Must match the exact attributes used when setting the cookie
-    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;SameSite=Lax`
+    // Try multiple attribute combinations to ensure deletion
+    const deleteConfigs = [
+      'path=/;SameSite=Lax',
+      'path=/;SameSite=Strict',
+      'path=/;SameSite=None;Secure',
+      'path=/',
+      ''
+    ]
+
+    deleteConfigs.forEach(config => {
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;${config}`
+    })
   }
 
   /**
@@ -138,10 +148,10 @@ class CookieStorage {
   removeItem(key) {
     try {
       const cookieName = this.prefix + key
-      
+
       // Remove single cookie
       this.removeCookie(cookieName)
-      
+
       // Remove all chunks
       let chunkIndex = 0
       let chunk = this.getCookie(cookieName + '_' + chunkIndex)
@@ -152,6 +162,30 @@ class CookieStorage {
       }
     } catch (error) {
       console.error('Error removing cookie:', error)
+    }
+  }
+
+  /**
+   * Clear all items from storage (localStorage interface)
+   * Removes all cookies with the sb- prefix (Supabase cookies)
+   */
+  clear() {
+    try {
+      console.log('[COOKIE] Clearing all Supabase cookies...')
+      const allCookies = document.cookie.split(';')
+
+      allCookies.forEach(cookie => {
+        const cookieName = cookie.split('=')[0].trim()
+        // Remove all Supabase cookies (those starting with 'sb-')
+        if (cookieName.startsWith('sb-')) {
+          console.log('[COOKIE] Removing:', cookieName)
+          this.removeCookie(cookieName)
+        }
+      })
+
+      console.log('[COOKIE] All Supabase cookies cleared')
+    } catch (error) {
+      console.error('Error clearing cookies:', error)
     }
   }
 }

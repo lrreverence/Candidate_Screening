@@ -170,7 +170,7 @@ const DocumentUploadForm = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}/qualifications`)
+    navigate(`/apply/${jobId || ''}`)
   }
 
   const handleNext = async (e) => {

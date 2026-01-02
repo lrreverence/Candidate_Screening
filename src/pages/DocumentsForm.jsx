@@ -258,7 +258,7 @@ const DocumentsForm = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}/qualifications`)
+    navigate(`/apply/${jobId || ''}`)
   }
 
   return (

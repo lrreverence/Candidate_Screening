@@ -13,204 +13,15 @@ const JobDetail = () => {
   const [loading, setLoading] = useState(true)
   const [showLoginModal, setShowLoginModal] = useState(false)
 
-  // Fallback jobs data
-  const fallbackJobs = [
-    {
-      id: 1,
-      title: "Security Guard (Armed)",
-      location: "Makati City, Metro Manila",
-      salary: "₱18,000 - ₱22,000/month",
-      type: "Full-time",
-      shift: "Night Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDZRk1m2i3zfyB3hCaKff_AaKIkUS-CTpDqys4aGCynnaHv0j12a4W1adJzL-j7qLkeNbOXgCg1a_H8CNti8u0ayjNHdYwra9uxSx49Sni_0sEIAnbPttmR-zqjVOp8vc4p3QT6qrWiEDfYD2oZ-VRtGilar8Bj6EKSmIk8duqo0pUnz7GrfY-HcBgMROD8VwkQEhcjfHBmuy9pkJ013rxG65VXxQmd6SRD6cMr_NnKjc2s8AaT9IzN9G0GCI9QOjO1jkqmZa3BKl0",
-      badge_text: "Urgent",
-      badge_icon: "schedule",
-      badge_color: "primary",
-      category: "Armed Guard",
-      description: "We are seeking a highly trained and licensed Armed Security Guard to provide security services for high-risk environments. The ideal candidate will have extensive experience in security operations and be capable of handling emergency situations with professionalism and composure.",
-      requirements: [
-        "Valid Security Guard License (SGL) with firearms endorsement",
-        "At least 2 years of experience in armed security",
-        "Physical fitness and ability to stand/walk for extended periods",
-        "Excellent observation and communication skills",
-        "Ability to work night shifts and weekends",
-        "Clean criminal record and background check",
-        "First Aid and CPR certification preferred"
-      ],
-      responsibilities: [
-        "Patrol assigned areas and monitor for suspicious activity",
-        "Control access to facilities and verify credentials",
-        "Respond to emergencies and security incidents",
-        "Maintain detailed logs and incident reports",
-        "Coordinate with law enforcement when necessary",
-        "Ensure compliance with security protocols and procedures"
-      ],
-      benefits: [
-        "Competitive salary package",
-        "Health insurance coverage",
-        "Paid training and certification",
-        "Career advancement opportunities",
-        "Overtime pay available",
-        "Uniform and equipment provided"
-      ]
-    },
-    {
-      id: 2,
-      title: "CCTV Operator",
-      location: "Quezon City, Metro Manila",
-      salary: "₱16,000 - ₱20,000/month",
-      type: "Full-time",
-      shift: "Rotating Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAd3CslepwCSCpzvnCvkdjTpLzFZo7a4Etdl0lv97RQpd0h28B4gQZBPPK5zeKow3OM3jsmbGeeBZx5P9B7rpa1lG9V1-cGrI8ftwtDNudIM0nlajhnlbeeXbghOIGz8RHQuwFQb3MO34wjCfprCTIPe5k97fse0DsQREMslQTr3A_PifwdY3uad8mQmNsFDsix0nDMfF0Ts3IhftoVa_lJ7tNXmP75zhcVr7wdoR9G48rUJJIurAwWJc1JSZeIt9g75dmj9Lk-bAU",
-      category: "CCTV Operator",
-      description: "Join our team as a CCTV Operator and play a crucial role in maintaining security through advanced surveillance systems. You will monitor multiple camera feeds, identify potential security threats, and coordinate with on-ground security personnel.",
-      requirements: [
-        "High school diploma or equivalent",
-        "Experience with CCTV systems preferred",
-        "Strong attention to detail and observation skills",
-        "Ability to work in a fast-paced environment",
-        "Basic computer skills",
-        "Good communication skills",
-        "Ability to work rotating shifts including nights and weekends"
-      ],
-      responsibilities: [
-        "Monitor multiple CCTV camera feeds simultaneously",
-        "Identify and report suspicious activities",
-        "Maintain surveillance logs and records",
-        "Coordinate with security teams on the ground",
-        "Operate and maintain CCTV equipment",
-        "Respond to alarms and security alerts"
-      ],
-      benefits: [
-        "Competitive salary",
-        "Health insurance",
-        "Paid training on advanced systems",
-        "Career growth opportunities",
-        "Shift differential pay",
-        "Modern control room environment"
-      ]
-    },
-    {
-      id: 3,
-      title: "Security Guard (Unarmed)",
-      location: "BGC, Taguig City",
-      salary: "₱15,000 - ₱18,000/month",
-      type: "Full-time",
-      shift: "Day Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBh9NMyTEvvaGeIKwMO8q4oXClyDNEfQZbeGYFYAkN8akCAZ24d5EgqzkxMRYvQzMGHKGBvpT01CapUkx4T2G2IAUzZhq6TvhBt4649rDmEobaxK5WreRqjiA1hDNJ2QojG35dXwHl-ECy-06STI2vJVHMyssr7x6GWL0nLx9ixPB10hKhW2yNOxPv6danYy-Gb_bSV5cu-ntXN_q_ljLo9xD2YOApmT13Y4GG5Ncg6AjnlN8Tvdlo-XdtxJykbRqlJv4iu6SHwvWA",
-      badge_text: "Featured",
-      badge_icon: "star",
-      badge_color: "white",
-      category: "Unarmed",
-      description: "We are looking for professional Unarmed Security Guards to provide security services for corporate and commercial properties. This role focuses on customer service, access control, and maintaining a safe environment.",
-      requirements: [
-        "Valid Security Guard License (SGL)",
-        "At least 1 year of security experience",
-        "Excellent customer service skills",
-        "Professional appearance and demeanor",
-        "Ability to work day shifts",
-        "Good communication skills in English and Filipino",
-        "Physical fitness for standing and walking"
-      ],
-      responsibilities: [
-        "Greet and assist visitors professionally",
-        "Control access to facilities",
-        "Conduct regular patrols",
-        "Monitor security systems",
-        "Write incident reports",
-        "Respond to emergencies"
-      ],
-      benefits: [
-        "Competitive salary",
-        "Health benefits",
-        "Paid training",
-        "Career advancement",
-        "Day shift schedule",
-        "Professional development"
-      ]
-    },
-    {
-      id: 4,
-      title: "Security Guard (Mall)",
-      location: "SM Megamall, Mandaluyong",
-      salary: "₱16,000 - ₱19,000/month",
-      type: "Full-time",
-      shift: "Rotating Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuCvKqooubCoZGLRW7V4ltaM6NioiQHhGVpY1y-vsWMHOvpsiD-DzwmTBjXElR_57s0VowCVX2o5eOku1mGsFcxYO-YU7Gv_zUaAGnD0J32av5BscfikETzCx5bM8NAaxQCGB0ts0_cbO9taEVpE5tN4bjfCYp5sUoXMmac4gIUhcQFm_OCku93Vkw-mNm05jJumUA1tHqgguVbP0YyOjddNAXl9BGQQPhcQI4LLzIrwKmVfEYJ5AxuHY8FZXU7ZshksmOpmhyeeS4c",
-      category: "Unarmed",
-      description: "Join our team as a Mall Security Guard and help ensure the safety of shoppers and staff in one of Metro Manila's busiest shopping centers. This role requires excellent customer service skills and the ability to handle high-traffic environments.",
-      requirements: [
-        "Valid Security Guard License",
-        "Experience in retail or mall security preferred",
-        "Excellent customer service orientation",
-        "Ability to work in a fast-paced environment",
-        "Physical fitness for extended standing and walking",
-        "Conflict resolution skills",
-        "Flexibility to work rotating shifts"
-      ],
-      responsibilities: [
-        "Patrol mall premises regularly",
-        "Assist shoppers and provide directions",
-        "Monitor for shoplifting and suspicious activity",
-        "Coordinate with mall management",
-        "Handle customer complaints professionally",
-        "Respond to medical emergencies"
-      ],
-      benefits: [
-        "Competitive salary",
-        "Health insurance",
-        "Mall employee discounts",
-        "Paid training",
-        "Career opportunities",
-        "Uniform provided"
-      ]
-    },
-    {
-      id: 5,
-      title: "Mobile Patrol Guard",
-      location: "Pasig City, Metro Manila",
-      salary: "₱17,000 - ₱21,000/month",
-      type: "Full-time",
-      shift: "Graveyard Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuC1bg08hhvOVTxQc6qVqHCSaooNdV2mj5taGFS5ox5-4rncQ0vqOShI017F-MtNCkpigVEY4oXl0jqcG9fIYmfSYBJAOP4x2Jl5lDhSKPbCsMXA8h187ooq2ksnL4Obiwix2LKWVwLWFxGnbDDyr0WtrqWnd85r-Jh-WzgFZsbQ98nefREOnh4BDSgOtZBO-v01Fa_KSsuNd9F6eot95kllgrwffensJQ2O56wtZep1fzDsxu4sdpYfAmapl1OmFOMUToTU1alFvII",
-      category: "Patrol",
-      description: "We are seeking Mobile Patrol Guards to provide security coverage across multiple locations. This role involves patrolling assigned routes, conducting property inspections, and responding to security incidents.",
-      requirements: [
-        "Valid Security Guard License",
-        "Valid driver's license preferred",
-        "At least 1 year of security experience",
-        "Ability to work graveyard shifts",
-        "Physical fitness for patrol duties",
-        "Good navigation and map-reading skills",
-        "Reliable and punctual"
-      ],
-      responsibilities: [
-        "Patrol assigned routes and locations",
-        "Conduct property inspections",
-        "Document security findings",
-        "Respond to alarm activations",
-        "Coordinate with stationary security posts",
-        "Maintain patrol vehicle and equipment"
-      ],
-      benefits: [
-        "Competitive salary with shift differential",
-        "Health insurance",
-        "Vehicle and equipment provided",
-        "Paid training",
-        "Career advancement",
-        "Overtime opportunities"
-      ]
-    }
-  ]
-
   useEffect(() => {
     const fetchJob = () => {
       setLoading(true)
       
-      // Try to find job from Supabase first
+      // Find job from Supabase using UUID (not parseInt)
       if (supabaseJobs && supabaseJobs.length > 0) {
-        const foundJob = supabaseJobs.find(j => j.id === parseInt(jobId))
+        const foundJob = supabaseJobs.find(j => j.id === jobId) // Direct UUID comparison
         if (foundJob) {
+          console.log('[JOB_DETAIL] Found job from Supabase:', foundJob.id)
           setJob({
             id: foundJob.id,
             title: foundJob.title,
@@ -232,17 +43,15 @@ const JobDetail = () => {
           })
           setLoading(false)
           return
+        } else {
+          console.warn('[JOB_DETAIL] Job not found in Supabase:', jobId)
         }
+      } else {
+        console.warn('[JOB_DETAIL] No Supabase jobs available')
       }
       
-      // Fallback to static data
-      const foundJob = fallbackJobs.find(j => j.id === parseInt(jobId))
-      if (foundJob) {
-        setJob(foundJob)
-      } else {
-        // Job not found
-        setJob(null)
-      }
+      // Job not found - set to null
+      setJob(null)
       setLoading(false)
     }
 

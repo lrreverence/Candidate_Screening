@@ -8,7 +8,7 @@ import SignupModal from '../components/SignupModal'
 const Home = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { jobs: supabaseJobs, loading } = useSupabase()
+  const { jobs: supabaseJobs, loading: supabaseLoading, error: supabaseError } = useSupabase()
   const { user, userProfile, signOut } = useAuth()
   const [selectedCategory, setSelectedCategory] = useState('All Jobs')
   const [searchQuery, setSearchQuery] = useState('')
@@ -23,71 +23,18 @@ const Home = () => {
     }
   }, [user, userProfile, navigate, location.pathname])
 
-  // Fallback jobs data in case Supabase is empty or fails
-  const fallbackJobs = [
-    {
-      id: 1,
-      title: "Security Guard (Armed)",
-      location: "Makati City, Metro Manila",
-      salary: "₱18,000 - ₱22,000/month",
-      type: "Full-time",
-      shift: "Night Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDZRk1m2i3zfyB3hCaKff_AaKIkUS-CTpDqys4aGCynnaHv0j12a4W1adJzL-j7qLkeNbOXgCg1a_H8CNti8u0ayjNHdYwra9uxSx49Sni_0sEIAnbPttmR-zqjVOp8vc4p3QT6qrWiEDfYD2oZ-VRtGilar8Bj6EKSmIk8duqo0pUnz7GrfY-HcBgMROD8VwkQEhcjfHBmuy9pkJ013rxG65VXxQmd6SRD6cMr_NnKjc2s8AaT9IzN9G0GCI9QOjO1jkqmZa3BKl0",
-      badge_text: "Urgent",
-      badge_icon: "schedule",
-      badge_color: "primary",
-      category: "Armed Guard"
-    },
-    {
-      id: 2,
-      title: "CCTV Operator",
-      location: "Quezon City, Metro Manila",
-      salary: "₱16,000 - ₱20,000/month",
-      type: "Full-time",
-      shift: "Rotating Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAd3CslepwCSCpzvnCvkdjTpLzFZo7a4Etdl0lv97RQpd0h28B4gQZBPPK5zeKow3OM3jsmbGeeBZx5P9B7rpa1lG9V1-cGrI8ftwtDNudIM0nlajhnlbeeXbghOIGz8RHQuwFQb3MO34wjCfprCTIPe5k97fse0DsQREMslQTr3A_PifwdY3uad8mQmNsFDsix0nDMfF0Ts3IhftoVa_lJ7tNXmP75zhcVr7wdoR9G48rUJJIurAwWJc1JSZeIt9g75dmj9Lk-bAU",
-      category: "CCTV Operator"
-    },
-    {
-      id: 3,
-      title: "Security Guard (Unarmed)",
-      location: "BGC, Taguig City",
-      salary: "₱15,000 - ₱18,000/month",
-      type: "Full-time",
-      shift: "Day Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBh9NMyTEvvaGeIKwMO8q4oXClyDNEfQZbeGYFYAkN8akCAZ24d5EgqzkxMRYvQzMGHKGBvpT01CapUkx4T2G2IAUzZhq6TvhBt4649rDmEobaxK5WreRqjiA1hDNJ2QojG35dXwHl-ECy-06STI2vJVHMyssr7x6GWL0nLx9ixPB10hKhW2yNOxPv6danYy-Gb_bSV5cu-ntXN_q_ljLo9xD2YOApmT13Y4GG5Ncg6AjnlN8Tvdlo-XdtxJykbRqlJv4iu6SHwvWA",
-      badge_text: "Featured",
-      badge_icon: "star",
-      badge_color: "white",
-      category: "Unarmed"
-    },
-    {
-      id: 4,
-      title: "Security Guard (Mall)",
-      location: "SM Megamall, Mandaluyong",
-      salary: "₱16,000 - ₱19,000/month",
-      type: "Full-time",
-      shift: "Rotating Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuCvKqooubCoZGLRW7V4ltaM6NioiQHhGVpY1y-vsWMHOvpsiD-DzwmTBjXElR_57s0VowCVX2o5eOku1mGsFcxYO-YU7Gv_zUaAGnD0J32av5BscfikETzCx5bM8NAaxQCGB0ts0_cbO9taEVpE5tN4bjfCYp5sUoXMmac4gIUhcQFm_OCku93Vkw-mNm05jJumUA1tHqgguVbP0YyOjddNAXl9BGQQPhcQI4LLzIrwKmVfEYJ5AxuHY8FZXU7ZshksmOpmhyeeS4c",
-      category: "Unarmed"
-    },
-    {
-      id: 5,
-      title: "Mobile Patrol Guard",
-      location: "Pasig City, Metro Manila",
-      salary: "₱17,000 - ₱21,000/month",
-      type: "Full-time",
-      shift: "Graveyard Shift",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuC1bg08hhvOVTxQc6qVqHCSaooNdV2mj5taGFS5ox5-4rncQ0vqOShI017F-MtNCkpigVEY4oXl0jqcG9fIYmfSYBJAOP4x2Jl5lDhSKPbCsMXA8h187ooq2ksnL4Obiwix2LKWVwLWFxGnbDDyr0WtrqWnd85r-Jh-WzgFZsbQ98nefREOnh4BDSgOtZBO-v01Fa_KSsuNd9F6eot95kllgrwffensJQ2O56wtZep1fzDsxu4sdpYfAmapl1OmFOMUToTU1alFvII",
-      category: "Patrol"
-    }
-  ]
-
-  // Use Supabase jobs if available, otherwise use fallback
+  // Use only Supabase jobs - no fallback
   const allJobs = useMemo(() => {
+    console.log('[HOME] Supabase jobs state:', { 
+      hasJobs: !!supabaseJobs, 
+      jobCount: supabaseJobs?.length || 0,
+      loading: supabaseLoading 
+    })
+    
     if (supabaseJobs && supabaseJobs.length > 0) {
+      console.log('[HOME] Using Supabase jobs with UUIDs:', supabaseJobs.length)
       return supabaseJobs.map(job => ({
-        id: job.id,
+        id: job.id, // This is a UUID from Supabase
         title: job.title,
         location: job.location,
         salary: job.salary,
@@ -102,9 +49,11 @@ const Home = () => {
         category: job.category
       }))
     }
-    // Always return fallback jobs if Supabase is empty or still loading
-    return fallbackJobs
-  }, [supabaseJobs])
+    
+    // Return empty array if no jobs - don't use fallback
+    console.log('[HOME] No Supabase jobs found')
+    return []
+  }, [supabaseJobs, supabaseLoading])
 
   // Filter jobs based on category and search query
   const filteredJobs = useMemo(() => {
@@ -154,6 +103,10 @@ const Home = () => {
       setShowLoginModal(true)
       return
     }
+    
+    // Log the jobId to help debug
+    console.log('[HOME] Applying for job with ID:', jobId, 'Type:', typeof jobId)
+    
     // Navigate to application form if logged in
     navigate(`/apply/${jobId || ''}`)
   }
@@ -185,10 +138,8 @@ const Home = () => {
                       if (error) {
                         console.error('Failed to sign out:', error)
                         alert('Failed to sign out. Please try again.')
-                      } else {
-                        // Force a page reload to ensure state is cleared
-                        window.location.href = '/'
                       }
+                      // Auth state listener will handle the state update
                     } catch (err) {
                       console.error('Sign out error:', err)
                       alert('An error occurred while signing out. Please try again.')
@@ -324,6 +275,35 @@ const Home = () => {
                 </button>
               </div>
             </div>
+            
+            {/* Error Display */}
+            {supabaseError && (
+              <div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-lg">
+                <p className="text-red-400 font-bold mb-2">Error loading jobs:</p>
+                <p className="text-red-300 text-sm">{supabaseError}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-3 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            
+            {/* Loading State */}
+            {supabaseLoading && (
+              <div className="mb-6 p-4 bg-blue-500/20 border border-blue-500 rounded-lg">
+                <p className="text-blue-400">Loading jobs...</p>
+              </div>
+            )}
+            
+            {/* No Jobs Message */}
+            {!supabaseLoading && !supabaseError && filteredJobs.length === 0 && allJobs.length === 0 && (
+              <div className="mb-6 p-4 bg-yellow-500/20 border border-yellow-500 rounded-lg">
+                <p className="text-yellow-400">No jobs found. Please check back later.</p>
+              </div>
+            )}
+            
             {/* Job Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredJobs.map((job) => (

@@ -266,63 +266,61 @@ const AuthProvider = ({ children }) => {
     try {
       console.log('[AUTH] Starting sign out...')
 
-      // Clear local state first to provide immediate feedback
+      // Clear local state first to provide immediate UI feedback
       setUser(null)
       setUserProfile(null)
       setSession(null)
 
-      // Sign out from Supabase
+      // Sign out from Supabase (this will trigger the auth state change listener)
+      console.log('[AUTH] Calling supabase.auth.signOut()...')
       const { error } = await supabase.auth.signOut()
+
       if (error) {
         console.error('[AUTH] Error signing out from Supabase:', error)
+        // Continue with cleanup even if signOut fails
+      } else {
+        console.log('[AUTH] Supabase signOut successful')
       }
 
-      // NUCLEAR OPTION: Clear ALL cookies (not just sb- prefix)
-      console.log('[AUTH] NUCLEAR CLEAR: Deleting ALL cookies...')
+      // Manually clear ALL cookies (not just sb- prefix, to catch double-prefixed ones too)
+      console.log('[AUTH] Manually clearing ALL cookies...')
       const allCookies = document.cookie.split(';')
+      const cookieCount = allCookies.length
+      console.log(`[AUTH] Found ${cookieCount} cookies to check`)
 
       allCookies.forEach(cookie => {
         const cookieName = cookie.split('=')[0].trim()
         if (cookieName) {
-          console.log('[AUTH] Deleting cookie:', cookieName)
-
-          // Try all possible attribute combinations to ensure deletion
-          const attrs = [
+          console.log('[AUTH] Removing cookie:', cookieName)
+          const deleteConfigs = [
             'path=/;SameSite=Lax',
             'path=/;SameSite=Strict',
             'path=/;SameSite=None;Secure',
             'path=/;domain=localhost;SameSite=Lax',
             'path=/;domain=.localhost;SameSite=Lax',
             'path=/',
-            'path=/;domain=localhost',
-            'path=/;domain=.localhost',
             ''
           ]
-
-          attrs.forEach(attr => {
-            document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;${attr}`
+          deleteConfigs.forEach(config => {
+            document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;${config}`
           })
         }
       })
 
-      // Clear ALL localStorage (not just sb- prefix)
-      console.log('[AUTH] Clearing ALL localStorage...')
-      localStorage.clear()
+      // Verify cookies are gone
+      const remainingCookies = document.cookie.split(';').filter(c => c.trim())
+      console.log('[AUTH] Remaining cookies after deletion:', remainingCookies.length)
 
-      // Clear ALL sessionStorage
-      console.log('[AUTH] Clearing ALL sessionStorage...')
+      // Clear any remaining storage
+      console.log('[AUTH] Clearing localStorage and sessionStorage...')
+      localStorage.clear()
       sessionStorage.clear()
 
-      console.log('[AUTH] Sign out complete - redirecting to home')
+      console.log('[AUTH] Sign out complete - all cookies and storage cleared')
 
-      // Always force reload to home page after logout to clear any cached state
-      setTimeout(() => {
-        window.location.href = '/'
-      }, 100)
-
-      return { error: null }
+      return { error: error || null }
     } catch (error) {
-      console.error('[AUTH] Error signing out:', error)
+      console.error('[AUTH] Exception during sign out:', error)
       // Clear state even on error
       setUser(null)
       setUserProfile(null)
