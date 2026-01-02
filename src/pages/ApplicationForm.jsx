@@ -47,23 +47,85 @@ const ApplicationForm = () => {
     }))
   }
 
-  // Load user email if logged in
+  // Load existing applicant data from database
   useEffect(() => {
-    if (user?.email) {
-      setFormData(prev => ({ ...prev, email: user.email }))
-    }
-    
-    // Load saved form data from localStorage
-    const savedData = localStorage.getItem(`application_form_${jobId || 'general'}`)
-    if (savedData) {
+    console.log('[APPLICATION] useEffect triggered, user:', user?.id)
+
+    const loadExistingData = async () => {
+      console.log('[APPLICATION] loadExistingData called')
+
+      if (!user?.id) {
+        console.log('[APPLICATION] No user ID, skipping data load')
+        return
+      }
+
+      console.log('[APPLICATION] User ID exists, proceeding...')
+      setLoading(true)
+
       try {
-        const parsed = JSON.parse(savedData)
-        setFormData(prev => ({ ...parsed, ...prev }))
-      } catch (e) {
-        console.error('Error loading saved form data:', e)
+        console.log('[APPLICATION] Loading existing applicant data for user:', user.id)
+
+        // Skip session check - we already have authenticated user from AuthContext
+        console.log('[APPLICATION] Starting applicants query...')
+        const startTime = Date.now()
+
+        // Fetch applicant data
+        console.log('[APPLICATION] Executing query NOW...')
+        const { data: applicant, error } = await supabase
+          .from('applicants')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        const elapsed = Date.now() - startTime
+        console.log(`[APPLICATION] Query completed in ${elapsed}ms`, {
+          hasData: !!applicant,
+          error: error?.message,
+          applicantId: applicant?.id
+        })
+
+        if (error) {
+          console.error('[APPLICATION] Error loading applicant:', error)
+          // Continue - user can still fill the form
+        } else if (applicant) {
+          console.log('[APPLICATION] Found existing applicant data:', applicant.id)
+          // Populate form with existing data
+          setFormData({
+            first_name: applicant.first_name || '',
+            last_name: applicant.last_name || '',
+            date_of_birth: applicant.date_of_birth || '',
+            gender: applicant.gender || '',
+            email: applicant.email || user.email || '',
+            phone_number: applicant.phone || '',
+            street_address: applicant.street_address || '',
+            barangay: applicant.barangay || '',
+            city: applicant.city || '',
+            province: applicant.province || '',
+            zip_code: applicant.zip_code || '',
+            licenses: applicant.licenses || [],
+            height_cm: applicant.height_cm || '',
+            weight_kg: applicant.weight_kg || '',
+          })
+        } else {
+          console.log('[APPLICATION] No existing applicant found, using defaults')
+          // Set email from user
+          if (user?.email) {
+            setFormData(prev => ({ ...prev, email: user.email }))
+          }
+        }
+      } catch (error) {
+        console.error('[APPLICATION] Exception loading applicant:', error)
+        // Set email from user as fallback
+        if (user?.email) {
+          setFormData(prev => ({ ...prev, email: user.email }))
+        }
+      } finally {
+        setLoading(false)
       }
     }
-  }, [user, jobId])
+
+    loadExistingData()
+  }, [user?.id])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -519,88 +581,8 @@ const ApplicationForm = () => {
               />
             </div>
 
-            {/* Qualifications Section */}
-            <h2 className="text-xl font-bold mt-12 mb-6 flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-white/10">
-              <span className="material-symbols-outlined text-primary">badge</span>
-              Qualifications & Licenses
-            </h2>
-
-            {/* Licenses Checklist */}
-            <div className="bg-background-light dark:bg-background-dark p-6 rounded-xl border border-gray-200 dark:border-white/5">
-              <h3 className="text-lg font-bold mb-4 text-slate-900 dark:text-white">Select Valid Licenses</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {licenseOptions.map((license) => (
-                  <label
-                    key={license.id}
-                    className={`group relative flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
-                      formData.licenses.includes(license.id)
-                        ? 'border-primary dark:border-primary bg-primary/10'
-                        : 'border-gray-200 dark:border-white/10 bg-white dark:bg-[#1e293b]'
-                    } hover:border-primary`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.licenses.includes(license.id)}
-                      onChange={() => handleLicenseChange(license.id)}
-                      className="h-6 w-6 rounded border-gray-400 dark:border-white/20 text-primary focus:ring-primary/50 focus:ring-offset-0 bg-transparent transition-colors"
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-slate-900 dark:text-white font-medium">{license.label}</span>
-                      <span className="text-slate-500 dark:text-gray-400 text-xs">{license.subtitle}</span>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Physical Attributes */}
-            <div className="bg-background-light dark:bg-background-dark p-6 rounded-xl border border-gray-200 dark:border-white/5">
-              <h3 className="text-lg font-bold mb-4 text-slate-900 dark:text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary">accessibility_new</span>
-                Physical Attributes
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="height">
-                    Height (cm)
-                  </label>
-                  <input
-                    className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
-                    id="height"
-                    name="height_cm"
-                    value={formData.height_cm}
-                    onChange={handleChange}
-                    placeholder="180"
-                    type="number"
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="weight">
-                    Weight (kg)
-                  </label>
-                  <input
-                    className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
-                    id="weight"
-                    name="weight_kg"
-                    value={formData.weight_kg}
-                    onChange={handleChange}
-                    placeholder="85"
-                    type="number"
-                  />
-                </div>
-              </div>
-            </div>
-
             {/* Actions */}
-            <div className="flex flex-col-reverse md:flex-row items-center justify-between gap-4 pt-6 mt-8 border-t border-gray-100 dark:border-white/10">
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={saving}
-                className="w-full md:w-auto px-8 py-4 rounded-full border border-gray-300 dark:border-white/20 text-gray-700 dark:text-white font-bold hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save Draft'}
-              </button>
+            <div className="flex items-center justify-end gap-4 pt-6 mt-8 border-t border-gray-100 dark:border-white/10">
               <button
                 type="submit"
                 disabled={loading}

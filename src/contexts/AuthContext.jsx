@@ -271,60 +271,36 @@ const AuthProvider = ({ children }) => {
       setUserProfile(null)
       setSession(null)
 
-      // Sign out from Supabase (this will trigger the auth state change listener)
-      console.log('[AUTH] Calling supabase.auth.signOut()...')
-      const { error } = await supabase.auth.signOut()
-
-      if (error) {
-        console.error('[AUTH] Error signing out from Supabase:', error)
-        // Continue with cleanup even if signOut fails
-      } else {
-        console.log('[AUTH] Supabase signOut successful')
-      }
-
-      // Manually clear ALL cookies (not just sb- prefix, to catch double-prefixed ones too)
-      console.log('[AUTH] Manually clearing ALL cookies...')
-      const allCookies = document.cookie.split(';')
-      const cookieCount = allCookies.length
-      console.log(`[AUTH] Found ${cookieCount} cookies to check`)
-
-      allCookies.forEach(cookie => {
-        const cookieName = cookie.split('=')[0].trim()
-        if (cookieName) {
-          console.log('[AUTH] Removing cookie:', cookieName)
-          const deleteConfigs = [
-            'path=/;SameSite=Lax',
-            'path=/;SameSite=Strict',
-            'path=/;SameSite=None;Secure',
-            'path=/;domain=localhost;SameSite=Lax',
-            'path=/;domain=.localhost;SameSite=Lax',
-            'path=/',
-            ''
-          ]
-          deleteConfigs.forEach(config => {
-            document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;${config}`
-          })
-        }
-      })
-
-      // Verify cookies are gone
-      const remainingCookies = document.cookie.split(';').filter(c => c.trim())
-      console.log('[AUTH] Remaining cookies after deletion:', remainingCookies.length)
-
-      // Clear any remaining storage
+      // Clear storage FIRST (before Supabase call that might hang)
       console.log('[AUTH] Clearing localStorage and sessionStorage...')
       localStorage.clear()
       sessionStorage.clear()
+      console.log('[AUTH] Storage cleared successfully')
 
-      console.log('[AUTH] Sign out complete - all cookies and storage cleared')
+      // Try to sign out from Supabase (non-blocking - don't await)
+      console.log('[AUTH] Calling supabase.auth.signOut() (non-blocking)...')
+      supabase.auth.signOut().then(({ error }) => {
+        if (error) {
+          console.error('[AUTH] Error signing out from Supabase:', error)
+        } else {
+          console.log('[AUTH] Supabase signOut successful')
+        }
+      }).catch(err => {
+        console.error('[AUTH] Exception in Supabase signOut:', err)
+      })
 
-      return { error: error || null }
+      console.log('[AUTH] Sign out complete')
+
+      return { error: null }
     } catch (error) {
       console.error('[AUTH] Exception during sign out:', error)
       // Clear state even on error
       setUser(null)
       setUserProfile(null)
       setSession(null)
+      // Clear storage even on error
+      localStorage.clear()
+      sessionStorage.clear()
       return { error }
     }
   }

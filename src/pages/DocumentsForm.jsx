@@ -63,21 +63,34 @@ const DocumentsForm = () => {
     const newUploadedFiles = []
 
     try {
-      // Step 1: Find applicant
-      console.log('[DOCUMENTS] Finding applicant...')
-      const { data: applicant, error: findError } = await supabase
+      // Step 1: Find applicant with timeout
+      console.log('[DOCUMENTS] Finding applicant for user:', user.id)
+
+      const applicantPromise = supabase
         .from('applicants')
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle()
 
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Query timeout after 5 seconds')), 5000)
+      })
+
+      const { data: applicant, error: findError } = await Promise.race([
+        applicantPromise,
+        timeoutPromise
+      ])
+
       if (findError) {
+        console.error('[DOCUMENTS] Error finding applicant:', findError)
         throw new Error(`Failed to find applicant: ${findError.message}`)
       }
 
       if (!applicant) {
+        console.warn('[DOCUMENTS] No applicant found for user')
         alert('Please complete Step 1 (Personal Information) first')
         navigate(`/apply/${jobId || ''}`)
+        setUploading(false)
         return
       }
 
@@ -220,14 +233,26 @@ const DocumentsForm = () => {
     setLoading(true)
 
     try {
-      // Find applicant
-      const { data: applicant, error: findError } = await supabase
+      // Find applicant with timeout
+      console.log('[DOCUMENTS] Finding applicant for next step...')
+
+      const applicantPromise = supabase
         .from('applicants')
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle()
 
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Query timeout after 5 seconds')), 5000)
+      })
+
+      const { data: applicant, error: findError } = await Promise.race([
+        applicantPromise,
+        timeoutPromise
+      ])
+
       if (findError || !applicant) {
+        console.error('[DOCUMENTS] Error or no applicant:', findError)
         throw new Error('Failed to find applicant. Please complete previous steps first.')
       }
 

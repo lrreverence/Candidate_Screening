@@ -21,17 +21,27 @@ export const SupabaseProvider = ({ children }) => {
   }, [])
 
   const fetchJobs = async () => {
+    console.log('[SUPABASE] fetchJobs called')
+
     try {
+      console.log('[SUPABASE] Setting loading state...')
       setLoading(true)
       setError(null)
 
       console.log('[SUPABASE] Fetching jobs...')
+      console.log('[SUPABASE] Supabase client exists:', !!supabase)
 
-      // Simple direct query without timeout nonsense
+      const startTime = Date.now()
+
+      // Simple direct query
+      console.log('[SUPABASE] Executing query NOW...')
       const { data, error } = await supabase
         .from('jobs')
         .select('*')
         .order('created_at', { ascending: false })
+
+      const elapsed = Date.now() - startTime
+      console.log(`[SUPABASE] Query completed in ${elapsed}ms`)
 
       if (error) {
         console.error('[SUPABASE] Error fetching jobs:', error)
