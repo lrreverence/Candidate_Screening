@@ -264,22 +264,65 @@ const AuthProvider = ({ children }) => {
 
   const signOut = async () => {
     try {
+      console.log('[AUTH] Starting sign out...')
+
       // Clear local state first to provide immediate feedback
       setUser(null)
       setUserProfile(null)
       setSession(null)
-      
-      // Then sign out from Supabase
+
+      // Sign out from Supabase
       const { error } = await supabase.auth.signOut()
       if (error) {
-        console.error('Error signing out from Supabase:', error)
-        // Even if Supabase sign out fails, we've cleared local state
-        return { error }
+        console.error('[AUTH] Error signing out from Supabase:', error)
       }
-      
+
+      // NUCLEAR OPTION: Clear ALL cookies (not just sb- prefix)
+      console.log('[AUTH] NUCLEAR CLEAR: Deleting ALL cookies...')
+      const allCookies = document.cookie.split(';')
+
+      allCookies.forEach(cookie => {
+        const cookieName = cookie.split('=')[0].trim()
+        if (cookieName) {
+          console.log('[AUTH] Deleting cookie:', cookieName)
+
+          // Try all possible attribute combinations to ensure deletion
+          const attrs = [
+            'path=/;SameSite=Lax',
+            'path=/;SameSite=Strict',
+            'path=/;SameSite=None;Secure',
+            'path=/;domain=localhost;SameSite=Lax',
+            'path=/;domain=.localhost;SameSite=Lax',
+            'path=/',
+            'path=/;domain=localhost',
+            'path=/;domain=.localhost',
+            ''
+          ]
+
+          attrs.forEach(attr => {
+            document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;${attr}`
+          })
+        }
+      })
+
+      // Clear ALL localStorage (not just sb- prefix)
+      console.log('[AUTH] Clearing ALL localStorage...')
+      localStorage.clear()
+
+      // Clear ALL sessionStorage
+      console.log('[AUTH] Clearing ALL sessionStorage...')
+      sessionStorage.clear()
+
+      console.log('[AUTH] Sign out complete - redirecting to home')
+
+      // Always force reload to home page after logout to clear any cached state
+      setTimeout(() => {
+        window.location.href = '/'
+      }, 100)
+
       return { error: null }
     } catch (error) {
-      console.error('Error signing out:', error)
+      console.error('[AUTH] Error signing out:', error)
       // Clear state even on error
       setUser(null)
       setUserProfile(null)

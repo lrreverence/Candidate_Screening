@@ -3,7 +3,7 @@ import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import ApplicationForm from './pages/ApplicationForm'
 import QualificationsForm from './pages/QualificationsForm'
-import DocumentUploadForm from './pages/DocumentUploadForm'
+import DocumentsForm from './pages/DocumentsForm'
 import ApplicationSuccess from './pages/ApplicationSuccess'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import TermsOfService from './pages/TermsOfService'
@@ -48,7 +48,7 @@ const App = () => {
         path="/apply/:jobId/documents"
         element={
           <ProtectedRoute>
-            <DocumentUploadForm />
+            <DocumentsForm />
           </ProtectedRoute>
         }
       />

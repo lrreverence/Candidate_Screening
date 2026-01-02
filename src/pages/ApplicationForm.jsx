@@ -21,7 +21,31 @@ const ApplicationForm = () => {
     city: '',
     province: '',
     zip_code: '',
+    licenses: [],
+    height_cm: '',
+    weight_kg: '',
   })
+
+  const licenseOptions = [
+    { id: 'psa_birth_certificate', label: 'PSA Birth Certificate', subtitle: 'Philippine Statistics Authority' },
+    { id: 'nbi_clearance', label: 'NBI Clearance', subtitle: 'National Bureau of Investigation' },
+    { id: 'sss_id', label: 'SSS ID / E-1 Form', subtitle: 'Social Security System' },
+    { id: 'philhealth_id', label: 'PhilHealth ID', subtitle: 'Philippine Health Insurance Corporation' },
+    { id: 'pagibig_id', label: 'Pag-IBIG ID', subtitle: 'Home Development Mutual Fund' },
+    { id: 'tin_id', label: 'TIN ID', subtitle: 'Tax Identification Number' },
+    { id: 'drivers_license', label: "Driver's License", subtitle: 'Land Transportation Office (LTO)' },
+    { id: 'first_aid', label: 'First Aid Certificate', subtitle: 'BLS/CPR Training' },
+    { id: 'security_guard_license', label: 'Security Guard License', subtitle: 'PASCO / PNP Security Agency' }
+  ]
+
+  const handleLicenseChange = (licenseId) => {
+    setFormData(prev => ({
+      ...prev,
+      licenses: prev.licenses.includes(licenseId)
+        ? prev.licenses.filter(id => id !== licenseId)
+        : [...prev.licenses, licenseId]
+    }))
+  }
 
   // Load user email if logged in
   useEffect(() => {
@@ -78,6 +102,9 @@ const ApplicationForm = () => {
               city: formData.city || null,
               province: formData.province || null,
               zip_code: formData.zip_code || null,
+              licenses: formData.licenses || [],
+              height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
+              weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
             })
             .eq('id', applicantId)
         } else {
@@ -98,6 +125,9 @@ const ApplicationForm = () => {
               city: formData.city || null,
               province: formData.province || null,
               zip_code: formData.zip_code || null,
+              licenses: formData.licenses || [],
+              height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
+              weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
               user_id: user.id,
               status: 'Pending'
             })
@@ -201,7 +231,10 @@ const ApplicationForm = () => {
             barangay: formData.barangay,
             city: formData.city,
             province: formData.province,
-            zip_code: formData.zip_code
+            zip_code: formData.zip_code,
+            licenses: formData.licenses,
+            height_cm: formData.height_cm,
+            weight_kg: formData.weight_kg
           },
           jobId: jobId || null,
           userId: user?.id || null
@@ -223,9 +256,9 @@ const ApplicationForm = () => {
 
       console.log('[FORM] Success! Applicant ID:', result.applicantId)
 
-      // Navigate to step 2 (Qualifications)
-      console.log('[FORM] Navigating to qualifications page...')
-      navigate(`/apply/${jobId || ''}/qualifications`)
+      // Navigate to step 2 (Documents)
+      console.log('[FORM] Navigating to documents page...')
+      navigate(`/apply/${jobId || ''}/documents`)
     } catch (error) {
       console.error('[FORM] Error saving application:', error)
       const errorMessage = error?.message || 'Unknown error occurred'
@@ -285,11 +318,11 @@ const ApplicationForm = () => {
         {/* Progress Indicator */}
         <div className="bg-white dark:bg-[#1e293b] p-6 rounded-xl border border-gray-200 dark:border-white/5 mb-10 shadow-sm">
           <div className="flex justify-between mb-4 text-sm font-medium">
-            <span className="text-primary">Step 1: Personal Info</span>
-            <span className="text-gray-400">Step 1 of 4</span>
+            <span className="text-primary">Step 1: Personal Info & Qualifications</span>
+            <span className="text-gray-400">Step 1 of 3</span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-black/30 rounded-full h-2.5">
-            <div className="bg-primary h-2.5 rounded-full w-[25%] shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
+            <div className="bg-primary h-2.5 rounded-full w-[33%] shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
           </div>
         </div>
 
@@ -484,6 +517,78 @@ const ApplicationForm = () => {
                 placeholder="e.g. 1000"
                 type="text"
               />
+            </div>
+
+            {/* Qualifications Section */}
+            <h2 className="text-xl font-bold mt-12 mb-6 flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-white/10">
+              <span className="material-symbols-outlined text-primary">badge</span>
+              Qualifications & Licenses
+            </h2>
+
+            {/* Licenses Checklist */}
+            <div className="bg-background-light dark:bg-background-dark p-6 rounded-xl border border-gray-200 dark:border-white/5">
+              <h3 className="text-lg font-bold mb-4 text-slate-900 dark:text-white">Select Valid Licenses</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {licenseOptions.map((license) => (
+                  <label
+                    key={license.id}
+                    className={`group relative flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                      formData.licenses.includes(license.id)
+                        ? 'border-primary dark:border-primary bg-primary/10'
+                        : 'border-gray-200 dark:border-white/10 bg-white dark:bg-[#1e293b]'
+                    } hover:border-primary`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.licenses.includes(license.id)}
+                      onChange={() => handleLicenseChange(license.id)}
+                      className="h-6 w-6 rounded border-gray-400 dark:border-white/20 text-primary focus:ring-primary/50 focus:ring-offset-0 bg-transparent transition-colors"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-slate-900 dark:text-white font-medium">{license.label}</span>
+                      <span className="text-slate-500 dark:text-gray-400 text-xs">{license.subtitle}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Physical Attributes */}
+            <div className="bg-background-light dark:bg-background-dark p-6 rounded-xl border border-gray-200 dark:border-white/5">
+              <h3 className="text-lg font-bold mb-4 text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">accessibility_new</span>
+                Physical Attributes
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="height">
+                    Height (cm)
+                  </label>
+                  <input
+                    className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
+                    id="height"
+                    name="height_cm"
+                    value={formData.height_cm}
+                    onChange={handleChange}
+                    placeholder="180"
+                    type="number"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="weight">
+                    Weight (kg)
+                  </label>
+                  <input
+                    className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
+                    id="weight"
+                    name="weight_kg"
+                    value={formData.weight_kg}
+                    onChange={handleChange}
+                    placeholder="85"
+                    type="number"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Actions */}
