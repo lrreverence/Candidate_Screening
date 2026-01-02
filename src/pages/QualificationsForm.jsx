@@ -15,6 +15,7 @@ const QualificationsForm = () => {
     documents: []
   })
   const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState(null) // 'uploading', 'success', 'error', null
 
   const licenseOptions = [
     { id: 'psa_birth_certificate', label: 'PSA Birth Certificate', subtitle: 'Philippine Statistics Authority' },
@@ -50,76 +51,57 @@ const QualificationsForm = () => {
     }))
   }
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+  const handleFileUpload = (e) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
 
-    // Validate file
+    // Validate files - PDF only
     const maxSize = 10 * 1024 * 1024 // 10MB
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf']
-    
-    if (file.size > maxSize) {
-      alert('File size must be less than 10MB')
-      return
-    }
+    const allowedType = 'application/pdf'
 
-    if (!allowedTypes.includes(file.type)) {
-      alert('File must be PNG, JPG, or PDF')
-      return
-    }
-
-    setUploading(true)
-    try {
-      // Upload to Supabase Storage
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${user?.id || 'anonymous'}_${Date.now()}.${fileExt}`
-      const filePath = `applications/${fileName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('application-documents')
-        .upload(filePath, file)
-
-      if (uploadError) {
-        // If bucket doesn't exist, we'll handle it gracefully
-        console.error('Upload error:', uploadError)
-        // For now, store file metadata
-        const newDoc = {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          uploaded_at: new Date().toISOString()
-        }
-        setFormData(prev => ({
-          ...prev,
-          documents: [...prev.documents, newDoc]
-        }))
-        alert('File metadata saved. Storage bucket setup required for full functionality.')
-      } else {
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('application-documents')
-          .getPublicUrl(filePath)
-
-        const newDoc = {
-          name: file.name,
-          url: publicUrl,
-          path: filePath,
-          size: file.size,
-          type: file.type,
-          uploaded_at: new Date().toISOString()
-        }
-        setFormData(prev => ({
-          ...prev,
-          documents: [...prev.documents, newDoc]
-        }))
-        alert('File uploaded successfully!')
+    const invalidFiles = []
+    Array.from(files).forEach((file) => {
+      if (file.size > maxSize) {
+        invalidFiles.push(`${file.name} (exceeds 10MB)`)
       }
-    } catch (error) {
-      console.error('Error uploading file:', error)
-      alert('Failed to upload file. Please try again.')
-    } finally {
-      setUploading(false)
+      if (file.type !== allowedType) {
+        invalidFiles.push(`${file.name} (not a PDF)`)
+      }
+    })
+
+    if (invalidFiles.length > 0) {
+      alert(`Invalid files:\n${invalidFiles.join('\n')}\n\nPlease upload PDF files only, max 10MB each.`)
+      return
     }
+
+    console.log('[QUALIFICATIONS] Files validated, storing temporarily...', { fileCount: files.length })
+
+    // Store files temporarily in state (not uploaded to Supabase yet)
+    const tempFiles = []
+    Array.from(files).forEach((file) => {
+      const timestamp = Date.now() + Math.random().toString(36).substring(7)
+      const tempDoc = {
+        id: `temp_${timestamp}_${file.name}`,
+        name: file.name,
+        file: file, // Store the actual File object
+        size: file.size,
+        type: file.type,
+        isTemporary: true, // Flag to indicate it's not uploaded yet
+        uploaded_at: new Date().toISOString()
+      }
+      tempFiles.push(tempDoc)
+      console.log('[QUALIFICATIONS] File stored temporarily:', file.name)
+    })
+
+    // Add to existing documents
+    setFormData(prev => ({
+      ...prev,
+      documents: [...prev.documents, ...tempFiles]
+    }))
+
+    setUploadStatus('success')
+    setTimeout(() => setUploadStatus(null), 3000)
+    console.log('[QUALIFICATIONS] All files stored temporarily. Total documents:', formData.documents.length + tempFiles.length)
   }
 
   const handleDragOver = (e) => {
@@ -130,11 +112,73 @@ const QualificationsForm = () => {
   const handleDrop = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    const file = e.dataTransfer.files[0]
-    if (file) {
-      const event = { target: { files: [file] } }
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      const event = { target: { files } }
       handleFileUpload(event)
     }
+  }
+
+  const uploadDocumentsToSupabase = async () => {
+    console.log('[QUALIFICATIONS] Starting upload to Supabase...', { documentCount: formData.documents.length })
+
+    if (!user?.id) {
+      throw new Error('You must be logged in to upload files')
+    }
+
+    const uploadedDocs = []
+    const tempId = user.id
+
+    // Upload only temporary files (not already uploaded)
+    for (const doc of formData.documents) {
+      if (!doc.isTemporary) {
+        // Already uploaded, keep as is
+        uploadedDocs.push(doc)
+        continue
+      }
+
+      const file = doc.file
+      console.log('[QUALIFICATIONS] Uploading file to Supabase:', file.name, { size: file.size, type: file.type })
+
+      const timestamp = Date.now() + Math.random().toString(36).substring(7)
+      const fileName = `${tempId}/${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+      const filePath = fileName
+
+      // Upload file to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('resumes')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (uploadError) {
+        console.error('[QUALIFICATIONS] Upload error for', file.name, ':', uploadError)
+        throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`)
+      }
+
+      console.log('[QUALIFICATIONS] File uploaded successfully:', file.name, { path: filePath })
+
+      // Get signed URL
+      const { data: signedData } = await supabase.storage
+        .from('resumes')
+        .createSignedUrl(filePath, 3600)
+
+      const uploadedDoc = {
+        id: doc.id,
+        name: file.name,
+        url: signedData?.signedUrl || filePath,
+        path: filePath,
+        size: file.size,
+        type: file.type,
+        uploaded_at: new Date().toISOString()
+      }
+
+      uploadedDocs.push(uploadedDoc)
+    }
+
+    console.log('[QUALIFICATIONS] All files uploaded to Supabase successfully')
+    return uploadedDocs
   }
 
   const handleBack = () => {
@@ -144,11 +188,25 @@ const QualificationsForm = () => {
   const handleNext = async (e) => {
     e.preventDefault()
     setLoading(true)
+    setUploading(true)
 
     try {
+      // First, upload any temporary documents to Supabase Storage
+      if (formData.documents.length > 0) {
+        console.log('[QUALIFICATIONS] Uploading documents to Supabase before proceeding...')
+        const uploadedDocs = await uploadDocumentsToSupabase()
+
+        // Update formData with uploaded documents
+        setFormData(prev => ({
+          ...prev,
+          documents: uploadedDocs
+        }))
+        console.log('[QUALIFICATIONS] Documents uploaded successfully')
+      }
+
       // Get applicant by user_id or email
       let applicantId = null
-      
+
       if (user?.id) {
         const { data: applicant } = await supabase
           .from('applicants')
@@ -217,6 +275,7 @@ const QualificationsForm = () => {
       alert(`Failed to save qualifications: ${errorMessage}. Please try again.`)
     } finally {
       setLoading(false)
+      setUploading(false)
     }
   }
 
@@ -362,25 +421,60 @@ const QualificationsForm = () => {
                 Documentation
               </h3>
               <div
-                className="mt-2 flex justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-[#2563eb] px-6 py-10 hover:bg-gray-50 dark:hover:bg-[#1e293b] transition-colors cursor-pointer group"
+                className={`mt-2 flex justify-center rounded-xl border-2 border-dashed px-6 py-10 transition-all ${
+                  uploading 
+                    ? 'border-primary bg-primary/5 cursor-wait' 
+                    : 'border-gray-300 dark:border-[#2563eb] hover:bg-gray-50 dark:hover:bg-[#1e293b] cursor-pointer group'
+                }`}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
-                onClick={() => document.getElementById('file-upload').click()}
+                onClick={() => !uploading && document.getElementById('file-upload').click()}
               >
                 <div className="text-center">
-                  <span className="material-symbols-outlined text-gray-400 dark:text-[#93c5fd] text-5xl group-hover:text-primary transition-colors">cloud_upload</span>
-                  <div className="mt-4 flex text-sm leading-6 text-slate-600 dark:text-gray-400">
-                    <span className="relative cursor-pointer rounded-md font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 hover:text-blue-400">
-                      <span>Upload a file</span>
-                    </span>
-                    <p className="pl-1">or drag and drop</p>
-                  </div>
-                  <p className="text-xs leading-5 text-slate-500 dark:text-gray-500">PNG, JPG, PDF up to 10MB</p>
+                  {uploading ? (
+                    <>
+                      <div className="inline-block animate-spin">
+                        <span className="material-symbols-outlined text-primary text-5xl">sync</span>
+                      </div>
+                      <div className="mt-4 text-sm leading-6 text-primary font-semibold">
+                        Uploading files...
+                      </div>
+                      <p className="text-xs leading-5 text-slate-500 dark:text-gray-500 mt-2">Please wait while we upload your files</p>
+                    </>
+                  ) : uploadStatus === 'success' ? (
+                    <>
+                      <span className="material-symbols-outlined text-green-500 text-5xl">check_circle</span>
+                      <div className="mt-4 text-sm leading-6 text-green-600 dark:text-green-400 font-semibold">
+                        Files uploaded successfully!
+                      </div>
+                      <p className="text-xs leading-5 text-slate-500 dark:text-gray-500 mt-2">You can upload more files or continue</p>
+                    </>
+                  ) : uploadStatus === 'error' ? (
+                    <>
+                      <span className="material-symbols-outlined text-red-500 text-5xl">error</span>
+                      <div className="mt-4 text-sm leading-6 text-red-600 dark:text-red-400 font-semibold">
+                        Upload failed
+                      </div>
+                      <p className="text-xs leading-5 text-slate-500 dark:text-gray-500 mt-2">Please try again</p>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-gray-400 dark:text-[#93c5fd] text-5xl group-hover:text-primary transition-colors">cloud_upload</span>
+                      <div className="mt-4 flex text-sm leading-6 text-slate-600 dark:text-gray-400">
+                        <span className="relative cursor-pointer rounded-md font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 hover:text-blue-400">
+                          <span>Upload a file</span>
+                        </span>
+                        <p className="pl-1">or drag and drop</p>
+                      </div>
+                      <p className="text-xs leading-5 text-slate-500 dark:text-gray-500">PDF files only, up to 10MB each</p>
+                    </>
+                  )}
                   <input
                     id="file-upload"
                     type="file"
                     className="hidden"
-                    accept=".png,.jpg,.jpeg,.pdf"
+                    accept=".pdf,application/pdf"
+                    multiple
                     onChange={handleFileUpload}
                     disabled={uploading}
                   />
@@ -388,12 +482,53 @@ const QualificationsForm = () => {
               </div>
               {formData.documents.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  <p className="text-sm text-slate-600 dark:text-gray-400">Uploaded files:</p>
+                  <p className="text-sm text-slate-600 dark:text-gray-400 font-semibold">
+                    Selected files ({formData.documents.length}):
+                  </p>
+                  {formData.documents.some(doc => doc.isTemporary) && (
+                    <p className="text-xs text-slate-500 dark:text-gray-500 italic">
+                      Files will be uploaded to secure storage when you click "Next Step"
+                    </p>
+                  )}
                   {formData.documents.map((doc, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm text-slate-700 dark:text-gray-300">
-                      <span className="material-symbols-outlined text-primary">description</span>
-                      <span>{doc.name}</span>
-                      <span className="text-xs text-slate-500">({(doc.size / 1024 / 1024).toFixed(2)} MB)</span>
+                    <div key={doc.id || index} className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-[#1e293b] rounded-lg text-sm text-slate-700 dark:text-gray-300">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="material-symbols-outlined text-primary flex-shrink-0">description</span>
+                        <span className="truncate">{doc.name}</span>
+                        <span className="text-xs text-slate-500 flex-shrink-0">({(doc.size / 1024 / 1024).toFixed(2)} MB)</span>
+                        {doc.isTemporary && (
+                          <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded-full flex-shrink-0">
+                            Ready to upload
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          // Remove from storage only if it was uploaded (not temporary)
+                          if (doc.path && !doc.isTemporary) {
+                            try {
+                              await supabase.storage
+                                .from('resumes')
+                                .remove([doc.path])
+                              console.log('[QUALIFICATIONS] File removed from storage:', doc.path)
+                            } catch (error) {
+                              console.error('Error removing file from storage:', error)
+                            }
+                          } else {
+                            console.log('[QUALIFICATIONS] Temporary file removed from local state:', doc.name)
+                          }
+                          // Remove from form data
+                          setFormData(prev => ({
+                            ...prev,
+                            documents: prev.documents.filter((d, i) => (d.id || i) !== (doc.id || index))
+                          }))
+                        }}
+                        className="text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors flex-shrink-0"
+                        title="Remove file"
+                      >
+                        <span className="material-symbols-outlined text-lg">close</span>
+                      </button>
                     </div>
                   ))}
                 </div>
