@@ -19,8 +19,14 @@ const AuthProvider = ({ children }) => {
     try {
       console.log('[AUTH] Fetching user profile for:', userId)
 
-      // Check if we have a valid session first
-      const { data: sessionData } = await supabase.auth.getSession()
+      // Check if we have a valid session first (with timeout)
+      const sessionPromise = supabase.auth.getSession()
+      const { data: sessionData } = await Promise.race([
+        sessionPromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Session check timeout')), 3000)
+        )
+      ])
       console.log('[AUTH] Current session valid:', !!sessionData?.session)
       console.log('[AUTH] User email from session:', sessionData?.session?.user?.email)
 
@@ -68,15 +74,42 @@ const AuthProvider = ({ children }) => {
   }
 
   useEffect(() => {
+    let isInitialLoad = true
+
     // Get initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       console.log('[AUTH] Initial session:', session?.user?.id)
       setSession(session)
       setUser(session?.user ?? null)
-      if (session?.user) {
-        await fetchUserProfile(session.user.id)
+
+      try {
+        if (session?.user) {
+          // Add timeout to prevent hanging forever
+          await Promise.race([
+            fetchUserProfile(session.user.id),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Profile fetch timeout (5s)')), 5000)
+            )
+          ])
+        }
+      } catch (error) {
+        console.error('[AUTH] Error in initial profile fetch:', error)
+        // Set a minimal fallback profile to prevent blocking
+        if (session?.user) {
+          setUserProfile({
+            id: session.user.id,
+            email: session.user.email,
+            role: session.user.user_metadata?.role || 'applicant'
+          })
+        }
+      } finally {
+        setLoading(false)
+        isInitialLoad = false
       }
+    }).catch((error) => {
+      console.error('[AUTH] Error getting initial session:', error)
       setLoading(false)
+      isInitialLoad = false
     })
 
     // Listen for auth changes
@@ -84,14 +117,41 @@ const AuthProvider = ({ children }) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       console.log('[AUTH] Auth state changed:', _event, session?.user?.id)
+
+      // Skip if this is the initial SIGNED_IN event (already handled above)
+      if (isInitialLoad && _event === 'SIGNED_IN') {
+        console.log('[AUTH] Skipping duplicate initial SIGNED_IN event')
+        return
+      }
+
       setSession(session)
       setUser(session?.user ?? null)
-      if (session?.user) {
-        await fetchUserProfile(session.user.id)
-      } else {
-        setUserProfile(null)
+
+      try {
+        if (session?.user) {
+          // Add timeout to prevent hanging forever
+          await Promise.race([
+            fetchUserProfile(session.user.id),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Profile fetch timeout (5s)')), 5000)
+            )
+          ])
+        } else {
+          setUserProfile(null)
+        }
+      } catch (error) {
+        console.error('[AUTH] Error in auth state change profile fetch:', error)
+        // Set a minimal fallback profile to prevent blocking
+        if (session?.user) {
+          setUserProfile({
+            id: session.user.id,
+            email: session.user.email,
+            role: session.user.user_metadata?.role || 'applicant'
+          })
+        }
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     return () => subscription.unsubscribe()
@@ -305,6 +365,13 @@ const AuthProvider = ({ children }) => {
     }
   }
 
+  // Stable function reference for refreshing user profile
+  const refreshUserProfile = React.useCallback(() => {
+    if (user?.id) {
+      return fetchUserProfile(user.id)
+    }
+  }, [user?.id])
+
   const resetPassword = async (email) => {
     try {
       const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -317,19 +384,19 @@ const AuthProvider = ({ children }) => {
   }
 
   // Helper function to check if user is admin
-  const isAdmin = () => {
+  const isAdmin = React.useCallback(() => {
     return userProfile?.role === 'admin'
-  }
+  }, [userProfile?.role])
 
   // Helper function to check if user is applicant
-  const isApplicant = () => {
+  const isApplicant = React.useCallback(() => {
     return userProfile?.role === 'applicant' || !userProfile
-  }
+  }, [userProfile?.role])
 
   // Helper function to get user role
-  const getUserRole = () => {
+  const getUserRole = React.useCallback(() => {
     return userProfile?.role || 'applicant'
-  }
+  }, [userProfile?.role])
 
   const value = {
     user,
@@ -343,7 +410,7 @@ const AuthProvider = ({ children }) => {
     isAdmin,
     isApplicant,
     getUserRole,
-    refreshUserProfile: () => user?.id && fetchUserProfile(user.id),
+    refreshUserProfile,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
