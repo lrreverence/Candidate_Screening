@@ -15,6 +15,8 @@ const Home = () => {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showSignupModal, setShowSignupModal] = useState(false)
   const [pendingJobId, setPendingJobId] = useState(null)
+  const [appliedJobIds, setAppliedJobIds] = useState(new Set())
+  const [checkingApplications, setCheckingApplications] = useState(false)
 
   // Redirect admin users to /admin after login (only if not already there)
   useEffect(() => {
@@ -22,6 +24,77 @@ const Home = () => {
       navigate('/admin')
     }
   }, [user, userProfile, navigate, location.pathname])
+
+  // Check which jobs the user has applied to
+  useEffect(() => {
+    const checkApplications = async () => {
+      if (!user?.id || !supabaseJobs || supabaseJobs.length === 0) {
+        setAppliedJobIds(new Set())
+        return
+      }
+
+      setCheckingApplications(true)
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sbmwzgtlqmwtbrgdehuw.supabase.co'
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNibXd6Z3RscW13dGJyZ2RlaHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDUyMDMsImV4cCI6MjA3ODY4MTIwM30.LaXLtSuHVnY0JbN5YTa-2JlbrN2_cLAbAd6NfXtdyJY'
+
+        // Get applicant ID for this user
+        const applicantResponse = await fetch(
+          `${supabaseUrl}/rest/v1/applicants?user_id=eq.${user.id}&select=id`,
+          {
+            headers: {
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+
+        if (!applicantResponse.ok) {
+          console.error('[HOME] Error fetching applicant:', applicantResponse.statusText)
+          setAppliedJobIds(new Set())
+          return
+        }
+
+        const applicants = await applicantResponse.json()
+        if (!applicants || applicants.length === 0) {
+          setAppliedJobIds(new Set())
+          return
+        }
+
+        const applicantId = applicants[0].id
+
+        // Get all applications for this applicant
+        const appsResponse = await fetch(
+          `${supabaseUrl}/rest/v1/applications?applicant_id=eq.${applicantId}&select=job_id`,
+          {
+            headers: {
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+
+        if (!appsResponse.ok) {
+          console.error('[HOME] Error fetching applications:', appsResponse.statusText)
+          setAppliedJobIds(new Set())
+          return
+        }
+
+        const applications = await appsResponse.json()
+        const appliedIds = new Set(applications.map(app => app.job_id).filter(Boolean))
+        setAppliedJobIds(appliedIds)
+      } catch (error) {
+        console.error('[HOME] Exception checking applications:', error)
+        setAppliedJobIds(new Set())
+      } finally {
+        setCheckingApplications(false)
+      }
+    }
+
+    checkApplications()
+  }, [user?.id, supabaseJobs])
 
   // Use only Supabase jobs - no fallback
   const allJobs = useMemo(() => {
@@ -353,14 +426,25 @@ const Home = () => {
                         >
                           View Details
                         </button>
-                        <button 
-                          type="button"
-                          onClick={() => handleApply(job.id)}
-                          className="flex-1 h-10 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-1"
-                        >
-                          Apply
-                          <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                        </button>
+                        {appliedJobIds.has(job.id) ? (
+                          <button 
+                            type="button"
+                            disabled
+                            className="flex-1 h-10 rounded-full bg-secondary/50 text-white text-sm font-bold cursor-not-allowed flex items-center justify-center gap-1 opacity-75"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                            Applied
+                          </button>
+                        ) : (
+                          <button 
+                            type="button"
+                            onClick={() => handleApply(job.id)}
+                            className="flex-1 h-10 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-1"
+                          >
+                            Apply
+                            <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </article>

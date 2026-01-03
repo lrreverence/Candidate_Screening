@@ -11,6 +11,7 @@ const JobDetail = () => {
   const { user } = useAuth()
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [hasApplied, setHasApplied] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
 
   useEffect(() => {
@@ -59,6 +60,57 @@ const JobDetail = () => {
       fetchJob()
     }
   }, [jobId, supabaseJobs, supabaseLoading])
+
+  // Check if user has already applied to this job
+  useEffect(() => {
+    const checkApplication = async () => {
+      if (!user?.id || !jobId) {
+        setHasApplied(false)
+        return
+      }
+
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sbmwzgtlqmwtbrgdehuw.supabase.co'
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNibXd6Z3RscW13dGJyZ2RlaHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDUyMDMsImV4cCI6MjA3ODY4MTIwM30.LaXLtSuHVnY0JbN5YTa-2JlbrN2_cLAbAd6NfXtdyJY'
+
+        const applicantResponse = await fetch(
+          `${supabaseUrl}/rest/v1/applicants?user_id=eq.${user.id}&select=id`,
+          {
+            headers: {
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+
+        if (!applicantResponse.ok) return
+
+        const applicants = await applicantResponse.json()
+        if (!applicants?.length) return
+
+        const appResponse = await fetch(
+          `${supabaseUrl}/rest/v1/applications?applicant_id=eq.${applicants[0].id}&job_id=eq.${jobId}&select=id`,
+          {
+            headers: {
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+
+        if (!appResponse.ok) return
+
+        const applications = await appResponse.json()
+        setHasApplied(applications?.length > 0)
+      } catch (error) {
+        setHasApplied(false)
+      }
+    }
+
+    checkApplication()
+  }, [user?.id, jobId])
 
   const handleApply = () => {
     if (!user) {
@@ -231,14 +283,25 @@ const JobDetail = () => {
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleApply}
-                  className="w-full h-12 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-2"
-                >
-                  Apply Now
-                  <span className="material-symbols-outlined">arrow_forward</span>
-                </button>
+                {hasApplied ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full h-12 rounded-full bg-secondary/50 text-white text-sm font-bold cursor-not-allowed flex items-center justify-center gap-2 opacity-75"
+                  >
+                    <span className="material-symbols-outlined">check_circle</span>
+                    Applied
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleApply}
+                    className="w-full h-12 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-2"
+                  >
+                    Apply Now
+                    <span className="material-symbols-outlined">arrow_forward</span>
+                  </button>
+                )}
               </div>
 
               {/* Benefits */}
