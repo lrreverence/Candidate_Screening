@@ -192,14 +192,14 @@ const ApplicantsManagement = () => {
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-[#f3f4f6]">
       {/* Top Navigation Bar */}
-      <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-8 shadow-sm">
+      <header className="hidden lg:flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-8 shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-navy">Applicant Management</h2>
-          <p className="text-xs text-gray-500">View and manage security personnel applications</p>
+          <h2 className="text-lg lg:text-xl font-bold text-navy">Applicant Management</h2>
+          <p className="text-xs text-gray-500 hidden sm:block">View and manage security personnel applications</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 lg:gap-4">
           {/* Search */}
-          <div className="relative w-64">
+          <div className="relative w-48 lg:w-64">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">search</span>
             <input
               className="h-10 w-full rounded-md border border-gray-300 bg-gray-50 pl-10 pr-4 text-sm text-gray-700 focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy transition-all"
@@ -219,10 +219,24 @@ const ApplicantsManagement = () => {
         </div>
       </header>
 
+      {/* Mobile Search Bar */}
+      <div className="lg:hidden p-4 bg-white border-b border-gray-200">
+        <div className="relative">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">search</span>
+          <input
+            className="h-10 w-full rounded-md border border-gray-300 bg-gray-50 pl-10 pr-4 text-sm text-gray-700 focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy transition-all"
+            placeholder="Search by name or ID..."
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 lg:p-8">
         {/* KPI Stats Cards */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6 lg:mb-8">
           <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-start justify-between">
               <div>
@@ -286,7 +300,7 @@ const ApplicantsManagement = () => {
         {/* Main Section */}
         <div className="flex flex-col gap-6 rounded-lg border border-gray-200 bg-white shadow-sm">
           {/* Advanced Filter Toolbar */}
-          <div className="flex flex-col gap-4 border-b border-gray-200 p-6 lg:flex-row lg:items-end">
+          <div className="flex flex-col gap-4 border-b border-gray-200 p-4 lg:p-6 lg:flex-row lg:items-end">
             <div className="flex-1 grid grid-cols-1 gap-4 md:grid-cols-3">
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">License Type</span>
@@ -366,8 +380,10 @@ const ApplicantsManagement = () => {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[800px] table-auto text-left text-sm">
+              <div className="overflow-x-auto -mx-4 lg:mx-0">
+                <div className="inline-block min-w-full align-middle">
+                  <div className="overflow-hidden">
+                    <table className="min-w-full table-auto text-left text-sm">
                   <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                     <tr className="border-b border-gray-200">
                       <th className="px-6 py-4 font-semibold tracking-wider">Applicant Name</th>
@@ -443,28 +459,30 @@ const ApplicantsManagement = () => {
                     )}
                   </tbody>
                 </table>
+                  </div>
+                </div>
               </div>
               {/* Pagination */}
-              <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
-                <div className="text-sm text-gray-500">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 px-4 lg:px-6 py-4">
+                <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-left">
                   Showing <span className="font-medium text-gray-900">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
                   <span className="font-medium text-gray-900">
                     {Math.min(currentPage * itemsPerPage, applications.length)}
                   </span>{' '}
                   of <span className="font-medium text-gray-900">{applications.length}</span> results
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full sm:w-auto justify-center">
                   <button
                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex-1 sm:flex-none"
                   >
                     Previous
                   </button>
                   <button
                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex-1 sm:flex-none"
                   >
                     Next
                   </button>
