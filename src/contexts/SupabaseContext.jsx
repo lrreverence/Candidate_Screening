@@ -30,15 +30,24 @@ export const SupabaseProvider = ({ children }) => {
 
       console.log('[SUPABASE] Fetching jobs...')
       console.log('[SUPABASE] Supabase client exists:', !!supabase)
+      console.log('[SUPABASE] Supabase URL:', supabase?.supabaseUrl)
 
       const startTime = Date.now()
 
-      // Simple direct query
+      // Simple direct query with timeout
       console.log('[SUPABASE] Executing query NOW...')
-      const { data, error } = await supabase
+
+      const queryPromise = supabase
         .from('jobs')
         .select('*')
         .order('created_at', { ascending: false })
+
+      // Add 10 second timeout
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Query timeout after 10 seconds')), 10000)
+      )
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise])
 
       const elapsed = Date.now() - startTime
       console.log(`[SUPABASE] Query completed in ${elapsed}ms`)
