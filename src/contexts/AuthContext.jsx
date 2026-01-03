@@ -9,66 +9,61 @@ const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch user profile from users table using RPC function to bypass RLS complexity
-  const fetchUserProfile = async (userId) => {
+  // Fetch user profile - try database first, fall back to session data
+  const fetchUserProfile = async (userId, sessionData = null) => {
     if (!userId) {
       setUserProfile(null)
       return
     }
 
     try {
-      console.log('[AUTH] Fetching user profile for:', userId)
-
-      // Check if we have a valid session first (with timeout)
-      const sessionPromise = supabase.auth.getSession()
-      const { data: sessionData } = await Promise.race([
-        sessionPromise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Session check timeout')), 3000)
-        )
-      ])
-      console.log('[AUTH] Current session valid:', !!sessionData?.session)
-      console.log('[AUTH] User email from session:', sessionData?.session?.user?.email)
-
-      // Try direct query with a short timeout
-      console.log('[AUTH] Fetching user profile with direct query...')
-      const directPromise = supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      const { data, error } = await Promise.race([
-        directPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Query timeout')), 2000))
-      ])
-
-      if (error) {
-        console.error('[AUTH] Database query failed:', error.message)
-
-        if (error.message === 'Query timeout') {
-          console.error('[AUTH] ⚠️ DATABASE TIMEOUT - This is likely an RLS (Row Level Security) issue')
-          console.error('[AUTH] The users table RLS policy may not be allowing authenticated reads')
-          console.error('[AUTH] Check your Supabase RLS policies for the users table')
-        }
-
-        // FALLBACK: Create a minimal profile from session data
-        console.warn('[AUTH] Using fallback profile from session data')
-        const fallbackProfile = {
-          id: sessionData?.session?.user?.id || userId,
-          email: sessionData?.session?.user?.email || '',
-          role: sessionData?.session?.user?.user_metadata?.role || 'applicant',
-          full_name: sessionData?.session?.user?.user_metadata?.full_name || '',
-          created_at: sessionData?.session?.user?.created_at
-        }
-        console.log('[AUTH] Fallback profile created:', fallbackProfile)
-        setUserProfile(fallbackProfile)
-      } else {
-        console.log('[AUTH] ✓ User profile loaded successfully from database:', data)
-        setUserProfile(data)
+      // If session not provided, fetch it
+      if (!sessionData) {
+        const { data } = await supabase.auth.getSession()
+        sessionData = data
       }
+
+      const sessionUser = sessionData?.session?.user
+
+      if (!sessionUser) {
+        console.warn('[AUTH] No session user found')
+        setUserProfile(null)
+        return
+      }
+
+      // Try to get profile from database with a short timeout
+      try {
+        const { data: dbProfile, error } = await Promise.race([
+          supabase.from('users').select('*').eq('id', userId).single(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 2000)
+          )
+        ])
+
+        if (!error && dbProfile) {
+          console.log('[AUTH] ✓ User profile loaded from database:', dbProfile)
+          setUserProfile(dbProfile)
+          return
+        }
+      } catch (dbError) {
+        console.log('[AUTH] Database query failed, using session fallback')
+      }
+
+      // Fallback: Use session data
+      const profile = {
+        id: sessionUser.id,
+        email: sessionUser.email,
+        role: sessionUser.user_metadata?.role || 'applicant',
+        full_name: sessionUser.user_metadata?.full_name || '',
+        first_name: sessionUser.user_metadata?.first_name || '',
+        last_name: sessionUser.user_metadata?.last_name || '',
+        created_at: sessionUser.created_at
+      }
+
+      console.log('[AUTH] ✓ User profile loaded from session fallback:', profile)
+      setUserProfile(profile)
     } catch (error) {
-      console.error('[AUTH] Exception fetching user profile:', error)
+      console.error('[AUTH] Error fetching user profile:', error)
       setUserProfile(null)
     }
   }
@@ -77,16 +72,17 @@ const AuthProvider = ({ children }) => {
     let isInitialLoad = true
 
     // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: sessionData }) => {
+      const session = sessionData.session
       console.log('[AUTH] Initial session:', session?.user?.id)
       setSession(session)
       setUser(session?.user ?? null)
 
       try {
         if (session?.user) {
-          // Add timeout to prevent hanging forever
+          // Add timeout to prevent hanging forever - pass session to avoid re-fetching
           await Promise.race([
-            fetchUserProfile(session.user.id),
+            fetchUserProfile(session.user.id, sessionData),
             new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Profile fetch timeout (5s)')), 5000)
             )
@@ -129,9 +125,9 @@ const AuthProvider = ({ children }) => {
 
       try {
         if (session?.user) {
-          // Add timeout to prevent hanging forever
+          // Add timeout to prevent hanging forever - pass session to avoid re-fetching
           await Promise.race([
-            fetchUserProfile(session.user.id),
+            fetchUserProfile(session.user.id, { session }),
             new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Profile fetch timeout (5s)')), 5000)
             )
@@ -301,7 +297,7 @@ const AuthProvider = ({ children }) => {
       if (data?.user?.id) {
         console.log('[AUTH] Fetching profile after cookie storage settled...')
         try {
-          await fetchUserProfile(data.user.id)
+          await fetchUserProfile(data.user.id, { session: data.session })
           console.log('[AUTH] Profile fetch completed')
         } catch (profileError) {
           console.error('[AUTH] Profile fetch failed:', profileError)

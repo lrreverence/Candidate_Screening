@@ -23,9 +23,9 @@ const AdminSidebar = () => {
 
   const isActive = (path) => {
     if (path === '/admin') {
-      return location.pathname === '/admin' || location.pathname === '/admin/applicants'
+      return location.pathname === '/admin'
     }
-    return location.pathname === path
+    return location.pathname.startsWith(path)
   }
 
   return (
