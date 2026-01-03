@@ -98,14 +98,7 @@ const Home = () => {
 
   // Use only Supabase jobs - no fallback
   const allJobs = useMemo(() => {
-    console.log('[HOME] Supabase jobs state:', { 
-      hasJobs: !!supabaseJobs, 
-      jobCount: supabaseJobs?.length || 0,
-      loading: supabaseLoading 
-    })
-    
     if (supabaseJobs && supabaseJobs.length > 0) {
-      console.log('[HOME] Using Supabase jobs with UUIDs:', supabaseJobs.length)
       return supabaseJobs.map(job => ({
         id: job.id, // This is a UUID from Supabase
         title: job.title,
@@ -124,7 +117,6 @@ const Home = () => {
     }
     
     // Return empty array if no jobs - don't use fallback
-    console.log('[HOME] No Supabase jobs found')
     return []
   }, [supabaseJobs, supabaseLoading])
 
@@ -176,9 +168,6 @@ const Home = () => {
       setShowLoginModal(true)
       return
     }
-    
-    // Log the jobId to help debug
-    console.log('[HOME] Applying for job with ID:', jobId, 'Type:', typeof jobId)
     
     // Navigate to application form if logged in
     navigate(`/apply/${jobId || ''}`)
