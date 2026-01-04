@@ -497,24 +497,6 @@ const AuthProvider = ({ children }) => {
     }
   }
 
-  const signInWithFacebook = async () => {
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'facebook',
-        options: {
-          redirectTo: `${window.location.origin}`,
-        },
-      })
-      return { data, error }
-    } catch (error) {
-      return {
-        data: null,
-        error: {
-          message: error.message || 'An unexpected error occurred during Facebook sign in',
-        },
-      }
-    }
-  }
 
   // Helper function to check if user is admin
   const isAdmin = React.useCallback(() => {
@@ -541,7 +523,6 @@ const AuthProvider = ({ children }) => {
     signOut,
     resetPassword,
     signInWithGoogle,
-    signInWithFacebook,
     isAdmin,
     isApplicant,
     getUserRole,

@@ -93,9 +93,9 @@ Screening/
 
 The app is pre-configured with Supabase credentials. The jobs table has been created in your Supabase database with sample data.
 
-### OAuth Configuration (Google & Facebook)
+### OAuth Configuration (Google)
 
-To enable Google and Facebook sign-in, you need to configure OAuth providers in your Supabase dashboard:
+To enable Google sign-in, you need to configure the OAuth provider in your Supabase dashboard:
 
 1. **Go to Supabase Dashboard** → Authentication → Providers
 2. **Enable Google OAuth:**
@@ -104,14 +104,9 @@ To enable Google and Facebook sign-in, you need to configure OAuth providers in 
      - Client ID (from Google Cloud Console)
      - Client Secret (from Google Cloud Console)
    - Add authorized redirect URL: `https://your-project-ref.supabase.co/auth/v1/callback`
-3. **Enable Facebook OAuth:**
-   - Toggle Facebook provider to enabled
-   - Add your Facebook OAuth credentials:
-     - App ID (from Facebook Developers)
-     - App Secret (from Facebook Developers)
-   - Add authorized redirect URL: `https://your-project-ref.supabase.co/auth/v1/callback`
+   - Click **Save**
 
-**Note:** Make sure to add your production domain to the authorized redirect URLs in both Google Cloud Console and Facebook Developers settings.
+**Note:** Make sure to add your production domain to the authorized redirect URLs in Google Cloud Console.
 
 ### Environment Variables (Optional)
 
