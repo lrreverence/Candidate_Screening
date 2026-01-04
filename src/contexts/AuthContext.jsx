@@ -9,6 +9,91 @@ const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // Ensure OAuth user has proper profile and applicant record
+  const ensureOAuthUserProfile = async (user) => {
+    if (!user) return
+
+    try {
+      // Extract name from OAuth provider metadata
+      const providerMetadata = user.app_metadata?.provider || 'email'
+      const fullName = user.user_metadata?.full_name || 
+                      user.user_metadata?.name || 
+                      `${user.user_metadata?.first_name || ''} ${user.user_metadata?.last_name || ''}`.trim() ||
+                      user.user_metadata?.display_name || ''
+      
+      const firstName = user.user_metadata?.first_name || 
+                       user.user_metadata?.given_name || 
+                       fullName.split(' ')[0] || ''
+      const lastName = user.user_metadata?.last_name || 
+                      user.user_metadata?.family_name || 
+                      fullName.split(' ').slice(1).join(' ') || ''
+
+      // Check if user record exists
+      const { data: existingUser, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (fetchError || !existingUser) {
+        // Create user record
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: user.id,
+            email: user.email || '',
+            full_name: fullName,
+            first_name: firstName,
+            last_name: lastName,
+            role: 'applicant'
+          })
+
+        if (insertError) {
+          console.error('[AUTH] Error creating OAuth user record:', insertError)
+        }
+      }
+
+      // Check if applicant record exists
+      const { data: existingApplicant } = await supabase
+        .from('applicants')
+        .select('id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (!existingApplicant) {
+        // Generate reference code
+        const { data: refCode, error: refError } = await supabase
+          .rpc('generate_reference_code')
+        
+        let referenceCode = refCode
+        if (refError || !refCode) {
+          // Fallback reference code
+          const year = new Date().getFullYear()
+          const timestamp = Date.now().toString().slice(-6)
+          referenceCode = `REF-${year}-${timestamp.slice(0, 3)}`
+        }
+
+        // Create applicant record
+        const { error: applicantError } = await supabase
+          .from('applicants')
+          .insert({
+            reference_code: referenceCode,
+            first_name: firstName,
+            last_name: lastName,
+            email: user.email || '',
+            user_id: user.id,
+            status: 'Pending'
+          })
+
+        if (applicantError) {
+          console.error('[AUTH] Error creating OAuth applicant record:', applicantError)
+        }
+      }
+    } catch (error) {
+      console.error('[AUTH] Error ensuring OAuth user profile:', error)
+    }
+  }
+
   // Fetch user profile - try database first, fall back to session data
   const fetchUserProfile = async (userId, sessionData = null) => {
     if (!userId) {
@@ -29,6 +114,13 @@ const AuthProvider = ({ children }) => {
         console.warn('[AUTH] No session user found')
         setUserProfile(null)
         return
+      }
+
+      // Check if this is an OAuth user and ensure profile exists
+      const isOAuthUser = sessionUser.app_metadata?.provider && 
+                         sessionUser.app_metadata.provider !== 'email'
+      if (isOAuthUser) {
+        await ensureOAuthUserProfile(sessionUser)
       }
 
       // Try to get profile from database with a short timeout
@@ -54,9 +146,12 @@ const AuthProvider = ({ children }) => {
         id: sessionUser.id,
         email: sessionUser.email,
         role: sessionUser.user_metadata?.role || 'applicant',
-        full_name: sessionUser.user_metadata?.full_name || '',
-        first_name: sessionUser.user_metadata?.first_name || '',
-        last_name: sessionUser.user_metadata?.last_name || '',
+        full_name: sessionUser.user_metadata?.full_name || 
+                   sessionUser.user_metadata?.name || '',
+        first_name: sessionUser.user_metadata?.first_name || 
+                   sessionUser.user_metadata?.given_name || '',
+        last_name: sessionUser.user_metadata?.last_name || 
+                  sessionUser.user_metadata?.family_name || '',
         created_at: sessionUser.created_at
       }
 
@@ -379,6 +474,48 @@ const AuthProvider = ({ children }) => {
     }
   }
 
+  const signInWithGoogle = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      })
+      return { data, error }
+    } catch (error) {
+      return {
+        data: null,
+        error: {
+          message: error.message || 'An unexpected error occurred during Google sign in',
+        },
+      }
+    }
+  }
+
+  const signInWithFacebook = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'facebook',
+        options: {
+          redirectTo: `${window.location.origin}`,
+        },
+      })
+      return { data, error }
+    } catch (error) {
+      return {
+        data: null,
+        error: {
+          message: error.message || 'An unexpected error occurred during Facebook sign in',
+        },
+      }
+    }
+  }
+
   // Helper function to check if user is admin
   const isAdmin = React.useCallback(() => {
     return userProfile?.role === 'admin'
@@ -403,6 +540,8 @@ const AuthProvider = ({ children }) => {
     signIn,
     signOut,
     resetPassword,
+    signInWithGoogle,
+    signInWithFacebook,
     isAdmin,
     isApplicant,
     getUserRole,
