@@ -20,6 +20,24 @@ const ApplicantDetailView = () => {
 
   // Load file URL when active file changes
   useEffect(() => {
+    if (!application?.applicants?.documents) {
+      setFileUrl(null)
+      return
+    }
+
+    const documents = application.applicants.documents || []
+    const files = documents.map(doc => {
+      let fileType = 'pdf'
+      if (doc.file_type === 'IDPhoto') fileType = 'image'
+      
+      return {
+        id: doc.file_type === 'Resume' ? 'resume' : doc.file_type === '201File' ? 'file201' : 'idPhoto',
+        name: doc.file_name,
+        path: doc.file_path,
+        type: fileType
+      }
+    })
+
     const activeFileData = files.find(f => f.id === activeFile)
     if (activeFileData?.path) {
       supabase.storage
@@ -36,7 +54,7 @@ const ApplicantDetailView = () => {
     } else {
       setFileUrl(null)
     }
-  }, [activeFile, files])
+  }, [activeFile, application])
 
   const fetchApplication = async () => {
     setLoading(true)
@@ -53,7 +71,8 @@ const ApplicantDetailView = () => {
           jobs:job_id (
             title,
             location,
-            salary
+            salary,
+            required_credentials
           )
         `)
         .eq('id', id)
@@ -177,20 +196,50 @@ const ApplicantDetailView = () => {
   }
 
   const getMatchPercentage = () => {
-    // Calculate match percentage based on available data
+    // Calculate match percentage based on available data and job requirements
     const applicant = application?.applicants
     if (!applicant) return 0
     
     let score = 0
-    if (applicant?.first_name && applicant?.last_name) score += 20
-    if (applicant?.email) score += 15
-    if (applicant?.phone) score += 10
-    if (applicant?.licenses && Array.isArray(applicant.licenses) && applicant.licenses.length > 0) score += 20
+    const maxScore = 100
+    
+    // Basic information (40 points)
+    if (applicant?.first_name && applicant?.last_name) score += 15
+    if (applicant?.email) score += 10
+    if (applicant?.phone) score += 5
+    if (applicant?.street_address || applicant?.city) score += 10
+    
+    // Documents (20 points)
     const documents = applicant?.documents || []
-    if (documents.find(d => d.file_type === 'Resume')) score += 15
-    if (documents.find(d => d.file_type === '201File')) score += 10
-    if (documents.find(d => d.file_type === 'IDPhoto')) score += 10
-    return Math.min(score, 100)
+    if (documents.find(d => d.file_type === 'Resume')) score += 10
+    if (documents.find(d => d.file_type === '201File')) score += 5
+    if (documents.find(d => d.file_type === 'IDPhoto')) score += 5
+    
+    // Credentials matching (40 points) - Most important for security jobs
+    const job = application?.jobs
+    const requiredCredentials = Array.isArray(job?.required_credentials) ? job.required_credentials : []
+    const applicantLicenses = Array.isArray(applicant?.licenses) ? applicant.licenses : []
+    
+    if (requiredCredentials.length > 0) {
+      // Calculate how many required credentials the applicant has
+      const matchedCredentials = requiredCredentials.filter(cred => 
+        applicantLicenses.includes(cred)
+      ).length
+      
+      // Give points based on match ratio (40 points max)
+      const credentialMatchRatio = matchedCredentials / requiredCredentials.length
+      score += Math.round(credentialMatchRatio * 40)
+      
+      // Bonus: If applicant has all required credentials, add extra points
+      if (matchedCredentials === requiredCredentials.length && requiredCredentials.length > 0) {
+        score += 5 // Bonus for perfect match
+      }
+    } else {
+      // If no specific requirements, give points for having any credentials
+      if (applicantLicenses.length > 0) score += 20
+    }
+    
+    return Math.min(score, maxScore)
   }
 
   if (loading) {

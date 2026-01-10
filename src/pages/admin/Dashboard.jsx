@@ -43,11 +43,10 @@ const Dashboard = () => {
         app.license_status === 'expired' || app.license_status === 'expiring'
       ).length || 0
 
-      // Fetch active jobs count
+      // Fetch active jobs count (all jobs are considered active since there's no status column)
       const { count: activeJobs, error: jobsError } = await supabase
         .from('jobs')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'active')
 
       if (jobsError) throw jobsError
 

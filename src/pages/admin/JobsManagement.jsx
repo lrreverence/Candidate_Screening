@@ -23,8 +23,21 @@ const JobsManagement = () => {
     description: '',
     requirements: '',
     salary_range: '',
-    status: 'active'
+    status: 'active',
+    required_credentials: []
   })
+
+  const licenseOptions = [
+    { id: 'psa_birth_certificate', label: 'PSA Birth Certificate', subtitle: 'Philippine Statistics Authority' },
+    { id: 'nbi_clearance', label: 'NBI Clearance', subtitle: 'National Bureau of Investigation' },
+    { id: 'sss_id', label: 'SSS ID / E-1 Form', subtitle: 'Social Security System' },
+    { id: 'philhealth_id', label: 'PhilHealth ID', subtitle: 'Philippine Health Insurance Corporation' },
+    { id: 'pagibig_id', label: 'Pag-IBIG ID', subtitle: 'Home Development Mutual Fund' },
+    { id: 'tin_id', label: 'TIN ID', subtitle: 'Tax Identification Number' },
+    { id: 'drivers_license', label: "Driver's License", subtitle: 'Land Transportation Office (LTO)' },
+    { id: 'first_aid', label: 'First Aid Certificate', subtitle: 'BLS/CPR Training' },
+    { id: 'security_guard_license', label: 'Security Guard License', subtitle: 'PASCO / PNP Security Agency' }
+  ]
 
   useEffect(() => {
     fetchJobs()
@@ -120,6 +133,11 @@ const JobsManagement = () => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
+  const getLicenseLabel = (licenseId) => {
+    const license = licenseOptions.find(l => l.id === licenseId)
+    return license ? license.label : licenseId
+  }
+
   const handleToggleStatus = async (jobId, currentStatus) => {
     try {
       const newStatus = currentStatus === 'active' ? 'closed' : 'active'
@@ -172,7 +190,8 @@ const JobsManagement = () => {
         description: job.description || '',
         requirements: job.requirements || '',
         salary_range: job.salary_range || '',
-        status: job.status || 'active'
+        status: job.status || 'active',
+        required_credentials: Array.isArray(job.required_credentials) ? job.required_credentials : []
       })
     } else {
       setEditingJob(null)
@@ -184,7 +203,8 @@ const JobsManagement = () => {
         description: '',
         requirements: '',
         salary_range: '',
-        status: 'active'
+        status: 'active',
+        required_credentials: []
       })
     }
     setShowJobForm(true)
@@ -201,13 +221,23 @@ const JobsManagement = () => {
       description: '',
       requirements: '',
       salary_range: '',
-      status: 'active'
+      status: 'active',
+      required_credentials: []
     })
   }
 
   const handleFormChange = (e) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleCredentialToggle = (credentialId) => {
+    setFormData(prev => ({
+      ...prev,
+      required_credentials: prev.required_credentials.includes(credentialId)
+        ? prev.required_credentials.filter(id => id !== credentialId)
+        : [...prev.required_credentials, credentialId]
+    }))
   }
 
   const handleSubmitJob = async (e) => {
@@ -431,6 +461,29 @@ const JobsManagement = () => {
                       <span className="material-symbols-outlined text-sm">group</span>
                       <span>{job.applications?.[0]?.count || 0} applications</span>
                     </div>
+                    {Array.isArray(job.required_credentials) && job.required_credentials.length > 0 && (
+                      <div className="flex items-start gap-2 text-gray-600">
+                        <span className="material-symbols-outlined text-sm mt-0.5">verified</span>
+                        <div className="flex-1">
+                          <p className="text-xs font-medium text-gray-700 mb-1">Required Credentials:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {job.required_credentials.slice(0, 3).map((credId) => (
+                              <span
+                                key={credId}
+                                className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                              >
+                                {getLicenseLabel(credId)}
+                              </span>
+                            ))}
+                            {job.required_credentials.length > 3 && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+                                +{job.required_credentials.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between pt-4 border-t border-gray-100">
@@ -605,6 +658,37 @@ const JobsManagement = () => {
                     className="w-full rounded-md border border-gray-300 px-4 py-2.5 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
                     placeholder="List the qualifications and requirements..."
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Required Security Credentials
+                    <span className="text-xs font-normal text-gray-500 ml-2">(Select credentials candidates must have)</span>
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    {licenseOptions.map((license) => (
+                      <label
+                        key={license.id}
+                        className="flex items-start gap-3 p-3 rounded-md border border-gray-200 bg-white hover:border-primary hover:bg-blue-50/50 cursor-pointer transition-all"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.required_credentials.includes(license.id)}
+                          onChange={() => handleCredentialToggle(license.id)}
+                          className="mt-1 h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2"
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-gray-900">{license.label}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{license.subtitle}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  {formData.required_credentials.length > 0 && (
+                    <p className="mt-2 text-xs text-gray-600">
+                      {formData.required_credentials.length} credential{formData.required_credentials.length !== 1 ? 's' : ''} selected
+                    </p>
+                  )}
                 </div>
               </div>
 
