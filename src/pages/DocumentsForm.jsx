@@ -1,7 +1,24 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+
+// Document types that applicants can upload
+const DOCUMENT_TYPES = [
+  'BIO-DATA',
+  'PHOTOCOPY OF SECURITY LICENSE / SBR',
+  'BARANGAY CLEARANCE',
+  'POLICE CLEARANCE',
+  'NBI CLEARANCE',
+  'EMPLOYMENT CERTIFICATE',
+  'DRUG TEST',
+  'NEURO-PSYCHIATRIC TEST / MEDICAL EXAMINATION',
+  'RE-TRAINING CERTIFICATE / GUN',
+  'BIRTH CERTIFICATE',
+  'EDUCATIONAL DIPLOMA\'S / TRANSCRIPT OF RECORD',
+  'OTHER GKE, OPENING AND CLOSING REPORT',
+  'VACCINATION CARD'
+]
 
 const DocumentsForm = () => {
   const navigate = useNavigate()
@@ -11,6 +28,51 @@ const DocumentsForm = () => {
   const [uploading, setUploading] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [currentUploadFile, setCurrentUploadFile] = useState(null)
+  const [selectedDocumentType, setSelectedDocumentType] = useState('')
+  const [requiredDocuments, setRequiredDocuments] = useState([])
+  const [availableDocumentTypes, setAvailableDocumentTypes] = useState(DOCUMENT_TYPES)
+
+  // Fetch job requirements
+  useEffect(() => {
+    const fetchJobRequirements = async () => {
+      if (!jobId) {
+        // If no jobId, show all document types
+        setAvailableDocumentTypes(DOCUMENT_TYPES)
+        setSelectedDocumentType(DOCUMENT_TYPES[0])
+        return
+      }
+
+      try {
+        const { data: job, error } = await supabase
+          .from('jobs')
+          .select('required_documents')
+          .eq('id', jobId)
+          .single()
+
+        if (error) throw error
+
+        if (job?.required_documents && Array.isArray(job.required_documents) && job.required_documents.length > 0) {
+          // Job has specific requirements
+          setRequiredDocuments(job.required_documents)
+          const requiredTypes = job.required_documents.map(doc => doc.document_type)
+          setAvailableDocumentTypes(requiredTypes)
+          setSelectedDocumentType(requiredTypes[0] || DOCUMENT_TYPES[0])
+        } else {
+          // No specific requirements, show all
+          setRequiredDocuments([])
+          setAvailableDocumentTypes(DOCUMENT_TYPES)
+          setSelectedDocumentType(DOCUMENT_TYPES[0])
+        }
+      } catch (error) {
+        console.error('Error fetching job requirements:', error)
+        // Fallback to all document types
+        setAvailableDocumentTypes(DOCUMENT_TYPES)
+        setSelectedDocumentType(DOCUMENT_TYPES[0])
+      }
+    }
+
+    fetchJobRequirements()
+  }, [jobId])
 
   const handleFileSelect = async (e) => {
     const files = e.target.files
@@ -146,7 +208,7 @@ const DocumentsForm = () => {
               applicant_id: applicantId,
               file_path: filePath,
               file_name: file.name,
-              file_type: 'Document',
+              file_type: selectedDocumentType,
               file_size: file.size,
               mime_type: file.type
             })
@@ -166,6 +228,7 @@ const DocumentsForm = () => {
             path: filePath,
             size: file.size,
             type: file.type,
+            file_type: selectedDocumentType,
             uploaded_at: new Date().toISOString()
           })
         } catch (error) {
@@ -344,6 +407,54 @@ const DocumentsForm = () => {
           </div>
 
           <form onSubmit={handleNext} className="flex flex-col gap-8">
+            {/* Document Type Selector */}
+            <div className="bg-surface-light dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-[#2563eb]">
+              <label className="block text-slate-900 dark:text-white text-sm font-bold mb-3">
+                <span className="material-symbols-outlined text-primary align-middle mr-2">category</span>
+                Document Type
+                {requiredDocuments.length > 0 && (
+                  <span className="text-xs font-normal text-slate-600 dark:text-[#93c5fd] ml-2">
+                    (Required for this position)
+                  </span>
+                )}
+              </label>
+              <select
+                value={selectedDocumentType}
+                onChange={(e) => setSelectedDocumentType(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-[#2563eb] text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                disabled={uploading}
+              >
+                {availableDocumentTypes.map((type) => {
+                  const docReq = requiredDocuments.find(doc => doc.document_type === type)
+                  const percentage = docReq?.percentage || 0
+                  return (
+                    <option key={type} value={type} className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white">
+                      {type}{percentage > 0 ? ` (${percentage}%)` : ''}
+                    </option>
+                  )
+                })}
+              </select>
+              <p className="text-slate-600 dark:text-[#93c5fd] text-xs mt-2">
+                {requiredDocuments.length > 0 
+                  ? `Select the type of document you're uploading. This position requires ${requiredDocuments.length} document type${requiredDocuments.length !== 1 ? 's' : ''}.`
+                  : "Select the type of document you're uploading. All files uploaded will be tagged with this type."
+                }
+              </p>
+              {requiredDocuments.length > 0 && (
+                <div className="mt-3 p-3 bg-gray-50 dark:bg-[#0f172a] rounded-lg border border-gray-200 dark:border-[#2563eb]">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-white mb-2">Required Documents for this Position:</p>
+                  <div className="space-y-1">
+                    {requiredDocuments.map((doc) => (
+                      <div key={doc.document_type} className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 dark:text-[#93c5fd]">{doc.document_type}</span>
+                        <span className="text-primary font-bold">{doc.percentage}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Document Upload Area */}
             <div className="bg-surface-light dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-[#2563eb]">
               <h3 className="text-slate-900 dark:text-white text-xl font-bold mb-4 flex items-center gap-2">
@@ -410,7 +521,12 @@ const DocumentsForm = () => {
                     <div key={file.id || index} className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-[#1e293b] rounded-lg text-sm text-slate-700 dark:text-gray-300">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <span className="material-symbols-outlined text-primary flex-shrink-0">description</span>
-                        <span className="truncate">{file.name}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="truncate block">{file.name}</span>
+                          {file.file_type && (
+                            <span className="text-xs text-primary dark:text-[#60a5fa] font-semibold block mt-1">{file.file_type}</span>
+                          )}
+                        </div>
                         <span className="text-xs text-slate-500 flex-shrink-0">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
                         <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full flex-shrink-0">
                           Uploaded

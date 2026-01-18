@@ -2,6 +2,23 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
+// Document types that can be required for jobs
+const DOCUMENT_TYPES = [
+  'BIO-DATA',
+  'PHOTOCOPY OF SECURITY LICENSE / SBR',
+  'BARANGAY CLEARANCE',
+  'POLICE CLEARANCE',
+  'NBI CLEARANCE',
+  'EMPLOYMENT CERTIFICATE',
+  'DRUG TEST',
+  'NEURO-PSYCHIATRIC TEST / MEDICAL EXAMINATION',
+  'RE-TRAINING CERTIFICATE / GUN',
+  'BIRTH CERTIFICATE',
+  'EDUCATIONAL DIPLOMA\'S / TRANSCRIPT OF RECORD',
+  'OTHER GKE, OPENING AND CLOSING REPORT',
+  'VACCINATION CARD'
+]
+
 const JobsManagement = () => {
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -24,7 +41,8 @@ const JobsManagement = () => {
     requirements: '',
     salary_range: '',
     status: 'active',
-    required_credentials: []
+    required_credentials: [],
+    required_documents: []
   })
 
   const licenseOptions = [
@@ -186,12 +204,13 @@ const JobsManagement = () => {
         title: job.title || '',
         location: job.location || '',
         department: job.department || '',
-        employment_type: job.employment_type || 'Full-time',
+        employment_type: job.type || job.employment_type || 'Full-time', // Map type to employment_type
         description: job.description || '',
         requirements: job.requirements || '',
-        salary_range: job.salary_range || '',
+        salary_range: job.salary || job.salary_range || '', // Map salary to salary_range
         status: job.status || 'active',
-        required_credentials: Array.isArray(job.required_credentials) ? job.required_credentials : []
+        required_credentials: Array.isArray(job.required_credentials) ? job.required_credentials : [],
+        required_documents: Array.isArray(job.required_documents) ? job.required_documents : []
       })
     } else {
       setEditingJob(null)
@@ -204,7 +223,8 @@ const JobsManagement = () => {
         requirements: '',
         salary_range: '',
         status: 'active',
-        required_credentials: []
+        required_credentials: [],
+        required_documents: []
       })
     }
     setShowJobForm(true)
@@ -222,7 +242,8 @@ const JobsManagement = () => {
       requirements: '',
       salary_range: '',
       status: 'active',
-      required_credentials: []
+      required_credentials: [],
+      required_documents: []
     })
   }
 
@@ -240,6 +261,41 @@ const JobsManagement = () => {
     }))
   }
 
+  const handleDocumentToggle = (documentType) => {
+    setFormData(prev => {
+      const existing = prev.required_documents.find(doc => doc.document_type === documentType)
+      if (existing) {
+        // Remove if already exists
+        return {
+          ...prev,
+          required_documents: prev.required_documents.filter(doc => doc.document_type !== documentType)
+        }
+      } else {
+        // Add with default 0 percentage
+        return {
+          ...prev,
+          required_documents: [...prev.required_documents, { document_type: documentType, percentage: 0 }]
+        }
+      }
+    })
+  }
+
+  const handleDocumentPercentageChange = (documentType, percentage) => {
+    const numValue = parseFloat(percentage) || 0
+    setFormData(prev => ({
+      ...prev,
+      required_documents: prev.required_documents.map(doc =>
+        doc.document_type === documentType
+          ? { ...doc, percentage: Math.max(0, Math.min(100, numValue)) }
+          : doc
+      )
+    }))
+  }
+
+  const getTotalPercentage = () => {
+    return formData.required_documents.reduce((sum, doc) => sum + (parseFloat(doc.percentage) || 0), 0)
+  }
+
   const handleSubmitJob = async (e) => {
     e.preventDefault()
 
@@ -249,22 +305,42 @@ const JobsManagement = () => {
     }
 
     try {
+      // Prepare data for submission - map form fields to database columns
+      const submitData = {
+        title: formData.title,
+        location: formData.location || null,
+        salary: formData.salary_range || null, // Map salary_range to salary
+        type: formData.employment_type || null, // Map employment_type to type
+        department: formData.department || null,
+        description: formData.description || null,
+        requirements: formData.requirements || null,
+        status: formData.status || 'active',
+        required_credentials: Array.isArray(formData.required_credentials) ? formData.required_credentials : [],
+        required_documents: Array.isArray(formData.required_documents) ? formData.required_documents : []
+      }
+
       if (editingJob) {
         // Update existing job
         const { error } = await supabase
           .from('jobs')
-          .update(formData)
+          .update(submitData)
           .eq('id', editingJob.id)
 
-        if (error) throw error
+        if (error) {
+          console.error('Update error:', error)
+          throw error
+        }
         alert('Job updated successfully!')
       } else {
         // Create new job
         const { error } = await supabase
           .from('jobs')
-          .insert([formData])
+          .insert([submitData])
 
-        if (error) throw error
+        if (error) {
+          console.error('Insert error:', error)
+          throw error
+        }
         alert('Job posted successfully!')
       }
 
@@ -273,7 +349,8 @@ const JobsManagement = () => {
       fetchStats()
     } catch (error) {
       console.error('Error saving job:', error)
-      alert('Failed to save job posting')
+      const errorMessage = error?.message || 'Unknown error occurred'
+      alert(`Failed to save job posting: ${errorMessage}`)
     }
   }
 
@@ -495,7 +572,7 @@ const JobsManagement = () => {
                         title={job.status === 'active' ? 'Close job' : 'Activate job'}
                       >
                         <span className="material-symbols-outlined text-[18px]">
-                          {job.status === 'active' ? 'pause' : 'play_arrow'}
+                          {job.status === 'active' ? 'close' : 'play_arrow'}
                         </span>
                       </button>
                       <button
@@ -687,6 +764,86 @@ const JobsManagement = () => {
                   {formData.required_credentials.length > 0 && (
                     <p className="mt-2 text-xs text-gray-600">
                       {formData.required_credentials.length} credential{formData.required_credentials.length !== 1 ? 's' : ''} selected
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Required Documents (201 File Checklist)
+                    <span className="text-xs font-normal text-gray-500 ml-2">(Select documents and set percentage value for each)</span>
+                  </label>
+                  <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    {DOCUMENT_TYPES.map((docType) => {
+                      const isSelected = formData.required_documents.some(doc => doc.document_type === docType)
+                      const docData = formData.required_documents.find(doc => doc.document_type === docType)
+                      const percentage = docData?.percentage || 0
+                      
+                      return (
+                        <div
+                          key={docType}
+                          className={`flex items-center gap-3 p-3 rounded-md border transition-all ${
+                            isSelected
+                              ? 'border-primary bg-blue-50'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleDocumentToggle(docType)}
+                            className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2 flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900">{docType}</div>
+                          </div>
+                          {isSelected && (
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.1"
+                                value={percentage}
+                                onChange={(e) => handleDocumentPercentageChange(docType, e.target.value)}
+                                className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                placeholder="0"
+                              />
+                              <span className="text-sm text-gray-600">%</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {formData.required_documents.length > 0 && (
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">
+                          Total Percentage: <span className={`font-bold ${getTotalPercentage() === 100 ? 'text-green-600' : getTotalPercentage() > 100 ? 'text-red-600' : 'text-blue-600'}`}>
+                            {getTotalPercentage().toFixed(1)}%
+                          </span>
+                        </span>
+                        {getTotalPercentage() !== 100 && (
+                          <span className="text-xs text-gray-500">
+                            {getTotalPercentage() < 100 
+                              ? `Add ${(100 - getTotalPercentage()).toFixed(1)}% more`
+                              : `Reduce by ${(getTotalPercentage() - 100).toFixed(1)}%`
+                            }
+                          </span>
+                        )}
+                      </div>
+                      {getTotalPercentage() === 100 && (
+                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">check_circle</span>
+                          Perfect! Total equals 100%
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {formData.required_documents.length > 0 && (
+                    <p className="mt-2 text-xs text-gray-600">
+                      {formData.required_documents.length} document{formData.required_documents.length !== 1 ? 's' : ''} selected
                     </p>
                   )}
                 </div>

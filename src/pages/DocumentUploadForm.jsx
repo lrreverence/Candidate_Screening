@@ -3,14 +3,76 @@ import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
+// Document types that applicants can upload
+const DOCUMENT_TYPES = [
+  'BIO-DATA',
+  'PHOTOCOPY OF SECURITY LICENSE / SBR',
+  'BARANGAY CLEARANCE',
+  'POLICE CLEARANCE',
+  'NBI CLEARANCE',
+  'EMPLOYMENT CERTIFICATE',
+  'DRUG TEST',
+  'NEURO-PSYCHIATRIC TEST / MEDICAL EXAMINATION',
+  'RE-TRAINING CERTIFICATE / GUN',
+  'BIRTH CERTIFICATE',
+  'EDUCATIONAL DIPLOMA\'S / TRANSCRIPT OF RECORD',
+  'OTHER GKE, OPENING AND CLOSING REPORT',
+  'VACCINATION CARD'
+]
+
 const DocumentUploadForm = () => {
   const navigate = useNavigate()
   const { jobId } = useParams()
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [selectedDocumentType, setSelectedDocumentType] = useState('')
+  const [requiredDocuments, setRequiredDocuments] = useState([])
+  const [availableDocumentTypes, setAvailableDocumentTypes] = useState(DOCUMENT_TYPES)
   
   const [documents, setDocuments] = useState([])
+
+  // Fetch job requirements
+  useEffect(() => {
+    const fetchJobRequirements = async () => {
+      if (!jobId) {
+        // If no jobId, show all document types
+        setAvailableDocumentTypes(DOCUMENT_TYPES)
+        setSelectedDocumentType(DOCUMENT_TYPES[0])
+        return
+      }
+
+      try {
+        const { data: job, error } = await supabase
+          .from('jobs')
+          .select('required_documents')
+          .eq('id', jobId)
+          .single()
+
+        if (error) throw error
+
+        if (job?.required_documents && Array.isArray(job.required_documents) && job.required_documents.length > 0) {
+          // Job has specific requirements
+          setRequiredDocuments(job.required_documents)
+          const requiredTypes = job.required_documents.map(doc => doc.document_type)
+          setAvailableDocumentTypes(requiredTypes)
+          setSelectedDocumentType(requiredTypes[0] || DOCUMENT_TYPES[0])
+        } else {
+          // No specific requirements, show all
+          setRequiredDocuments([])
+          setAvailableDocumentTypes(DOCUMENT_TYPES)
+          setSelectedDocumentType(DOCUMENT_TYPES[0])
+        }
+      } catch (error) {
+        console.error('Error fetching job requirements:', error)
+        // Fallback to all document types
+        setAvailableDocumentTypes(DOCUMENT_TYPES)
+        setSelectedDocumentType(DOCUMENT_TYPES[0])
+      }
+    }
+
+    fetchJobRequirements()
+  }, [jobId])
 
   // Load existing documents from localStorage (if any were uploaded previously in this session)
   useEffect(() => {
@@ -96,7 +158,7 @@ const DocumentUploadForm = () => {
           name: file.name,
           size: file.size,
           type: file.type,
-          file_type: 'Document', // Generic type for multiple PDFs
+          file_type: selectedDocumentType, // Use selected document type
           uploaded_at: new Date().toISOString()
         }
 
@@ -325,6 +387,54 @@ const DocumentUploadForm = () => {
 
           {/* Upload Area */}
           <form onSubmit={handleNext} className="flex flex-col gap-6">
+            {/* Document Type Selector */}
+            <div className="rounded-xl bg-[#1e293b] p-6 border border-[#2563eb]">
+              <label className="block text-white text-sm font-bold mb-3">
+                <span className="material-symbols-outlined text-primary align-middle mr-2">category</span>
+                Document Type
+                {requiredDocuments.length > 0 && (
+                  <span className="text-xs font-normal text-[#93c5fd] ml-2">
+                    (Required for this position)
+                  </span>
+                )}
+              </label>
+              <select
+                value={selectedDocumentType}
+                onChange={(e) => setSelectedDocumentType(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg bg-[#0f172a] border border-[#2563eb] text-white font-medium focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                disabled={uploading}
+              >
+                {availableDocumentTypes.map((type) => {
+                  const docReq = requiredDocuments.find(doc => doc.document_type === type)
+                  const percentage = docReq?.percentage || 0
+                  return (
+                    <option key={type} value={type} className="bg-[#0f172a] text-white">
+                      {type}{percentage > 0 ? ` (${percentage}%)` : ''}
+                    </option>
+                  )
+                })}
+              </select>
+              <p className="text-[#93c5fd] text-xs mt-2">
+                {requiredDocuments.length > 0 
+                  ? `Select the type of document you're uploading. This position requires ${requiredDocuments.length} document type${requiredDocuments.length !== 1 ? 's' : ''}.`
+                  : 'Select the type of document you're uploading. All files uploaded will be tagged with this type.'
+                }
+              </p>
+              {requiredDocuments.length > 0 && (
+                <div className="mt-3 p-3 bg-[#0f172a] rounded-lg border border-[#2563eb]">
+                  <p className="text-xs font-semibold text-white mb-2">Required Documents for this Position:</p>
+                  <div className="space-y-1">
+                    {requiredDocuments.map((doc) => (
+                      <div key={doc.document_type} className="flex items-center justify-between text-xs">
+                        <span className="text-[#93c5fd]">{doc.document_type}</span>
+                        <span className="text-primary font-bold">{doc.percentage}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Drag and Drop Upload Area */}
             <div
               className="rounded-xl border-2 border-dashed border-[#2563eb] bg-[#1e293b] p-8 hover:border-primary hover:bg-[#1e293b]/80 transition-all cursor-pointer relative"
@@ -374,6 +484,9 @@ const DocumentUploadForm = () => {
                         <div className="flex-1 min-w-0">
                           <p className="text-white font-medium truncate">{doc.name}</p>
                           <p className="text-[#93c5fd] text-xs">{formatFileSize(doc.size)}</p>
+                          {doc.file_type && (
+                            <p className="text-[#60a5fa] text-xs mt-1 font-semibold">{doc.file_type}</p>
+                          )}
                         </div>
                       </div>
                       <button
@@ -397,7 +510,7 @@ const DocumentUploadForm = () => {
             <div className="rounded-xl bg-[#1e293b] p-4 flex items-start gap-3 border border-[#2563eb]">
               <span className="material-symbols-outlined text-[#93c5fd] mt-0.5">info</span>
               <p className="text-sm text-[#93c5fd] leading-relaxed">
-                <strong>Note:</strong> You can upload multiple PDF files at once. Accepted documents include Resume, NBI Clearance, Birth Certificate, Government IDs (SSS, PhilHealth, Pag-IBIG), and other supporting documents. Each file must be a PDF and under 10MB.
+                <strong>Note:</strong> You can upload multiple PDF files at once. Please select the document type before uploading. All files uploaded will be tagged with the selected document type. Each file must be a PDF and under 10MB.
               </p>
             </div>
 
