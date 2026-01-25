@@ -325,9 +325,9 @@ const ApplicationForm = () => {
 
       console.log('[FORM] Success! Applicant ID:', result.applicantId)
 
-      // Navigate to step 2 (Documents)
-      console.log('[FORM] Navigating to documents page...')
-      navigate(`/apply/${jobId || ''}/documents`)
+      // Navigate to step 2 (ID Picture Upload)
+      console.log('[FORM] Navigating to ID picture upload page...')
+      navigate(`/apply/${jobId || ''}/id-picture`)
     } catch (error) {
       console.error('[FORM] Error saving application:', error)
       const errorMessage = error?.message || 'Unknown error occurred'
@@ -357,7 +357,7 @@ const ApplicationForm = () => {
           </p>
         </div>
 
-        <ApplicationProgress currentStep={1} totalSteps={3} />
+        <ApplicationProgress currentStep={1} totalSteps={4} />
 
         {/* Main Form Card */}
         <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 md:p-10 border border-gray-200 dark:border-white/5 shadow-xl">

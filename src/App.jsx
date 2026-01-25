@@ -2,6 +2,7 @@ import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import ApplicationForm from './pages/ApplicationForm'
+import IdPictureUpload from './pages/IdPictureUpload'
 import DocumentsForm from './pages/DocumentsForm'
 import ApplicationSuccess from './pages/ApplicationSuccess'
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -32,6 +33,14 @@ const App = () => {
         element={
           <ProtectedRoute>
             <ApplicationForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/apply/:jobId/id-picture"
+        element={
+          <ProtectedRoute>
+            <IdPictureUpload />
           </ProtectedRoute>
         }
       />

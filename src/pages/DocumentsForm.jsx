@@ -289,8 +289,8 @@ const DocumentsForm = () => {
     e.preventDefault()
 
     if (uploadedFiles.length === 0) {
-      const proceed = confirm('No documents uploaded. Do you want to continue without uploading documents?')
-      if (!proceed) return
+      alert('Please upload at least one document before proceeding.')
+      return
     }
 
     setLoading(true)
@@ -325,7 +325,7 @@ const DocumentsForm = () => {
         if (uuidRegex.test(jobId)) {
           const { error: appError } = await supabase
             .from('applications')
-            .update({ current_step: 3 })
+            .update({ current_step: 4 })
             .eq('applicant_id', applicant.id)
             .eq('job_id', jobId)
 
@@ -346,7 +346,7 @@ const DocumentsForm = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}`)
+    navigate(`/apply/${jobId || ''}/id-picture`)
   }
 
   return (
@@ -558,7 +558,7 @@ const DocumentsForm = () => {
               </button>
               <button
                 type="submit"
-                disabled={loading || uploading}
+                disabled={loading || uploading || uploadedFiles.length === 0}
                 className="group flex items-center gap-2 px-8 py-3 rounded-full bg-primary text-[#0f172a] font-bold shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] hover:bg-[#2563eb] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Saving...' : 'Next Step'}
