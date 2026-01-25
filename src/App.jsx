@@ -12,6 +12,7 @@ import AboutUs from './pages/AboutUs'
 import OurServices from './pages/OurServices'
 import Contact from './pages/Contact'
 import JobDetail from './pages/JobDetail'
+import ResetPassword from './pages/ResetPassword'
 import ProtectedAdminRoute from './components/ProtectedAdminRoute'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -73,6 +74,7 @@ const App = () => {
       <Route path="/about" element={<AboutUs />} />
       <Route path="/services" element={<OurServices />} />
       <Route path="/contact" element={<Contact />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
     </Routes>
   )
 }
