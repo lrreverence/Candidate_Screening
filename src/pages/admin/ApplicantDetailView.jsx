@@ -28,20 +28,23 @@ const ApplicantDetailView = () => {
     const documents = application.applicants.documents || []
     const files = documents.map(doc => {
       let fileType = 'pdf'
-      if (doc.file_type === 'IDPhoto') fileType = 'image'
+      if (doc.file_type === 'IDPhoto' || doc.file_type === '2x2_ID_PICTURE') fileType = 'image'
       
       return {
-        id: doc.file_type === 'Resume' ? 'resume' : doc.file_type === '201File' ? 'file201' : 'idPhoto',
+        id: doc.file_type === 'Resume' ? 'resume' : doc.file_type === '201File' ? 'file201' : (doc.file_type === 'IDPhoto' || doc.file_type === '2x2_ID_PICTURE') ? 'idPhoto' : 'other',
         name: doc.file_name,
         path: doc.file_path,
-        type: fileType
+        type: fileType,
+        file_type: doc.file_type // Keep original file_type for bucket selection
       }
     })
 
     const activeFileData = files.find(f => f.id === activeFile)
     if (activeFileData?.path) {
+      // Use id-pictures bucket for 2x2 ID pictures, resumes bucket for others
+      const bucket = activeFileData.file_type === '2x2_ID_PICTURE' ? 'id-pictures' : 'resumes'
       supabase.storage
-        .from('resumes')
+        .from(bucket)
         .createSignedUrl(activeFileData.path, 3600)
         .then(({ data }) => {
           if (data?.signedUrl) {
@@ -65,8 +68,7 @@ const ApplicantDetailView = () => {
         .select(`
           *,
           applicants:applicant_id (
-            *,
-            documents (*)
+            *
           ),
           jobs:job_id (
             title,
@@ -81,16 +83,51 @@ const ApplicantDetailView = () => {
 
       if (appError) throw appError
 
+      // Fetch documents for this specific application
+      // Include documents with application_id matching this application
+      // OR documents without application_id (backwards compatibility) that belong to this applicant
+      const { data: documents, error: docsError } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('applicant_id', appData.applicant_id)
+        .or(`application_id.eq.${id},application_id.is.null`)
+        .order('created_at', { ascending: false })
+
+      if (docsError) {
+        console.error('Error fetching documents:', docsError)
+      }
+
+      // Filter: If documents have application_id, only show ones matching this application
+      // If application_id is null, show them (backwards compatibility)
+      // For null application_id, only show documents created after this application was created
+      const applicationCreatedAt = new Date(appData.created_at)
+      const filteredDocuments = (documents || []).filter(doc => {
+        if (doc.application_id === id) {
+          return true // Exact match
+        }
+        if (doc.application_id === null) {
+          // Backwards compatibility: show if created after application
+          const docCreatedAt = new Date(doc.created_at)
+          return docCreatedAt >= applicationCreatedAt
+        }
+        return false
+      })
+
+      // Attach documents to applicant data
+      if (appData.applicants) {
+        appData.applicants.documents = filteredDocuments
+      }
+
       setApplication(appData)
       setJob(appData.jobs)
 
       // Set active file based on available documents
-      const documents = appData.applicants?.documents || []
-      if (documents.find(d => d.file_type === 'Resume')) {
+      const docList = documents || []
+      if (docList.find(d => d.file_type === 'Resume')) {
         setActiveFile('resume')
-      } else if (documents.find(d => d.file_type === '201File')) {
+      } else if (docList.find(d => d.file_type === '201File')) {
         setActiveFile('file201')
-      } else if (documents.find(d => d.file_type === 'IDPhoto')) {
+      } else if (docList.find(d => d.file_type === 'IDPhoto' || d.file_type === '2x2_ID_PICTURE')) {
         setActiveFile('idPhoto')
       }
     } catch (error) {
@@ -327,13 +364,14 @@ const ApplicantDetailView = () => {
   
   const files = documents.map(doc => {
     let fileType = 'pdf'
-    if (doc.file_type === 'IDPhoto') fileType = 'image'
+    if (doc.file_type === 'IDPhoto' || doc.file_type === '2x2_ID_PICTURE') fileType = 'image'
     
     return {
-      id: doc.file_type === 'Resume' ? 'resume' : doc.file_type === '201File' ? 'file201' : 'idPhoto',
+      id: doc.file_type === 'Resume' ? 'resume' : doc.file_type === '201File' ? 'file201' : (doc.file_type === 'IDPhoto' || doc.file_type === '2x2_ID_PICTURE') ? 'idPhoto' : 'other',
       name: doc.file_name,
       path: doc.file_path,
-      type: fileType
+      type: fileType,
+      file_type: doc.file_type // Keep original file_type for bucket selection
     }
   })
 
@@ -700,8 +738,10 @@ const ApplicantDetailView = () => {
                   onClick={async () => {
                     const file = files.find(f => f.id === activeFile)
                     if (file?.path) {
+                      // Use id-pictures bucket for 2x2 ID pictures, resumes bucket for others
+                      const bucket = file.file_type === '2x2_ID_PICTURE' ? 'id-pictures' : 'resumes'
                       const { data } = await supabase.storage
-                        .from('resumes')
+                        .from(bucket)
                         .createSignedUrl(file.path, 3600)
                       if (data?.signedUrl) {
                         window.open(data.signedUrl, '_blank')

@@ -159,6 +159,46 @@ const DocumentsForm = () => {
       const applicantId = applicant.id
       console.log('[DOCUMENTS] Found applicant ID:', applicantId)
 
+      // Get or create application for this job
+      let applicationId = null
+      if (jobId) {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (uuidRegex.test(jobId)) {
+          const { data: existingApp, error: appError } = await supabase
+            .from('applications')
+            .select('id')
+            .eq('applicant_id', applicantId)
+            .eq('job_id', jobId)
+            .maybeSingle()
+
+          if (appError) {
+            console.error('[DOCUMENTS] Error finding application:', appError)
+          } else if (existingApp) {
+            applicationId = existingApp.id
+            console.log('[DOCUMENTS] Found application ID:', applicationId)
+          } else {
+            // Create application if it doesn't exist
+            const { data: newApp, error: createError } = await supabase
+              .from('applications')
+              .insert({
+                applicant_id: applicantId,
+                job_id: jobId,
+                status: 'Pending',
+                current_step: 3
+              })
+              .select('id')
+              .single()
+
+            if (createError) {
+              console.error('[DOCUMENTS] Error creating application:', createError)
+            } else if (newApp) {
+              applicationId = newApp.id
+              console.log('[DOCUMENTS] Created application ID:', applicationId)
+            }
+          }
+        }
+      }
+
       // Step 2: Upload each file
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
@@ -206,6 +246,7 @@ const DocumentsForm = () => {
             .from('documents')
             .insert({
               applicant_id: applicantId,
+              application_id: applicationId,
               file_path: filePath,
               file_name: file.name,
               file_type: selectedDocumentType,

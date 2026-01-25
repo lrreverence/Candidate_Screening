@@ -16,7 +16,7 @@ const IdPictureUpload = () => {
   const [uploadedFile, setUploadedFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
 
-  // Load existing ID picture if available
+  // Load existing ID picture if available for this specific application
   useEffect(() => {
     const loadExistingPicture = async () => {
       if (!user?.id) return
@@ -31,12 +31,37 @@ const IdPictureUpload = () => {
 
         if (!applicant) return
 
-        // Check if ID picture document exists
-        const { data: documents } = await supabase
+        // Get or find application for this job
+        let applicationId = null
+        if (jobId) {
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          if (uuidRegex.test(jobId)) {
+            const { data: existingApp } = await supabase
+              .from('applications')
+              .select('id')
+              .eq('applicant_id', applicant.id)
+              .eq('job_id', jobId)
+              .maybeSingle()
+
+            if (existingApp) {
+              applicationId = existingApp.id
+            }
+          }
+        }
+
+        // Check if ID picture document exists for this application
+        let query = supabase
           .from('documents')
           .select('*')
           .eq('applicant_id', applicant.id)
           .eq('file_type', '2x2_ID_PICTURE')
+
+        // Filter by application_id if available
+        if (applicationId) {
+          query = query.eq('application_id', applicationId)
+        }
+
+        const { data: documents } = await query
           .order('created_at', { ascending: false })
           .limit(1)
 
@@ -44,7 +69,7 @@ const IdPictureUpload = () => {
           const doc = documents[0]
           // Get signed URL for preview
           const { data: signedUrlData } = await supabase.storage
-            .from('resumes')
+            .from('id-pictures')
             .createSignedUrl(doc.file_path, 3600)
 
           if (signedUrlData?.signedUrl) {
@@ -66,6 +91,65 @@ const IdPictureUpload = () => {
     loadExistingPicture()
   }, [user?.id])
 
+  // Convert image to JPEG format for compatibility with storage bucket
+  const convertImageToJpeg = (file) => {
+    return new Promise((resolve, reject) => {
+      // Normalize JPEG MIME type - ensure it's exactly 'image/jpeg'
+      const normalizeJpegFile = (originalFile) => {
+        if (originalFile.type === 'image/jpeg') {
+          return originalFile
+        }
+        // If it's image/jpg, create a new file with image/jpeg MIME type
+        if (originalFile.type === 'image/jpg') {
+          return new File([originalFile], originalFile.name.replace(/\.jpg$/i, '.jpg'), {
+            type: 'image/jpeg',
+            lastModified: originalFile.lastModified
+          })
+        }
+        return originalFile
+      }
+
+      // If already JPEG, normalize and return
+      if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
+        const normalized = normalizeJpegFile(file)
+        console.log('[ID_PICTURE] Original MIME type:', file.type, 'Normalized to:', normalized.type)
+        resolve(normalized)
+        return
+      }
+
+      // Convert PNG/WebP to JPEG
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.width
+          canvas.height = img.height
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0)
+          
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error('Failed to convert image'))
+              return
+            }
+            // Create a new File object with normalized JPEG MIME type
+            const jpegFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            })
+            console.log('[ID_PICTURE] Converted file MIME type:', jpegFile.type)
+            resolve(jpegFile)
+          }, 'image/jpeg', 0.92) // 92% quality
+        }
+        img.onerror = () => reject(new Error('Failed to load image'))
+        img.src = e.target.result
+      }
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsDataURL(file)
+    })
+  }
+
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -84,15 +168,21 @@ const IdPictureUpload = () => {
       return
     }
 
-    // Create preview
+    // Create preview from original file
     const reader = new FileReader()
     reader.onloadend = () => {
       setPreviewUrl(reader.result)
     }
     reader.readAsDataURL(file)
 
-    // Upload file
-    await uploadFile(file)
+    // Convert to JPEG if needed and upload
+    try {
+      const fileToUpload = await convertImageToJpeg(file)
+      await uploadFile(fileToUpload)
+    } catch (error) {
+      console.error('Error converting image:', error)
+      alert('Failed to process image. Please try again.')
+    }
   }
 
   const uploadFile = async (file) => {
@@ -120,10 +210,81 @@ const IdPictureUpload = () => {
 
       const applicantId = applicant.id
 
-      // Remove existing ID picture if any
+      // Get or create application for this job
+      let applicationId = null
+      if (jobId) {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (uuidRegex.test(jobId)) {
+          const { data: existingApp, error: appError } = await supabase
+            .from('applications')
+            .select('id')
+            .eq('applicant_id', applicantId)
+            .eq('job_id', jobId)
+            .maybeSingle()
+
+          if (appError) {
+            console.error('[ID_PICTURE] Error finding application:', appError)
+          } else if (existingApp) {
+            applicationId = existingApp.id
+            console.log('[ID_PICTURE] Found application ID:', applicationId)
+          } else {
+            // Create application if it doesn't exist
+            const { data: newApp, error: createError } = await supabase
+              .from('applications')
+              .insert({
+                applicant_id: applicantId,
+                job_id: jobId,
+                status: 'Pending',
+                current_step: 2
+              })
+              .select('id')
+              .single()
+
+            if (createError) {
+              console.error('[ID_PICTURE] Error creating application:', createError)
+            } else if (newApp) {
+              applicationId = newApp.id
+              console.log('[ID_PICTURE] Created application ID:', applicationId)
+            }
+          }
+        }
+      }
+
+      // Remove existing ID picture if any (only for this application)
+      if (uploadedFile?.path && applicationId) {
+        // Only remove if it belongs to this application
+        const { data: existingDoc } = await supabase
+          .from('documents')
+          .select('application_id')
+          .eq('id', uploadedFile.id)
+          .maybeSingle()
+
+        if (existingDoc?.application_id === applicationId) {
+          await supabase.storage
+            .from('id-pictures')
+            .remove([uploadedFile.path])
+
+          await supabase
+            .from('documents')
+            .delete()
+            .eq('id', uploadedFile.id)
+        }
+      } else if (uploadedFile?.path && !applicationId) {
+        // Fallback: remove if no application context
+        await supabase.storage
+          .from('id-pictures')
+          .remove([uploadedFile.path])
+
+        if (uploadedFile?.id) {
+          await supabase
+            .from('documents')
+            .delete()
+            .eq('id', uploadedFile.id)
+        }
+      }
       if (uploadedFile?.path) {
         await supabase.storage
-          .from('resumes')
+          .from('id-pictures')
           .remove([uploadedFile.path])
       }
 
@@ -139,10 +300,29 @@ const IdPictureUpload = () => {
       const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
       const filePath = `${user.id}/id_picture_${timestamp}_${sanitizedName}`
 
+      // Log file details for debugging
+      console.log('[ID_PICTURE] Uploading file:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        path: filePath
+      })
+
+      // Ensure file has correct MIME type - create new File if needed
+      let fileToUpload = file
+      if (file.type !== 'image/jpeg' && file.type !== 'image/jpg') {
+        // Create a new File with explicit image/jpeg type
+        fileToUpload = new File([file], file.name.replace(/\.[^/.]+$/, '.jpg'), {
+          type: 'image/jpeg',
+          lastModified: file.lastModified || Date.now()
+        })
+        console.log('[ID_PICTURE] Normalized MIME type from', file.type, 'to', fileToUpload.type)
+      }
+
       // Upload to storage
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('resumes')
-        .upload(filePath, file, {
+        .from('id-pictures')
+        .upload(filePath, fileToUpload, {
           cacheControl: '3600',
           upsert: false
         })
@@ -156,6 +336,7 @@ const IdPictureUpload = () => {
         .from('documents')
         .insert({
           applicant_id: applicantId,
+          application_id: applicationId,
           file_path: filePath,
           file_name: file.name,
           file_type: '2x2_ID_PICTURE',
@@ -194,7 +375,7 @@ const IdPictureUpload = () => {
     try {
       if (uploadedFile?.path) {
         await supabase.storage
-          .from('resumes')
+          .from('id-pictures')
           .remove([uploadedFile.path])
       }
 
