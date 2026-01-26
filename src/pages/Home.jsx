@@ -4,6 +4,7 @@ import { useSupabase } from '../contexts/SupabaseContext'
 import { useAuth } from '../contexts/AuthContext'
 import LoginModal from '../components/LoginModal'
 import SignupModal from '../components/SignupModal'
+import { getJobImageUrl } from '../lib/storageUpload'
 
 const Home = () => {
   const navigate = useNavigate()
@@ -96,6 +97,34 @@ const Home = () => {
     checkApplications()
   }, [user?.id, supabaseJobs])
 
+  const [jobImageUrls, setJobImageUrls] = useState({})
+
+  // Load image URLs for jobs
+  useEffect(() => {
+    const loadJobImages = async () => {
+      if (!supabaseJobs || supabaseJobs.length === 0) return
+
+      const imageUrlMap = {}
+      
+      for (const job of supabaseJobs) {
+        if (job.image) {
+          try {
+            const url = await getJobImageUrl(job.image)
+            if (url) {
+              imageUrlMap[job.id] = url
+            }
+          } catch (error) {
+            console.error(`Error loading image for job ${job.id}:`, error)
+          }
+        }
+      }
+
+      setJobImageUrls(imageUrlMap)
+    }
+
+    loadJobImages()
+  }, [supabaseJobs])
+
   // Use only Supabase jobs - no fallback
   const allJobs = useMemo(() => {
     if (supabaseJobs && supabaseJobs.length > 0) {
@@ -106,7 +135,7 @@ const Home = () => {
         salary: job.salary,
         type: job.type,
         shift: job.shift,
-        image: job.image,
+        image: jobImageUrls[job.id] || job.image || null, // Use signed URL if available, fallback to original
         badge: job.badge_text ? {
           text: job.badge_text,
           icon: job.badge_icon,
@@ -118,7 +147,7 @@ const Home = () => {
     
     // Return empty array if no jobs - don't use fallback
     return []
-  }, [supabaseJobs, supabaseLoading])
+  }, [supabaseJobs, supabaseLoading, jobImageUrls])
 
   // Filter jobs based on category and search query
   const filteredJobs = useMemo(() => {
@@ -374,8 +403,8 @@ const Home = () => {
                     className="group relative flex flex-col bg-card-dark border border-[#1e40af] rounded-2xl overflow-hidden hover:border-primary/50 hover:shadow-[0_0_20px_rgba(59,130,246,0.1)] transition-all duration-300"
                   >
                     <div 
-                      className="h-40 w-full bg-cover bg-center relative"
-                      style={{ backgroundImage: `url("${job.image}")` }}
+                      className="h-40 w-full bg-cover bg-center relative bg-gray-800"
+                      style={{ backgroundImage: job.image ? `url("${job.image}")` : 'none' }}
                     >
                       <div className="absolute inset-0 bg-gradient-to-t from-card-dark to-transparent"></div>
                       {job.badge && (

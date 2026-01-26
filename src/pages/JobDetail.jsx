@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useSupabase } from '../contexts/SupabaseContext'
 import { useAuth } from '../contexts/AuthContext'
 import LoginModal from '../components/LoginModal'
+import { getJobImageUrl } from '../lib/storageUpload'
 
 const JobDetail = () => {
   const { jobId } = useParams()
@@ -13,9 +14,10 @@ const JobDetail = () => {
   const [loading, setLoading] = useState(true)
   const [hasApplied, setHasApplied] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [jobImageUrl, setJobImageUrl] = useState(null)
 
   useEffect(() => {
-    const fetchJob = () => {
+    const fetchJob = async () => {
       setLoading(true)
       
       // Find job from Supabase using UUID (not parseInt)
@@ -23,6 +25,22 @@ const JobDetail = () => {
         const foundJob = supabaseJobs.find(j => j.id === jobId) // Direct UUID comparison
         if (foundJob) {
           console.log('[JOB_DETAIL] Found job from Supabase:', foundJob.id)
+          
+          // Load image URL if job has an image
+          let imageUrl = foundJob.image
+          if (foundJob.image) {
+            try {
+              const signedUrl = await getJobImageUrl(foundJob.image)
+              if (signedUrl) {
+                imageUrl = signedUrl
+              }
+            } catch (error) {
+              console.error('[JOB_DETAIL] Error loading job image:', error)
+            }
+          }
+          
+          setJobImageUrl(imageUrl)
+          
           setJob({
             id: foundJob.id,
             title: foundJob.title,
@@ -30,7 +48,7 @@ const JobDetail = () => {
             salary: foundJob.salary,
             type: foundJob.type,
             shift: foundJob.shift,
-            image: foundJob.image,
+            image: imageUrl,
             badge: foundJob.badge_text ? {
               text: foundJob.badge_text,
               icon: foundJob.badge_icon,
@@ -53,6 +71,7 @@ const JobDetail = () => {
       
       // Job not found - set to null
       setJob(null)
+      setJobImageUrl(null)
       setLoading(false)
     }
 
@@ -175,8 +194,8 @@ const JobDetail = () => {
       <main className="flex-grow w-full">
         {/* Hero Section with Job Image */}
         <div 
-          className="w-full h-64 md:h-80 bg-cover bg-center relative"
-          style={{ backgroundImage: `url("${job.image}")` }}
+          className="w-full h-64 md:h-80 bg-cover bg-center relative bg-gray-800"
+          style={{ backgroundImage: job.image ? `url("${job.image}")` : 'none' }}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-background-dark via-background-dark/80 to-transparent"></div>
           <div className="relative z-10 max-w-[1200px] mx-auto px-4 md:px-10 pt-8 h-full flex flex-col justify-end pb-8">

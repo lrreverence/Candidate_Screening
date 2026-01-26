@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { uploadJobImage, deleteJobImage, getJobImageUrl } from '../../lib/storageUpload'
 
 // Document types that can be required for jobs
 const DOCUMENT_TYPES = [
@@ -42,8 +43,12 @@ const JobsManagement = () => {
     salary_range: '',
     status: 'active',
     required_credentials: [],
-    required_documents: []
+    required_documents: [],
+    image: null // Store image path
   })
+  const [imageFile, setImageFile] = useState(null) // Store selected file
+  const [imagePreview, setImagePreview] = useState(null) // Store preview URL
+  const [uploadingImage, setUploadingImage] = useState(false)
 
   const licenseOptions = [
     { id: 'psa_birth_certificate', label: 'PSA Birth Certificate', subtitle: 'Philippine Statistics Authority' },
@@ -197,7 +202,7 @@ const JobsManagement = () => {
     }
   }
 
-  const handleOpenJobForm = (job = null) => {
+  const handleOpenJobForm = async (job = null) => {
     if (job) {
       setEditingJob(job)
       setFormData({
@@ -210,8 +215,17 @@ const JobsManagement = () => {
         salary_range: job.salary || job.salary_range || '', // Map salary to salary_range
         status: job.status || 'active',
         required_credentials: Array.isArray(job.required_credentials) ? job.required_credentials : [],
-        required_documents: Array.isArray(job.required_documents) ? job.required_documents : []
+        required_documents: Array.isArray(job.required_documents) ? job.required_documents : [],
+        image: job.image || null
       })
+      
+      // Load image preview if job has an image
+      if (job.image) {
+        const imageUrl = await getJobImageUrl(job.image)
+        setImagePreview(imageUrl)
+      } else {
+        setImagePreview(null)
+      }
     } else {
       setEditingJob(null)
       setFormData({
@@ -224,9 +238,12 @@ const JobsManagement = () => {
         salary_range: '',
         status: 'active',
         required_credentials: [],
-        required_documents: []
+        required_documents: [],
+        image: null
       })
+      setImagePreview(null)
     }
+    setImageFile(null)
     setShowJobForm(true)
   }
 
@@ -243,8 +260,11 @@ const JobsManagement = () => {
       salary_range: '',
       status: 'active',
       required_credentials: [],
-      required_documents: []
+      required_documents: [],
+      image: null
     })
+    setImageFile(null)
+    setImagePreview(null)
   }
 
   const handleFormChange = (e) => {
@@ -296,6 +316,43 @@ const JobsManagement = () => {
     return formData.required_documents.reduce((sum, doc) => sum + (parseFloat(doc.percentage) || 0), 0)
   }
 
+  const handleImageChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be less than 5MB')
+      return
+    }
+
+    setImageFile(file)
+
+    // Create preview
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveImage = async () => {
+    // If editing and there's an existing image, delete it from storage
+    if (editingJob && formData.image) {
+      await deleteJobImage(formData.image)
+    }
+    
+    setImageFile(null)
+    setImagePreview(null)
+    setFormData(prev => ({ ...prev, image: null }))
+  }
+
   const handleSubmitJob = async (e) => {
     e.preventDefault()
 
@@ -305,6 +362,29 @@ const JobsManagement = () => {
     }
 
     try {
+      let imagePath = formData.image
+
+      // Upload new image if one was selected
+      if (imageFile) {
+        setUploadingImage(true)
+        try {
+          // Delete old image if editing
+          if (editingJob && formData.image) {
+            await deleteJobImage(formData.image)
+          }
+
+          const uploadResult = await uploadJobImage(imageFile, editingJob?.id)
+          imagePath = uploadResult.path
+        } catch (uploadError) {
+          console.error('Error uploading image:', uploadError)
+          alert(`Failed to upload image: ${uploadError.message}`)
+          setUploadingImage(false)
+          return
+        } finally {
+          setUploadingImage(false)
+        }
+      }
+
       // Prepare data for submission - map form fields to database columns
       const submitData = {
         title: formData.title,
@@ -316,7 +396,8 @@ const JobsManagement = () => {
         requirements: formData.requirements || null,
         status: formData.status || 'active',
         required_credentials: Array.isArray(formData.required_credentials) ? formData.required_credentials : [],
-        required_documents: Array.isArray(formData.required_documents) ? formData.required_documents : []
+        required_documents: Array.isArray(formData.required_documents) ? formData.required_documents : [],
+        image: imagePath || null
       }
 
       if (editingJob) {
@@ -711,6 +792,51 @@ const JobsManagement = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Job Image
+                  </label>
+                  <div className="space-y-3">
+                    {imagePreview && (
+                      <div className="relative w-full h-48 rounded-lg border border-gray-300 overflow-hidden bg-gray-50">
+                        <img
+                          src={imagePreview}
+                          alt="Job preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleRemoveImage}
+                          className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                          title="Remove image"
+                        >
+                          <span className="material-symbols-outlined text-sm">close</span>
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <label className="flex-1 cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          className="hidden"
+                          disabled={uploadingImage}
+                        />
+                        <div className="flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-md hover:border-navy hover:bg-gray-50 transition-colors">
+                          <span className="material-symbols-outlined text-gray-400">image</span>
+                          <span className="text-sm text-gray-600">
+                            {imagePreview ? 'Change Image' : 'Upload Job Image'}
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Recommended: 1200x600px. Max size: 5MB. Supported formats: JPG, PNG, WebP
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Job Description
                   </label>
                   <textarea
@@ -854,14 +980,16 @@ const JobsManagement = () => {
                   type="button"
                   onClick={handleCloseJobForm}
                   className="px-6 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50"
+                  disabled={uploadingImage}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-navy text-white text-sm font-medium rounded-md hover:bg-navy-light"
+                  className="px-6 py-2.5 bg-navy text-white text-sm font-medium rounded-md hover:bg-navy-light disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={uploadingImage}
                 >
-                  {editingJob ? 'Update Job' : 'Post Job'}
+                  {uploadingImage ? 'Uploading Image...' : (editingJob ? 'Update Job' : 'Post Job')}
                 </button>
               </div>
             </form>
