@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { uploadJobImage, deleteJobImage, getJobImageUrl } from '../../lib/storageUpload'
+import AdminNotificationBell from '../../components/admin/AdminNotificationBell'
+import AdminHelpButton from '../../components/admin/AdminHelpButton'
 
 // Document types that can be required for jobs
 const DOCUMENT_TYPES = [
@@ -455,13 +457,8 @@ const JobsManagement = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <button className="flex size-10 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 relative">
-            <span className="material-symbols-outlined">notifications</span>
-            <span className="absolute top-2 right-2 size-2 rounded-full bg-red-500 ring-2 ring-white"></span>
-          </button>
-          <button className="flex size-10 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100">
-            <span className="material-symbols-outlined">help</span>
-          </button>
+          <AdminNotificationBell />
+          <AdminHelpButton />
         </div>
       </header>
 

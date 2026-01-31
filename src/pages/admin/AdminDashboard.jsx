@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Routes, Route, Outlet } from 'react-router-dom'
 import AdminSidebar from '../../components/admin/AdminSidebar'
+import { AdminNotificationProvider } from '../../contexts/AdminNotificationContext'
 import Dashboard from './Dashboard'
 import ApplicantsManagement from './ApplicantsManagement'
 import ApplicantDetailView from './ApplicantDetailView'
@@ -37,15 +38,17 @@ const AdminLayout = () => {
 
 const AdminDashboard = () => {
   return (
-    <Routes>
-      <Route path="applicants/:id" element={<ApplicantDetailView />} />
-      <Route element={<AdminLayout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="applicants" element={<ApplicantsManagement />} />
-        <Route path="jobs" element={<JobsManagement />} />
-        <Route path="settings" element={<Settings />} />
-      </Route>
-    </Routes>
+    <AdminNotificationProvider>
+      <Routes>
+        <Route path="applicants/:id" element={<ApplicantDetailView />} />
+        <Route element={<AdminLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="applicants" element={<ApplicantsManagement />} />
+          <Route path="jobs" element={<JobsManagement />} />
+          <Route path="settings" element={<Settings />} />
+        </Route>
+      </Routes>
+    </AdminNotificationProvider>
   )
 }
 
