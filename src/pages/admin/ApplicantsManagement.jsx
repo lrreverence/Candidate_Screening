@@ -11,8 +11,6 @@ const ApplicantsManagement = () => {
     trainingLevel: '',
     applicationStatus: ''
   })
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 5
 
   // Statistics
   const [stats, setStats] = useState({
@@ -65,10 +63,13 @@ const ApplicantsManagement = () => {
             license_type,
             license_status,
             training_level,
-            licenses
+            licenses,
+            documents (file_type, application_id)
           ),
           jobs:job_id (
-            title
+            title,
+            required_documents,
+            required_credentials
           )
         `)
         .order('created_at', { ascending: false })
@@ -118,7 +119,6 @@ const ApplicantsManagement = () => {
 
   const handleFilterChange = (filterName, value) => {
     setFilters(prev => ({ ...prev, [filterName]: value }))
-    setCurrentPage(1)
   }
 
   const handleResetFilters = () => {
@@ -128,21 +128,57 @@ const ApplicantsManagement = () => {
       applicationStatus: ''
     })
     setSearchQuery('')
-    setCurrentPage(1)
   }
 
   const handleApplyFilters = () => {
     fetchApplications()
   }
 
-  // Pagination
-  const paginatedApplications = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage
-    const end = start + itemsPerPage
-    return applications.slice(start, end)
-  }, [applications, currentPage])
+  const handleDeleteApplication = async (app) => {
+    if (!confirm(`Remove this application for ${app.applicants?.first_name} ${app.applicants?.last_name}? This cannot be undone.`)) return
+    try {
+      // Delete documents linked to this application first (avoids FK constraint)
+      const { error: docsError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('application_id', app.id)
 
-  const totalPages = Math.ceil(applications.length / itemsPerPage)
+      if (docsError) {
+        console.error('Error deleting application documents:', docsError)
+        // Continue anyway - application might have no documents or RLS may block
+      }
+
+      const { error } = await supabase
+        .from('applications')
+        .delete()
+        .eq('id', app.id)
+
+      if (error) {
+        console.error('Delete application error:', error)
+        alert(`Failed to delete application: ${error.message}. You may need an RLS policy allowing DELETE on applications.`)
+        return
+      }
+      fetchApplications()
+      fetchStats()
+    } catch (err) {
+      console.error('Error deleting application:', err)
+      alert(`Failed to delete application: ${err?.message || 'Please try again.'}`)
+    }
+  }
+
+  // Group applications by job
+  const applicationsByJob = useMemo(() => {
+    const groups = new Map()
+    for (const app of applications) {
+      const jobId = app.job_id ?? 'general'
+      const jobTitle = app.jobs?.title || 'General Application'
+      if (!groups.has(jobId)) {
+        groups.set(jobId, { jobId, jobTitle, applications: [] })
+      }
+      groups.get(jobId).applications.push(app)
+    }
+    return Array.from(groups.values())
+  }, [applications])
 
   const getStatusBadge = (status) => {
     const statusMap = {
@@ -187,6 +223,56 @@ const ApplicantsManagement = () => {
     if (!dateString) return 'N/A'
     const date = new Date(dateString)
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  // Compliance %: job required_documents + required_credentials vs applicant documents + licenses
+  const getCompliancePercentage = (app) => {
+    const applicant = app.applicants
+    const jobData = app.jobs
+    if (!applicant) return null
+    const allDocs = applicant?.documents || []
+    const documents = allDocs.filter(
+      (d) => d.application_id === app.id || d.application_id == null
+    )
+    const applicantLicenses = Array.isArray(applicant?.licenses) ? applicant.licenses : []
+    const requiredDocuments = Array.isArray(jobData?.required_documents) ? jobData.required_documents : []
+    const requiredCredentials = Array.isArray(jobData?.required_credentials) ? jobData.required_credentials : []
+
+    if (requiredDocuments.length === 0 && requiredCredentials.length === 0) return null
+
+    let documentScore = 0
+    let documentTotal = 0
+    let credentialScore = 0
+    let credentialTotal = 0
+
+    if (requiredDocuments.length > 0) {
+      requiredDocuments.forEach((reqDoc) => {
+        const percentage = parseFloat(reqDoc.percentage) || 0
+        documentTotal += percentage
+        if (documents.some((doc) => doc.file_type === reqDoc.document_type)) {
+          documentScore += percentage
+        }
+      })
+    }
+    if (requiredCredentials.length > 0) {
+      credentialTotal = requiredCredentials.length
+      credentialScore = requiredCredentials.filter((cred) => applicantLicenses.includes(cred)).length
+    }
+
+    let matchPercentage = 0
+    if (documentTotal > 0 && credentialTotal > 0) {
+      const documentMatch = (documentScore / documentTotal) * 100
+      const credentialMatch = (credentialScore / credentialTotal) * 100
+      const documentWeight = Math.min(documentTotal / 100, 1)
+      const credentialWeight = Math.max(0, 1 - documentWeight)
+      matchPercentage = documentMatch * documentWeight + credentialMatch * credentialWeight
+    } else if (documentTotal > 0) {
+      matchPercentage = (documentScore / documentTotal) * 100
+    } else if (credentialTotal > 0) {
+      matchPercentage = (credentialScore / credentialTotal) * 100
+    }
+
+    return Math.round(Math.min(100, Math.max(0, matchPercentage)))
   }
 
   return (
@@ -378,117 +464,111 @@ const ApplicantsManagement = () => {
             <div className="flex items-center justify-center py-12">
               <p className="text-gray-500">Loading applications...</p>
             </div>
+          ) : applicationsByJob.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-gray-500">No applications found</p>
+            </div>
           ) : (
-            <>
-              <div className="overflow-x-auto -mx-4 lg:mx-0">
-                <div className="inline-block min-w-full align-middle">
-                  <div className="overflow-hidden">
-                    <table className="min-w-full table-auto text-left text-sm">
-                  <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                    <tr className="border-b border-gray-200">
-                      <th className="px-6 py-4 font-semibold tracking-wider">Applicant Name</th>
-                      <th className="px-6 py-4 font-semibold tracking-wider">Position Applied</th>
-                      <th className="px-6 py-4 font-semibold tracking-wider">
-                        <div className="flex items-center gap-1 cursor-pointer hover:text-navy">
-                          Applied Date
-                          <span className="material-symbols-outlined text-base">arrow_drop_down</span>
-                        </div>
-                      </th>
-                      <th className="px-6 py-4 font-semibold tracking-wider">License Status</th>
-                      <th className="px-6 py-4 font-semibold tracking-wider">Status</th>
-                      <th className="px-6 py-4 font-semibold tracking-wider text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {paginatedApplications.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
-                          No applications found
-                        </td>
-                      </tr>
-                    ) : (
-                      paginatedApplications.map((app) => {
-                        const applicant = app.applicants
-                        return (
-                          <tr key={app.id} className="group hover:bg-blue-50/30 transition-colors">
-                            <td className="whitespace-nowrap px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="flex size-10 items-center justify-center rounded-full bg-gray-200 text-gray-600 font-bold shadow-sm">
-                                  {getInitials(applicant?.first_name, applicant?.last_name)}
-                                </div>
-                                <div>
-                                  <div className="font-medium text-navy text-base">
-                                    {applicant?.first_name} {applicant?.last_name}
-                                  </div>
-                                  <div className="text-xs text-gray-500">ID: {applicant?.reference_code || `APP-${app.id}`}</div>
-                                </div>
+            <div className="flex flex-col gap-8">
+              {applicationsByJob.map(({ jobId, jobTitle, applications: jobApplications }) => (
+                <div key={jobId} className="border-t border-gray-200 first:border-t-0 first:pt-0 pt-6 first:pt-0">
+                  <h3 className="text-base font-semibold text-navy mb-4 px-4 lg:px-6 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[22px] text-primary">work</span>
+                    {jobTitle}
+                    <span className="text-sm font-normal text-gray-500">({jobApplications.length} applicant{jobApplications.length !== 1 ? 's' : ''})</span>
+                  </h3>
+                  <div className="overflow-x-auto -mx-4 lg:mx-0">
+                    <div className="inline-block min-w-full align-middle px-4 lg:px-6">
+                      <table className="min-w-full table-auto text-left text-sm">
+                        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                          <tr className="border-b border-gray-200">
+                            <th className="px-6 py-4 font-semibold tracking-wider">Applicant Name</th>
+                            <th className="px-6 py-4 font-semibold tracking-wider">
+                              <div className="flex items-center gap-1 cursor-pointer hover:text-navy">
+                                Applied Date
+                                <span className="material-symbols-outlined text-base">arrow_drop_down</span>
                               </div>
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-gray-700">
-                              {app.jobs?.title || 'General Application'}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-gray-700">
-                              {formatDate(app.submitted_at || app.created_at)}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4">
-                              {getLicenseStatusBadge(applicant?.license_status)}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4">
-                              {getStatusBadge(app.status)}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <Link
-                                  to={`/admin/applicants/${app.id}`}
-                                  className="rounded p-1.5 text-gray-500 hover:bg-white hover:text-navy hover:shadow-sm transition-all"
-                                  title="View Profile"
-                                >
-                                  <span className="material-symbols-outlined text-[20px]">visibility</span>
-                                </Link>
-                                <button
-                                  className="rounded p-1.5 text-gray-500 hover:bg-white hover:text-primary hover:shadow-sm transition-all"
-                                  title="Edit Application"
-                                >
-                                  <span className="material-symbols-outlined text-[20px]">edit</span>
-                                </button>
-                              </div>
-                            </td>
+                            </th>
+                            <th className="px-6 py-4 font-semibold tracking-wider">License Status</th>
+                            <th className="px-6 py-4 font-semibold tracking-wider">Requirements</th>
+                            <th className="px-6 py-4 font-semibold tracking-wider">Status</th>
+                            <th className="px-6 py-4 font-semibold tracking-wider text-right">Action</th>
                           </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {jobApplications.map((app) => {
+                            const applicant = app.applicants
+                            const compliance = getCompliancePercentage(app)
+                            return (
+                              <tr key={app.id} className="group hover:bg-blue-50/30 transition-colors">
+                                <td className="whitespace-nowrap px-6 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex size-10 items-center justify-center rounded-full bg-gray-200 text-gray-600 font-bold shadow-sm">
+                                      {getInitials(applicant?.first_name, applicant?.last_name)}
+                                    </div>
+                                    <div>
+                                      <div className="font-medium text-navy text-base">
+                                        {applicant?.first_name} {applicant?.last_name}
+                                      </div>
+                                      <div className="text-xs text-gray-500">ID: {applicant?.reference_code || `APP-${app.id}`}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="whitespace-nowrap px-6 py-4 text-gray-700">
+                                  {formatDate(app.submitted_at || app.created_at)}
+                                </td>
+                                <td className="whitespace-nowrap px-6 py-4">
+                                  {getLicenseStatusBadge(applicant?.license_status)}
+                                </td>
+                                <td className="whitespace-nowrap px-6 py-4">
+                                  {compliance != null ? (
+                                    <span
+                                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                        compliance >= 100
+                                          ? 'bg-green-100 text-green-800'
+                                          : compliance >= 50
+                                            ? 'bg-amber-100 text-amber-800'
+                                            : 'bg-red-100 text-red-800'
+                                      }`}
+                                    >
+                                      {compliance}%
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs">—</span>
+                                  )}
+                                </td>
+                                <td className="whitespace-nowrap px-6 py-4">
+                                  {getStatusBadge(app.status)}
+                                </td>
+                                <td className="whitespace-nowrap px-6 py-4 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Link
+                                      to={`/admin/applicants/${app.id}`}
+                                      className="rounded p-1.5 text-gray-500 hover:bg-white hover:text-navy hover:shadow-sm transition-all"
+                                      title="View Profile"
+                                    >
+                                      <span className="material-symbols-outlined text-[20px]">visibility</span>
+                                    </Link>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteApplication(app)}
+                                      className="rounded p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all"
+                                      title="Delete Application"
+                                    >
+                                      <span className="material-symbols-outlined text-[20px]">delete</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
-              </div>
-              {/* Pagination */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 px-4 lg:px-6 py-4">
-                <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-left">
-                  Showing <span className="font-medium text-gray-900">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
-                  <span className="font-medium text-gray-900">
-                    {Math.min(currentPage * itemsPerPage, applications.length)}
-                  </span>{' '}
-                  of <span className="font-medium text-gray-900">{applications.length}</span> results
-                </div>
-                <div className="flex gap-2 w-full sm:w-auto justify-center">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex-1 sm:flex-none"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex-1 sm:flex-none"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </>
+              ))}
+            </div>
           )}
         </div>
       </div>

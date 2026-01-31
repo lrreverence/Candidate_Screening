@@ -813,20 +813,24 @@ const ApplicantDetailView = () => {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <button
-            onClick={handleReject}
-            className="px-6 py-3 rounded-lg text-red-400 font-bold text-sm border border-red-500/30 hover:bg-red-500/10 hover:border-red-500 transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(239,68,68,0.1)]"
-          >
-            <span className="material-symbols-outlined text-[20px]">close</span>
-            Reject Applicant
-          </button>
-          <button
-            onClick={handleApprove}
-            className="px-8 py-3 rounded-lg text-white bg-primary hover:bg-[#1151d3] font-bold text-sm shadow-[0_0_20px_rgba(19,91,236,0.3)] hover:shadow-[0_0_25px_rgba(19,91,236,0.5)] transition-all flex items-center gap-2 transform active:scale-[0.98]"
-          >
-            <span className="material-symbols-outlined text-[20px]">check_circle</span>
-            Approve for Interview
-          </button>
+          {!['interview', 'rejected'].includes(application?.status?.toLowerCase()) && (
+            <>
+              <button
+                onClick={handleReject}
+                className="px-6 py-3 rounded-lg text-red-400 font-bold text-sm border border-red-500/30 hover:bg-red-500/10 hover:border-red-500 transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(239,68,68,0.1)]"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+                Reject Applicant
+              </button>
+              <button
+                onClick={handleApprove}
+                className="px-8 py-3 rounded-lg text-white bg-primary hover:bg-[#1151d3] font-bold text-sm shadow-[0_0_20px_rgba(19,91,236,0.3)] hover:shadow-[0_0_25px_rgba(19,91,236,0.5)] transition-all flex items-center gap-2 transform active:scale-[0.98]"
+              >
+                <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                Approve for Interview
+              </button>
+            </>
+          )}
         </div>
       </footer>
     </div>
