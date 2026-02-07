@@ -78,22 +78,22 @@ const DocumentsForm = () => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    // Validate files - PDF only
+    // Validate files - PDF and images
     const maxSize = 10 * 1024 * 1024 // 10MB
-    const allowedType = 'application/pdf'
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
     const invalidFiles = []
     Array.from(files).forEach((file) => {
       if (file.size > maxSize) {
         invalidFiles.push(`${file.name} (exceeds 10MB)`)
       }
-      if (file.type !== allowedType) {
-        invalidFiles.push(`${file.name} (not a PDF)`)
+      if (!allowedTypes.includes(file.type)) {
+        invalidFiles.push(`${file.name} (not PDF or image)`)
       }
     })
 
     if (invalidFiles.length > 0) {
-      alert(`Invalid files:\n${invalidFiles.join('\n')}\n\nPlease upload PDF files only, max 10MB each.`)
+      alert(`Invalid files:\n${invalidFiles.join('\n')}\n\nPlease upload PDF or image files (JPEG, PNG, GIF, WebP), max 10MB each.`)
       return
     }
 
@@ -118,6 +118,18 @@ const DocumentsForm = () => {
   const uploadFiles = async (files) => {
     if (!user?.id) {
       alert('You must be logged in to upload files')
+      return
+    }
+
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    const invalidFiles = []
+    Array.from(files).forEach((file) => {
+      if (file.size > maxSize) invalidFiles.push(`${file.name} (exceeds 10MB)`)
+      else if (!allowedTypes.includes(file.type)) invalidFiles.push(`${file.name} (not PDF or image)`)
+    })
+    if (invalidFiles.length > 0) {
+      alert(`Invalid files:\n${invalidFiles.join('\n')}\n\nPlease upload PDF or image files (JPEG, PNG, GIF, WebP), max 10MB each.`)
       return
     }
 
@@ -443,7 +455,7 @@ const DocumentsForm = () => {
               Upload Documents
             </h1>
             <p className="text-slate-600 dark:text-[#93c5fd] text-base md:text-lg font-normal leading-relaxed max-w-2xl">
-              Upload your supporting documents (PDF format only, max 10MB per file). Documents are saved immediately to secure storage.
+              Upload your supporting documents (PDF or images: JPEG, PNG, GIF, WebP; max 10MB per file). Documents are saved immediately to secure storage.
             </p>
           </div>
 
@@ -537,14 +549,14 @@ const DocumentsForm = () => {
                         </span>
                         <p className="pl-1">or drag and drop</p>
                       </div>
-                      <p className="text-xs leading-5 text-slate-500 dark:text-gray-500">PDF files only, up to 10MB each</p>
+                      <p className="text-xs leading-5 text-slate-500 dark:text-gray-500">PDF or images (JPEG, PNG, GIF, WebP), up to 10MB each</p>
                     </>
                   )}
                   <input
                     id="file-upload"
                     type="file"
                     className="hidden"
-                    accept=".pdf,application/pdf"
+                    accept=".pdf,application/pdf,image/jpeg,image/png,image/gif,image/webp,.jpg,.jpeg,.png,.gif,.webp"
                     multiple
                     onChange={handleFileSelect}
                     disabled={uploading}
@@ -561,7 +573,9 @@ const DocumentsForm = () => {
                   {uploadedFiles.map((file, index) => (
                     <div key={file.id || index} className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-[#1e293b] rounded-lg text-sm text-slate-700 dark:text-gray-300">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="material-symbols-outlined text-primary flex-shrink-0">description</span>
+                        <span className="material-symbols-outlined text-primary flex-shrink-0">
+                          {(file.type && file.type.startsWith('image/')) ? 'image' : 'description'}
+                        </span>
                         <div className="flex-1 min-w-0">
                           <span className="truncate block">{file.name}</span>
                           {file.file_type && (

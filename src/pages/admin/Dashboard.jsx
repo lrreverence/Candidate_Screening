@@ -8,7 +8,7 @@ const Dashboard = () => {
   const [stats, setStats] = useState({
     totalApplicants: 0,
     pendingReview: 0,
-    hiredThisMonth: 0,
+    totalForInterview: 0,
     licenseExpiring: 0,
     activeJobs: 0,
     totalApplications: 0
@@ -33,12 +33,9 @@ const Dashboard = () => {
       const totalApplicants = applicants?.length || 0
       const pendingReview = applicants?.filter(app => app.status === 'Pending' || app.status === 'pending').length || 0
 
-      // Count hired this month
-      const now = new Date()
-      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-      const hiredThisMonth = applicants?.filter(app =>
-        (app.status === 'Hired' || app.status === 'hired') &&
-        new Date(app.created_at) >= firstDayOfMonth
+      // Count total for interview (scheduled / interview status)
+      const totalForInterview = applicants?.filter(app =>
+        (app.status || '').toLowerCase() === 'interview'
       ).length || 0
 
       const licenseExpiring = applicants?.filter(app =>
@@ -81,7 +78,7 @@ const Dashboard = () => {
       setStats({
         totalApplicants,
         pendingReview,
-        hiredThisMonth,
+        totalForInterview,
         licenseExpiring,
         activeJobs: activeJobs || 0,
         totalApplications: totalApplications || 0
@@ -182,16 +179,16 @@ const Dashboard = () => {
               <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-500">Hired This Month</p>
-                    <p className="mt-2 text-3xl font-bold text-navy">{stats.hiredThisMonth}</p>
+                    <p className="text-sm font-medium text-gray-500">Total for Interview</p>
+                    <p className="mt-2 text-3xl font-bold text-navy">{stats.totalForInterview}</p>
                   </div>
                   <div className="rounded-md bg-blue-50 p-3 text-blue-600">
-                    <span className="material-symbols-outlined text-2xl">check_circle</span>
+                    <span className="material-symbols-outlined text-2xl">event_available</span>
                   </div>
                 </div>
                 <div className="mt-4 flex items-center text-xs text-blue-600">
-                  <span className="material-symbols-outlined text-sm">trending_up</span>
-                  <span className="ml-1 font-medium">Great progress</span>
+                  <span className="material-symbols-outlined text-sm">schedule</span>
+                  <span className="ml-1 font-medium">Scheduled for interview</span>
                 </div>
               </div>
 

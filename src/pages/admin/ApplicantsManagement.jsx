@@ -11,8 +11,12 @@ const ApplicantsManagement = () => {
   const [filters, setFilters] = useState({
     licenseType: '',
     trainingLevel: '',
-    applicationStatus: ''
+    applicationStatus: '',
+    appliedDateFrom: '',
+    appliedDateTo: ''
   })
+  const [sortBy, setSortBy] = useState('applied_date')
+  const [sortDirection, setSortDirection] = useState('desc')
 
   // Statistics
   const [stats, setStats] = useState({
@@ -110,6 +114,24 @@ const ApplicantsManagement = () => {
         )
       }
 
+      // Filter by applied date range
+      if (filters.appliedDateFrom) {
+        const fromStart = new Date(filters.appliedDateFrom)
+        fromStart.setHours(0, 0, 0, 0)
+        filtered = filtered.filter(app => {
+          const d = new Date(app.submitted_at || app.created_at)
+          return d >= fromStart
+        })
+      }
+      if (filters.appliedDateTo) {
+        const toEnd = new Date(filters.appliedDateTo)
+        toEnd.setHours(23, 59, 59, 999)
+        filtered = filtered.filter(app => {
+          const d = new Date(app.submitted_at || app.created_at)
+          return d <= toEnd
+        })
+      }
+
       setApplications(filtered)
     } catch (error) {
       console.error('Error fetching applications:', error)
@@ -127,9 +149,20 @@ const ApplicantsManagement = () => {
     setFilters({
       licenseType: '',
       trainingLevel: '',
-      applicationStatus: ''
+      applicationStatus: '',
+      appliedDateFrom: '',
+      appliedDateTo: ''
     })
     setSearchQuery('')
+  }
+
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(column)
+      setSortDirection(column === 'applied_date' ? 'desc' : 'asc')
+    }
   }
 
   const handleApplyFilters = () => {
@@ -168,66 +201,7 @@ const ApplicantsManagement = () => {
     }
   }
 
-  // Group applications by job
-  const applicationsByJob = useMemo(() => {
-    const groups = new Map()
-    for (const app of applications) {
-      const jobId = app.job_id ?? 'general'
-      const jobTitle = app.jobs?.title || 'General Application'
-      if (!groups.has(jobId)) {
-        groups.set(jobId, { jobId, jobTitle, applications: [] })
-      }
-      groups.get(jobId).applications.push(app)
-    }
-    return Array.from(groups.values())
-  }, [applications])
-
-  const getStatusBadge = (status) => {
-    const statusMap = {
-      'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
-      'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
-      'screening': { bg: 'bg-blue-100', text: 'text-navy', label: 'Screening' },
-      'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
-      'hired': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Hired' },
-      'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' }
-    }
-
-    const config = statusMap[status?.toLowerCase()] || statusMap['pending']
-    return (
-      <span className={`inline-flex items-center rounded-md ${config.bg} px-2.5 py-1 text-xs font-semibold ${config.text}`}>
-        {config.label}
-      </span>
-    )
-  }
-
-  const getLicenseStatusBadge = (licenseStatus) => {
-    const statusMap = {
-      'valid': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-600', label: 'Valid' },
-      'expired': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-600', label: 'Expired' },
-      'review': { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-500', label: 'Review' },
-      'pending': { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', dot: 'bg-gray-500', label: 'Pending' }
-    }
-
-    const config = statusMap[licenseStatus?.toLowerCase()] || statusMap['pending']
-    return (
-      <span className={`inline-flex items-center gap-1.5 rounded-full ${config.bg} ${config.border} border px-2.5 py-1 text-xs font-medium ${config.text}`}>
-        <span className={`size-1.5 rounded-full ${config.dot}`}></span>
-        {config.label}
-      </span>
-    )
-  }
-
-  const getInitials = (firstName, lastName) => {
-    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase()
-  }
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A'
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  }
-
-  // Compliance %: job required_documents + required_credentials vs applicant documents + licenses
+  // Compliance %: job required_documents + required_credentials vs applicant documents + licenses (must be above applicationsByJob useMemo)
   const getCompliancePercentage = (app) => {
     const applicant = app.applicants
     const jobData = app.jobs
@@ -275,6 +249,85 @@ const ApplicantsManagement = () => {
     }
 
     return Math.round(Math.min(100, Math.max(0, matchPercentage)))
+  }
+
+  // Group by job first (stable job order), then sort only within each job
+  const applicationsByJob = useMemo(() => {
+    const sortCompare = (a, b) => {
+      if (sortBy === 'applied_date') {
+        const dateA = new Date(a.submitted_at || a.created_at).getTime()
+        const dateB = new Date(b.submitted_at || b.created_at).getTime()
+        const diff = sortDirection === 'asc' ? dateA - dateB : dateB - dateA
+        return Number.isFinite(diff) ? diff : 0
+      }
+      if (sortBy === 'requirements') {
+        const rawA = getCompliancePercentage(a)
+        const rawB = getCompliancePercentage(b)
+        const aVal = typeof rawA === 'number' && Number.isFinite(rawA) ? rawA : -1
+        const bVal = typeof rawB === 'number' && Number.isFinite(rawB) ? rawB : -1
+        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal
+      }
+      return 0
+    }
+    const groups = new Map()
+    for (const app of applications) {
+      const jobId = app.job_id ?? 'general'
+      const jobTitle = app.jobs?.title || 'General Application'
+      if (!groups.has(jobId)) {
+        groups.set(jobId, { jobId, jobTitle, applications: [] })
+      }
+      groups.get(jobId).applications.push(app)
+    }
+    const result = Array.from(groups.values())
+    result.forEach((group) => {
+      group.applications.sort(sortCompare)
+    })
+    return result
+  }, [applications, sortBy, sortDirection])
+
+  const getStatusBadge = (status) => {
+    const statusMap = {
+      'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
+      'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
+      'screening': { bg: 'bg-blue-100', text: 'text-navy', label: 'Screening' },
+      'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
+      'hired': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Hired' },
+      'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' }
+    }
+
+    const config = statusMap[status?.toLowerCase()] || statusMap['pending']
+    return (
+      <span className={`inline-flex items-center rounded-md ${config.bg} px-2.5 py-1 text-xs font-semibold ${config.text}`}>
+        {config.label}
+      </span>
+    )
+  }
+
+  const getLicenseStatusBadge = (licenseStatus) => {
+    const statusMap = {
+      'valid': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-600', label: 'Valid' },
+      'expired': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-600', label: 'Expired' },
+      'review': { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-500', label: 'Review' },
+      'pending': { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', dot: 'bg-gray-500', label: 'Pending' }
+    }
+
+    const config = statusMap[licenseStatus?.toLowerCase()] || statusMap['pending']
+    return (
+      <span className={`inline-flex items-center gap-1.5 rounded-full ${config.bg} ${config.border} border px-2.5 py-1 text-xs font-medium ${config.text}`}>
+        <span className={`size-1.5 rounded-full ${config.dot}`}></span>
+        {config.label}
+      </span>
+    )
+  }
+
+  const getInitials = (firstName, lastName) => {
+    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase()
+  }
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A'
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   return (
@@ -437,6 +490,24 @@ const ApplicantsManagement = () => {
                   <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
                 </div>
               </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Applied From</span>
+                <input
+                  type="date"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                  value={filters.appliedDateFrom}
+                  onChange={(e) => handleFilterChange('appliedDateFrom', e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Applied To</span>
+                <input
+                  type="date"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                  value={filters.appliedDateTo}
+                  onChange={(e) => handleFilterChange('appliedDateTo', e.target.value)}
+                />
+              </label>
             </div>
             <div className="flex gap-3 pt-4 lg:pt-0">
               <button
@@ -481,13 +552,38 @@ const ApplicantsManagement = () => {
                           <tr className="border-b border-gray-200">
                             <th className="px-6 py-4 font-semibold tracking-wider">Applicant Name</th>
                             <th className="px-6 py-4 font-semibold tracking-wider">
-                              <div className="flex items-center gap-1 cursor-pointer hover:text-navy">
+                              <button
+                                type="button"
+                                onClick={() => handleSort('applied_date')}
+                                className="flex items-center gap-1 cursor-pointer hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy/30 rounded"
+                              >
                                 Applied Date
-                                <span className="material-symbols-outlined text-base">arrow_drop_down</span>
-                              </div>
+                                <span className="material-symbols-outlined text-base">
+                                  {sortBy === 'applied_date'
+                                    ? sortDirection === 'asc'
+                                      ? 'arrow_drop_up'
+                                      : 'arrow_drop_down'
+                                    : 'unfold_more'}
+                                </span>
+                              </button>
                             </th>
                             <th className="px-6 py-4 font-semibold tracking-wider">License Status</th>
-                            <th className="px-6 py-4 font-semibold tracking-wider">Requirements</th>
+                            <th className="px-6 py-4 font-semibold tracking-wider">
+                              <button
+                                type="button"
+                                onClick={() => handleSort('requirements')}
+                                className="flex items-center gap-1 cursor-pointer hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy/30 rounded"
+                              >
+                                Requirements
+                                <span className="material-symbols-outlined text-base">
+                                  {sortBy === 'requirements'
+                                    ? sortDirection === 'asc'
+                                      ? 'arrow_drop_up'
+                                      : 'arrow_drop_down'
+                                    : 'unfold_more'}
+                                </span>
+                              </button>
+                            </th>
                             <th className="px-6 py-4 font-semibold tracking-wider">Status</th>
                             <th className="px-6 py-4 font-semibold tracking-wider text-right">Action</th>
                           </tr>

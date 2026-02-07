@@ -133,12 +133,12 @@ const AuthProvider = ({ children }) => {
         ])
 
         if (!error && dbProfile) {
-          console.log('[AUTH] ✓ User profile loaded from database:', dbProfile)
+          if (import.meta.env?.DEV) console.log('[AUTH] ✓ User profile loaded from database')
           setUserProfile(dbProfile)
           return
         }
       } catch (dbError) {
-        console.log('[AUTH] Database query failed, using session fallback')
+        if (import.meta.env?.DEV) console.log('[AUTH] Database query failed, using session fallback')
       }
 
       // Fallback: Use session data
@@ -155,7 +155,7 @@ const AuthProvider = ({ children }) => {
         created_at: sessionUser.created_at
       }
 
-      console.log('[AUTH] ✓ User profile loaded from session fallback:', profile)
+      if (import.meta.env?.DEV) console.log('[AUTH] ✓ User profile loaded from session fallback')
       setUserProfile(profile)
     } catch (error) {
       console.error('[AUTH] Error fetching user profile:', error)
@@ -169,7 +169,7 @@ const AuthProvider = ({ children }) => {
     // Get initial session
     supabase.auth.getSession().then(async ({ data: sessionData }) => {
       const session = sessionData.session
-      console.log('[AUTH] Initial session:', session?.user?.id)
+      if (import.meta.env?.DEV) console.log('[AUTH] Initial session:', session?.user?.id ?? 'none')
       setSession(session)
       setUser(session?.user ?? null)
 
@@ -207,13 +207,10 @@ const AuthProvider = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log('[AUTH] Auth state changed:', _event, session?.user?.id)
+      if (import.meta.env?.DEV) console.log('[AUTH] Auth state changed:', _event, session?.user?.id ?? 'none')
 
       // Skip if this is the initial SIGNED_IN event (already handled above)
-      if (isInitialLoad && _event === 'SIGNED_IN') {
-        console.log('[AUTH] Skipping duplicate initial SIGNED_IN event')
-        return
-      }
+      if (isInitialLoad && _event === 'SIGNED_IN') return
 
       setSession(session)
       setUser(session?.user ?? null)

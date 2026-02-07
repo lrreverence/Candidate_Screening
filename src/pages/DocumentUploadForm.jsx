@@ -95,22 +95,22 @@ const DocumentUploadForm = () => {
   }, [jobId])
 
   const handleMultipleFileUpload = async (files) => {
-    // Validate all files are PDFs
+    // Validate all files are PDFs or images
     const maxSize = 10 * 1024 * 1024 // 10MB
-    const allowedType = 'application/pdf'
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp']
     
     const invalidFiles = []
     Array.from(files).forEach((file, index) => {
       if (file.size > maxSize) {
         invalidFiles.push(`${file.name} (exceeds 10MB)`)
       }
-      if (file.type !== allowedType) {
-        invalidFiles.push(`${file.name} (not a PDF)`)
+      if (!allowedTypes.includes(file.type)) {
+        invalidFiles.push(`${file.name} (not PDF or image)`)
       }
     })
 
     if (invalidFiles.length > 0) {
-      alert(`Invalid files:\n${invalidFiles.join('\n')}\n\nPlease upload PDF files only, max 10MB each.`)
+      alert(`Invalid files:\n${invalidFiles.join('\n')}\n\nPlease upload PDF or image files (JPEG, PNG, GIF, WebP), max 10MB each.`)
       return
     }
 
@@ -379,9 +379,9 @@ const DocumentUploadForm = () => {
               Upload Your Documents
             </h1>
             <p className="text-[#93c5fd] text-sm md:text-base font-normal leading-relaxed max-w-2xl">
-              Upload your documents. You can upload multiple PDF files at once.
+              Upload your documents. You can upload multiple PDF or image files at once.
               <br className="hidden md:block" />
-              Accepted format: PDF only. Max file size: 10MB per file.
+              Accepted formats: PDF, JPEG, PNG, GIF, WebP. Max file size: 10MB per file.
             </p>
           </div>
 
@@ -451,14 +451,14 @@ const DocumentUploadForm = () => {
                     {uploading ? 'Uploading files...' : 'Click to upload or drag and drop'}
                   </h3>
                   <p className="text-[#93c5fd] text-sm">
-                    PDF files only • Max 10MB per file • Multiple files allowed
+                    PDF or images (JPEG, PNG, GIF, WebP) • Max 10MB per file • Multiple files allowed
                   </p>
                 </div>
                 <input
                   id="file-upload"
                   type="file"
                   className="hidden"
-                  accept=".pdf"
+                  accept=".pdf,application/pdf,image/jpeg,image/png,image/gif,image/webp,.jpg,.jpeg,.png,.gif,.webp"
                   multiple
                   onChange={handleFileUpload}
                   disabled={uploading}
@@ -480,7 +480,9 @@ const DocumentUploadForm = () => {
                       className="flex items-center justify-between p-4 rounded-lg bg-[#0f172a] border border-[#2563eb] hover:border-primary transition-colors"
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <span className="material-symbols-outlined text-primary flex-shrink-0">picture_as_pdf</span>
+                        <span className="material-symbols-outlined text-primary flex-shrink-0">
+                          {(doc.type && doc.type.startsWith('image/')) ? 'image' : 'picture_as_pdf'}
+                        </span>
                         <div className="flex-1 min-w-0">
                           <p className="text-white font-medium truncate">{doc.name}</p>
                           <p className="text-[#93c5fd] text-xs">{formatFileSize(doc.size)}</p>
@@ -510,7 +512,7 @@ const DocumentUploadForm = () => {
             <div className="rounded-xl bg-[#1e293b] p-4 flex items-start gap-3 border border-[#2563eb]">
               <span className="material-symbols-outlined text-[#93c5fd] mt-0.5">info</span>
               <p className="text-sm text-[#93c5fd] leading-relaxed">
-                <strong>Note:</strong> You can upload multiple PDF files at once. Please select the document type before uploading. All files uploaded will be tagged with the selected document type. Each file must be a PDF and under 10MB.
+                <strong>Note:</strong> You can upload multiple PDF or image files at once. Please select the document type before uploading. All files uploaded will be tagged with the selected document type. Each file must be a PDF or image (JPEG, PNG, GIF, WebP) and under 10MB.
               </p>
             </div>
 
