@@ -1,18 +1,36 @@
 import React from 'react'
 
+const NAME_EXTENSIONS = ['', 'Jr', 'Sr', 'I', 'II', 'III', 'IV', 'V']
+
+function getAgeFromDOB(dateOfBirth) {
+  if (!dateOfBirth) return null
+  const dob = new Date(dateOfBirth)
+  if (Number.isNaN(dob.getTime())) return null
+  const today = new Date()
+  let age = today.getFullYear() - dob.getFullYear()
+  const m = today.getMonth() - dob.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1
+  return age >= 0 ? age : null
+}
+
 const IdentitySection = ({ formData, handleChange }) => {
+  const age = getAgeFromDOB(formData.date_of_birth)
+
   return (
     <>
-      <h2 className="text-xl font-bold mb-8 flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-white/10">
+      <h2 className="text-xl font-bold mb-2 flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-white/10">
         <span className="material-symbols-outlined text-primary">person</span>
-        Identity Information
+        1. Personal Information
       </h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+        Must include: Middle Name, Name Extension (Jr, Sr, I, II, etc.), Age, Height, Weight, Status (Single/Married/Widowed), Religion
+      </p>
 
       {/* Name Fields */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="firstName">
-            First Name
+            First Name <span className="text-red-500">*</span>
           </label>
           <input
             className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
@@ -26,8 +44,25 @@ const IdentitySection = ({ formData, handleChange }) => {
           />
         </div>
         <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="middleName">
+            Middle Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
+            id="middleName"
+            name="middle_name"
+            value={formData.middle_name}
+            onChange={handleChange}
+            placeholder="e.g. Reyes"
+            type="text"
+            required
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="lastName">
-            Last Name
+            Last Name <span className="text-red-500">*</span>
           </label>
           <input
             className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
@@ -40,24 +75,56 @@ const IdentitySection = ({ formData, handleChange }) => {
             required
           />
         </div>
-      </div>
-
-      {/* DOB & Gender */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="dob">
-            Date of Birth
+          <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="nameExtension">
+            Name Extension
           </label>
           <div className="relative">
-            <input
-              className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none appearance-none [&::-webkit-calendar-picker-indicator]:dark:invert"
-              id="dob"
-              name="date_of_birth"
-              value={formData.date_of_birth}
+            <select
+              className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 text-gray-500 dark:text-gray-400 dark:text-white text-base outline-none appearance-none"
+              id="nameExtension"
+              name="name_extension"
+              value={formData.name_extension || ''}
               onChange={handleChange}
-              type="date"
-            />
+            >
+              {NAME_EXTENSIONS.map((ext) => (
+                <option key={ext || 'none'} value={ext}>
+                  {ext || 'None (Jr, Sr, I, II, etc.)'}
+                </option>
+              ))}
+            </select>
+            <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
           </div>
+        </div>
+      </div>
+
+      {/* Date of Birth & Age & Gender */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="dob">
+            Date of Birth <span className="text-red-500">*</span>
+          </label>
+          <input
+            className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none appearance-none [&::-webkit-calendar-picker-indicator]:dark:invert"
+            id="dob"
+            name="date_of_birth"
+            value={formData.date_of_birth}
+            onChange={handleChange}
+            type="date"
+            required
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="age">
+            Age
+          </label>
+          <input
+            className="w-full h-14 px-6 rounded-full bg-gray-100 dark:bg-white/5 border-transparent text-gray-500 dark:text-gray-400 cursor-not-allowed"
+            id="age"
+            readOnly
+            value={age != null ? `${age} years old` : '—'}
+            tabIndex={-1}
+          />
         </div>
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="gender">
@@ -80,9 +147,86 @@ const IdentitySection = ({ formData, handleChange }) => {
           </div>
         </div>
       </div>
+
+      {/* Height & Weight */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="height">
+            Height (cm) <span className="text-red-500">*</span>
+          </label>
+          <input
+            className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
+            id="height"
+            name="height_cm"
+            value={formData.height_cm}
+            onChange={handleChange}
+            placeholder="e.g. 170"
+            type="number"
+            min={100}
+            max={250}
+            required
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="weight">
+            Weight (kg) <span className="text-red-500">*</span>
+          </label>
+          <input
+            className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
+            id="weight"
+            name="weight_kg"
+            value={formData.weight_kg}
+            onChange={handleChange}
+            placeholder="e.g. 65"
+            type="number"
+            min={30}
+            max={300}
+            required
+          />
+        </div>
+      </div>
+
+      {/* Civil Status & Religion */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="civilStatus">
+            Status (Civil Status) <span className="text-red-500">*</span>
+          </label>
+          <div className="relative">
+            <select
+              className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 text-gray-500 dark:text-gray-400 dark:text-white text-base outline-none appearance-none"
+              id="civilStatus"
+              name="civil_status"
+              value={formData.civil_status || ''}
+              onChange={handleChange}
+              required
+            >
+              <option disabled value="">Select status</option>
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+              <option value="Widowed">Widowed</option>
+            </select>
+            <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="religion">
+            Religion <span className="text-red-500">*</span>
+          </label>
+          <input
+            className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
+            id="religion"
+            name="religion"
+            value={formData.religion}
+            onChange={handleChange}
+            placeholder="e.g. Roman Catholic"
+            type="text"
+            required
+          />
+        </div>
+      </div>
     </>
   )
 }
 
 export default IdentitySection
-

@@ -68,7 +68,9 @@ Deno.serve(async (req: Request) => {
         .from('applicants')
         .update({
           first_name: formData.first_name,
+          middle_name: formData.middle_name || null,
           last_name: formData.last_name,
+          name_extension: formData.name_extension || null,
           phone: formData.phone_number || null,
           date_of_birth: formData.date_of_birth || null,
           gender: formData.gender || null,
@@ -80,6 +82,8 @@ Deno.serve(async (req: Request) => {
           licenses: formData.licenses || [],
           height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
           weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+          civil_status: formData.civil_status || null,
+          religion: formData.religion || null,
           user_id: userId || null
         })
         .eq('id', applicantId);
@@ -115,7 +119,9 @@ Deno.serve(async (req: Request) => {
         .insert({
           reference_code: referenceCode,
           first_name: formData.first_name,
+          middle_name: formData.middle_name || null,
           last_name: formData.last_name,
+          name_extension: formData.name_extension || null,
           email: formData.email,
           phone: formData.phone_number || null,
           date_of_birth: formData.date_of_birth || null,
@@ -128,6 +134,8 @@ Deno.serve(async (req: Request) => {
           licenses: formData.licenses || [],
           height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
           weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+          civil_status: formData.civil_status || null,
+          religion: formData.religion || null,
           user_id: userId || null,
           status: 'Pending'
         })
@@ -150,7 +158,9 @@ Deno.serve(async (req: Request) => {
               .from('applicants')
               .update({
                 first_name: formData.first_name,
+                middle_name: formData.middle_name || null,
                 last_name: formData.last_name,
+                name_extension: formData.name_extension || null,
                 phone: formData.phone_number || null,
                 date_of_birth: formData.date_of_birth || null,
                 gender: formData.gender || null,
@@ -162,6 +172,8 @@ Deno.serve(async (req: Request) => {
                 licenses: formData.licenses || [],
                 height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
                 weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+                civil_status: formData.civil_status || null,
+                religion: formData.religion || null,
                 user_id: userId || null
               })
               .eq('id', applicantId);

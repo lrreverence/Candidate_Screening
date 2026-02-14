@@ -4,6 +4,62 @@ import { useSupabase } from '../contexts/SupabaseContext'
 import { useAuth } from '../contexts/AuthContext'
 import LoginModal from '../components/LoginModal'
 import { getJobImageUrl } from '../lib/storageUpload'
+import { supabase } from '../lib/supabase'
+
+const APPLICATION_STATUS_LABELS = {
+  pending: { label: 'Pending Review', icon: 'schedule', className: 'text-yellow-500' },
+  submitted: { label: 'Submitted', icon: 'check_circle', className: 'text-primary' },
+  screening: { label: 'Screening', icon: 'manage_search', className: 'text-blue-400' },
+  interview: { label: 'Accepted – Next step: Interview', icon: 'event_available', className: 'text-green-500' },
+  hired: { label: 'Accepted – Hired', icon: 'verified_user', className: 'text-green-500' },
+  rejected: { label: 'Not selected', icon: 'cancel', className: 'text-red-400' }
+}
+
+function ApplicationStatusLabel({ status }) {
+  const key = (status || 'pending').toLowerCase()
+  const config = APPLICATION_STATUS_LABELS[key] || APPLICATION_STATUS_LABELS.pending
+  return (
+    <p className={`text-sm font-medium ${config.className} flex items-center gap-2`}>
+      <span className="material-symbols-outlined text-[18px]">{config.icon}</span>
+      {config.label}
+    </p>
+  )
+}
+
+// Normalize job row from DB (requirements may be text or array; responsibilities/benefits may be missing)
+function normalizeJobRow(foundJob, imageUrl) {
+  const toArray = (v) => {
+    if (Array.isArray(v)) return v
+    if (typeof v === 'string') {
+      try {
+        const parsed = JSON.parse(v)
+        return Array.isArray(parsed) ? parsed : v.trim() ? [v] : []
+      } catch {
+        return v.trim() ? v.split(/\n/).map(s => s.trim()).filter(Boolean) : []
+      }
+    }
+    return []
+  }
+  return {
+    id: foundJob.id,
+    title: foundJob.title,
+    location: foundJob.location,
+    salary: foundJob.salary,
+    type: foundJob.type,
+    shift: foundJob.shift,
+    image: imageUrl,
+    badge: foundJob.badge_text ? {
+      text: foundJob.badge_text,
+      icon: foundJob.badge_icon,
+      color: foundJob.badge_color
+    } : null,
+    category: foundJob.category,
+    description: foundJob.description || "Join our team and help us provide exceptional security services.",
+    requirements: toArray(foundJob.requirements),
+    responsibilities: toArray(foundJob.responsibilities),
+    benefits: toArray(foundJob.benefits)
+  }
+}
 
 const JobDetail = () => {
   const { jobId } = useParams()
@@ -13,65 +69,46 @@ const JobDetail = () => {
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
   const [hasApplied, setHasApplied] = useState(false)
+  const [applicationStatus, setApplicationStatus] = useState(null) // { status, rejection_reason }
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [jobImageUrl, setJobImageUrl] = useState(null)
 
   useEffect(() => {
     const fetchJob = async () => {
       setLoading(true)
-      
-      // Find job from Supabase using UUID (not parseInt)
+      let foundJob = null
+
+      // 1) Try context list first
       if (supabaseJobs && supabaseJobs.length > 0) {
-        const foundJob = supabaseJobs.find(j => j.id === jobId) // Direct UUID comparison
-        if (foundJob) {
-          console.log('[JOB_DETAIL] Found job from Supabase:', foundJob.id)
-          
-          // Load image URL if job has an image
-          let imageUrl = foundJob.image
-          if (foundJob.image) {
-            try {
-              const signedUrl = await getJobImageUrl(foundJob.image)
-              if (signedUrl) {
-                imageUrl = signedUrl
-              }
-            } catch (error) {
-              console.error('[JOB_DETAIL] Error loading job image:', error)
-            }
-          }
-          
-          setJobImageUrl(imageUrl)
-          
-          setJob({
-            id: foundJob.id,
-            title: foundJob.title,
-            location: foundJob.location,
-            salary: foundJob.salary,
-            type: foundJob.type,
-            shift: foundJob.shift,
-            image: imageUrl,
-            badge: foundJob.badge_text ? {
-              text: foundJob.badge_text,
-              icon: foundJob.badge_icon,
-              color: foundJob.badge_color
-            } : null,
-            category: foundJob.category,
-            description: foundJob.description || "Join our team and help us provide exceptional security services.",
-            requirements: foundJob.requirements || [],
-            responsibilities: foundJob.responsibilities || [],
-            benefits: foundJob.benefits || []
-          })
-          setLoading(false)
-          return
-        } else {
-          console.warn('[JOB_DETAIL] Job not found in Supabase:', jobId)
-        }
-      } else {
-        console.warn('[JOB_DETAIL] No Supabase jobs available')
+        foundJob = supabaseJobs.find(j => j.id === jobId) || null
       }
-      
-      // Job not found - set to null
-      setJob(null)
-      setJobImageUrl(null)
+
+      // 2) If not in list, fetch by ID from Supabase (so new postings and applied jobs remain viewable)
+      if (!foundJob && jobId) {
+        const { data: row, error } = await supabase
+          .from('jobs')
+          .select('*')
+          .eq('id', jobId)
+          .maybeSingle()
+        if (!error && row) foundJob = row
+      }
+
+      if (foundJob) {
+        let imageUrl = foundJob.image
+        if (foundJob.image) {
+          try {
+            const signedUrl = await getJobImageUrl(foundJob.image)
+            if (signedUrl) imageUrl = signedUrl
+          } catch (error) {
+            console.error('[JOB_DETAIL] Error loading job image:', error)
+          }
+        }
+        setJobImageUrl(imageUrl)
+        setJob(normalizeJobRow(foundJob, imageUrl))
+      } else {
+        setJob(null)
+        setJobImageUrl(null)
+      }
       setLoading(false)
     }
 
@@ -80,51 +117,48 @@ const JobDetail = () => {
     }
   }, [jobId, supabaseJobs, supabaseLoading])
 
-  // Check if user has already applied to this job
+  // Check if user has already applied and load application status (for status + rejection reason)
   useEffect(() => {
     const checkApplication = async () => {
       if (!user?.id || !jobId) {
         setHasApplied(false)
+        setApplicationStatus(null)
         return
       }
 
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sbmwzgtlqmwtbrgdehuw.supabase.co'
-        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNibXd6Z3RscW13dGJyZ2RlaHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDUyMDMsImV4cCI6MjA3ODY4MTIwM30.LaXLtSuHVnY0JbN5YTa-2JlbrN2_cLAbAd6NfXtdyJY'
+        const { data: applicants } = await supabase
+          .from('applicants')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1)
 
-        const applicantResponse = await fetch(
-          `${supabaseUrl}/rest/v1/applicants?user_id=eq.${user.id}&select=id`,
-          {
-            headers: {
-              'apikey': anonKey,
-              'Authorization': `Bearer ${anonKey}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        )
+        if (!applicants?.length) {
+          setHasApplied(false)
+          setApplicationStatus(null)
+          return
+        }
 
-        if (!applicantResponse.ok) return
+        const { data: applications } = await supabase
+          .from('applications')
+          .select('id, status, rejection_reason')
+          .eq('applicant_id', applicants[0].id)
+          .eq('job_id', jobId)
+          .maybeSingle()
 
-        const applicants = await applicantResponse.json()
-        if (!applicants?.length) return
-
-        const appResponse = await fetch(
-          `${supabaseUrl}/rest/v1/applications?applicant_id=eq.${applicants[0].id}&job_id=eq.${jobId}&select=id`,
-          {
-            headers: {
-              'apikey': anonKey,
-              'Authorization': `Bearer ${anonKey}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        )
-
-        if (!appResponse.ok) return
-
-        const applications = await appResponse.json()
-        setHasApplied(applications?.length > 0)
+        if (applications) {
+          setHasApplied(true)
+          setApplicationStatus({
+            status: applications.status,
+            rejection_reason: applications.rejection_reason || null
+          })
+        } else {
+          setHasApplied(false)
+          setApplicationStatus(null)
+        }
       } catch (error) {
         setHasApplied(false)
+        setApplicationStatus(null)
       }
     }
 
@@ -302,7 +336,22 @@ const JobDetail = () => {
                     </div>
                   </div>
                 </div>
-                {hasApplied ? (
+                {hasApplied && applicationStatus ? (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border p-4 bg-secondary/10 border-secondary/50">
+                      <div className="flex items-center gap-2 text-white font-semibold mb-1">
+                        <span className="material-symbols-outlined text-primary">check_circle</span>
+                        Application status
+                      </div>
+                      <ApplicationStatusLabel status={applicationStatus.status} />
+                      {applicationStatus.status?.toLowerCase() === 'rejected' && applicationStatus.rejection_reason && (
+                        <p className="mt-3 text-sm text-text-muted border-t border-secondary/30 pt-3">
+                          {applicationStatus.rejection_reason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : hasApplied ? (
                   <button
                     type="button"
                     disabled

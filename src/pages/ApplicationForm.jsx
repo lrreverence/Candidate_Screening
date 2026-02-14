@@ -18,7 +18,9 @@ const ApplicationForm = () => {
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({
     first_name: '',
+    middle_name: '',
     last_name: '',
+    name_extension: '',
     date_of_birth: '',
     gender: '',
     email: '',
@@ -31,6 +33,8 @@ const ApplicationForm = () => {
     licenses: [],
     height_cm: '',
     weight_kg: '',
+    civil_status: '',
+    religion: '',
   })
 
   const licenseOptions = [
@@ -99,7 +103,9 @@ const ApplicationForm = () => {
           // Populate form with existing data
           setFormData({
             first_name: applicant.first_name || '',
+            middle_name: applicant.middle_name || '',
             last_name: applicant.last_name || '',
+            name_extension: applicant.name_extension || '',
             date_of_birth: applicant.date_of_birth || '',
             gender: applicant.gender || '',
             email: applicant.email || user.email || '',
@@ -112,6 +118,8 @@ const ApplicationForm = () => {
             licenses: applicant.licenses || [],
             height_cm: applicant.height_cm || '',
             weight_kg: applicant.weight_kg || '',
+            civil_status: applicant.civil_status || '',
+            religion: applicant.religion || '',
           })
         } else {
           console.log('[APPLICATION] No existing applicant found, using defaults')
@@ -162,7 +170,9 @@ const ApplicationForm = () => {
             .from('applicants')
             .update({
               first_name: formData.first_name,
+              middle_name: formData.middle_name || null,
               last_name: formData.last_name,
+              name_extension: formData.name_extension || null,
               phone: formData.phone_number,
               date_of_birth: formData.date_of_birth || null,
               gender: formData.gender || null,
@@ -174,6 +184,8 @@ const ApplicationForm = () => {
               licenses: formData.licenses || [],
               height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
               weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+              civil_status: formData.civil_status || null,
+              religion: formData.religion || null,
             })
             .eq('id', applicantId)
         } else {
@@ -184,7 +196,9 @@ const ApplicationForm = () => {
             .insert({
               reference_code: tempRef,
               first_name: formData.first_name,
+              middle_name: formData.middle_name || null,
               last_name: formData.last_name,
+              name_extension: formData.name_extension || null,
               email: formData.email,
               phone: formData.phone_number || null,
               date_of_birth: formData.date_of_birth || null,
@@ -197,6 +211,8 @@ const ApplicationForm = () => {
               licenses: formData.licenses || [],
               height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
               weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+              civil_status: formData.civil_status || null,
+              religion: formData.religion || null,
               user_id: user.id,
               status: 'Pending'
             })
@@ -262,9 +278,13 @@ const ApplicationForm = () => {
   const handleNextStep = async (e) => {
     e.preventDefault()
 
-    // Basic validation
+    // Basic validation – Personal Information must include required fields
     if (!formData.first_name || !formData.last_name || !formData.email) {
       alert('Please fill in all required fields (First Name, Last Name, Email)')
+      return
+    }
+    if (!formData.middle_name || !formData.date_of_birth || !formData.height_cm || !formData.weight_kg || !formData.civil_status || !formData.religion) {
+      alert('Please complete Personal Information: Middle Name, Date of Birth, Height, Weight, Status (Civil Status), and Religion are required.')
       return
     }
 
@@ -291,7 +311,9 @@ const ApplicationForm = () => {
         body: JSON.stringify({
           formData: {
             first_name: formData.first_name,
+            middle_name: formData.middle_name,
             last_name: formData.last_name,
+            name_extension: formData.name_extension,
             email: formData.email,
             phone_number: formData.phone_number,
             date_of_birth: formData.date_of_birth,
@@ -303,7 +325,9 @@ const ApplicationForm = () => {
             zip_code: formData.zip_code,
             licenses: formData.licenses,
             height_cm: formData.height_cm,
-            weight_kg: formData.weight_kg
+            weight_kg: formData.weight_kg,
+            civil_status: formData.civil_status,
+            religion: formData.religion
           },
           jobId: jobId || null,
           userId: user?.id || null

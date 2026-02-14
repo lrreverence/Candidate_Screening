@@ -171,11 +171,18 @@ const ApplicantDetailView = () => {
   const handleReject = async () => {
     if (!confirm('Reject this applicant? This action cannot be undone.')) return
 
+    const rejectionReason = window.prompt(
+      'Optional: Add a reason for the applicant (they will see this on the job detail page):'
+    )
+    // User can click Cancel (null) or leave empty; both are valid
+    const reason = rejectionReason != null ? rejectionReason.trim() || null : null
+
     try {
       const { error } = await supabase
         .from('applications')
         .update({
           status: 'rejected',
+          rejection_reason: reason,
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
@@ -452,7 +459,8 @@ const ApplicantDetailView = () => {
                 <div className="flex flex-col flex-1 min-w-0">
                   <div className="flex justify-between items-start">
                     <h1 className="text-white text-3xl font-bold leading-tight tracking-tight truncate">
-                      {applicant?.first_name} {applicant?.last_name}
+                      {[applicant?.first_name, applicant?.middle_name, applicant?.last_name].filter(Boolean).join(' ')}
+                      {applicant?.name_extension ? ` ${applicant.name_extension}` : ''}
                     </h1>
                     <span className="text-[#92a4c9] text-xs font-mono bg-[#1a2332] px-2 py-1 rounded border border-[#232f48]">
                       ID: {applicant?.reference_code || `#${application?.id}`}
@@ -609,6 +617,79 @@ const ApplicantDetailView = () => {
                 </div>
               </section>
 
+              {/* Personal Information Section */}
+              <section>
+                <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <span className="w-1 h-3 bg-primary rounded-full"></span> Personal Information
+                </h3>
+                <div className="bg-[#161e2c] rounded-lg border border-[#232f48] divide-y divide-[#232f48]">
+                  {applicant?.date_of_birth && (
+                    <div className="p-4 flex justify-between items-center">
+                      <div>
+                        <p className="text-[#92a4c9] text-xs uppercase">Date of Birth</p>
+                        <p className="text-white font-medium text-sm mt-1">{formatDate(applicant.date_of_birth)}</p>
+                      </div>
+                    </div>
+                  )}
+                  {applicant?.date_of_birth && (
+                    <div className="p-4 flex justify-between items-center">
+                      <div>
+                        <p className="text-[#92a4c9] text-xs uppercase">Age</p>
+                        <p className="text-white font-medium text-sm mt-1">
+                          {(() => {
+                            const dob = new Date(applicant.date_of_birth)
+                            const today = new Date()
+                            let age = today.getFullYear() - dob.getFullYear()
+                            if (today.getMonth() < dob.getMonth() || (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())) age -= 1
+                            return `${age} years old`
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {applicant?.gender && (
+                    <div className="p-4 flex justify-between items-center">
+                      <div>
+                        <p className="text-[#92a4c9] text-xs uppercase">Gender</p>
+                        <p className="text-white font-medium text-sm mt-1">{applicant.gender}</p>
+                      </div>
+                    </div>
+                  )}
+                  {applicant?.height_cm && (
+                    <div className="p-4 flex justify-between items-center">
+                      <div>
+                        <p className="text-[#92a4c9] text-xs uppercase">Height</p>
+                        <p className="text-white font-medium text-sm mt-1">{applicant.height_cm} cm</p>
+                      </div>
+                    </div>
+                  )}
+                  {applicant?.weight_kg && (
+                    <div className="p-4 flex justify-between items-center">
+                      <div>
+                        <p className="text-[#92a4c9] text-xs uppercase">Weight</p>
+                        <p className="text-white font-medium text-sm mt-1">{applicant.weight_kg} kg</p>
+                      </div>
+                    </div>
+                  )}
+                  {applicant?.civil_status && (
+                    <div className="p-4 flex justify-between items-center">
+                      <div>
+                        <p className="text-[#92a4c9] text-xs uppercase">Civil Status</p>
+                        <p className="text-white font-medium text-sm mt-1">{applicant.civil_status}</p>
+                      </div>
+                    </div>
+                  )}
+                  {applicant?.religion && (
+                    <div className="p-4 flex justify-between items-center">
+                      <div>
+                        <p className="text-[#92a4c9] text-xs uppercase">Religion</p>
+                        <p className="text-white font-medium text-sm mt-1">{applicant.religion}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
               {/* Credentials Section */}
               <section>
                 <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -635,22 +716,6 @@ const ApplicantDetailView = () => {
                       <div>
                         <p className="text-[#92a4c9] text-xs uppercase">License Type</p>
                         <p className="text-white font-medium text-sm mt-1">{applicant.license_type}</p>
-                      </div>
-                    </div>
-                  )}
-                  {applicant?.height_cm && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Height</p>
-                        <p className="text-white font-medium text-sm mt-1">{applicant.height_cm} cm</p>
-                      </div>
-                    </div>
-                  )}
-                  {applicant?.weight_kg && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Weight</p>
-                        <p className="text-white font-medium text-sm mt-1">{applicant.weight_kg} kg</p>
                       </div>
                     </div>
                   )}
