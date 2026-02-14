@@ -13,6 +13,7 @@ import OurServices from './pages/OurServices'
 import Contact from './pages/Contact'
 import JobDetail from './pages/JobDetail'
 import ResetPassword from './pages/ResetPassword'
+import File201Form from './pages/File201Form'
 import ProtectedAdminRoute from './components/ProtectedAdminRoute'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -75,6 +76,14 @@ const App = () => {
       <Route path="/services" element={<OurServices />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route
+        path="/apply/:jobId/201-file"
+        element={
+          <ProtectedRoute>
+            <File201Form />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   )
 }

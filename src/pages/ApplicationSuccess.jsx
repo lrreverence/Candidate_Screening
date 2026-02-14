@@ -83,7 +83,7 @@ const ApplicationSuccess = () => {
                 .from('applications')
                 .update({
                   status: 'submitted',
-                  current_step: 4,
+                  current_step: 5,
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', existingApp.id)
