@@ -423,7 +423,7 @@ const IdPictureUpload = () => {
         if (uuidRegex.test(jobId)) {
           const { error: appError } = await supabase
             .from('applications')
-            .update({ current_step: 3 })
+            .update({ current_step: 3 }) // Step 3 of 6
             .eq('applicant_id', applicant.id)
             .eq('job_id', jobId)
 
@@ -444,7 +444,7 @@ const IdPictureUpload = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}`)
+    navigate(`/apply/${jobId || ''}/work-experience`)
   }
 
   return (
@@ -462,7 +462,7 @@ const IdPictureUpload = () => {
           </p>
         </div>
 
-        <ApplicationProgress currentStep={2} totalSteps={4} />
+        <ApplicationProgress currentStep={3} totalSteps={6} />
 
         {/* Main Form Card */}
         <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 md:p-10 border border-gray-200 dark:border-white/5 shadow-xl">

@@ -690,6 +690,35 @@ const ApplicantDetailView = () => {
                 </div>
               </section>
 
+              {/* Work Experience Section */}
+              {applicant?.work_experience && Array.isArray(applicant.work_experience) && applicant.work_experience.length > 0 && (
+                <section>
+                  <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <span className="w-1 h-3 bg-primary rounded-full"></span> Work Experience
+                  </h3>
+                  <div className="bg-[#161e2c] rounded-lg border border-[#232f48] overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-[#232f48] bg-[#1a2332] text-left">
+                          <th className="p-3 text-[#92a4c9] font-bold uppercase tracking-wide">Work Experience / Role</th>
+                          <th className="p-3 text-[#92a4c9] font-bold uppercase tracking-wide">Place</th>
+                          <th className="p-3 text-[#92a4c9] font-bold uppercase tracking-wide">Year</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {applicant.work_experience.map((entry, idx) => (
+                          <tr key={idx} className="border-b border-[#232f48] last:border-0">
+                            <td className="p-3 text-white font-medium">{entry.role || '—'}</td>
+                            <td className="p-3 text-white">{entry.place || '—'}</td>
+                            <td className="p-3 text-white">{entry.year ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
               {/* Credentials Section */}
               <section>
                 <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -737,6 +766,53 @@ const ApplicantDetailView = () => {
                         {license}
                       </span>
                     ))}
+                  </div>
+                </section>
+              )}
+
+              {/* 201 File Data Section */}
+              {applicant?.file_201_data && typeof applicant.file_201_data === 'object' && (
+                <section>
+                  <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <span className="w-1 h-3 bg-green-500 rounded-full"></span> 201 File
+                  </h3>
+                  <div className="bg-[#161e2c] rounded-lg border border-[#232f48] divide-y divide-[#232f48]">
+                    <div className="p-4">
+                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Security License</p>
+                      <p className="text-white text-sm mt-1">
+                        {applicant.file_201_data.hasSecurityLicense === 'Yes'
+                          ? `Yes — ${applicant.file_201_data.securityLicenseCategory || ''} ${applicant.file_201_data.securityLicenseNumber || ''} (Exp: ${applicant.file_201_data.securityLicenseExpiration || '—'})`
+                          : applicant.file_201_data.hasSecurityLicense === 'No' ? 'No' : '—'}
+                      </p>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-[#92a4c9] text-xs uppercase font-bold">NBI Clearance</p>
+                      <p className="text-white text-sm mt-1">
+                        {applicant.file_201_data.hasNBIClearance === 'Yes' ? `Yes — Exp: ${applicant.file_201_data.nbiClearanceExpiration || '—'}` : applicant.file_201_data.hasNBIClearance === 'No' ? 'No' : '—'}
+                      </p>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Police Clearance</p>
+                      <p className="text-white text-sm mt-1">
+                        {applicant.file_201_data.hasPoliceClearance === 'Yes' ? `Yes — Exp: ${applicant.file_201_data.policeClearanceExpiration || '—'}` : applicant.file_201_data.hasPoliceClearance === 'No' ? 'No' : '—'}
+                      </p>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Drug Test & Neuro Test</p>
+                      <p className="text-white text-sm mt-1">Drug Test: {applicant.file_201_data.drugTestDate || '—'} | Neuro Test: {applicant.file_201_data.neuroTestDate || '—'}</p>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-[#92a4c9] text-xs uppercase font-bold">COVID-19 Vaccination</p>
+                      <p className="text-white text-sm mt-1">
+                        {applicant.file_201_data.isVaccinatedCovid === 'Yes' ? 'Yes' : applicant.file_201_data.isVaccinatedCovid === 'No' ? `No — ${applicant.file_201_data.covidNotVaccinatedReason || '—'}` : '—'}
+                      </p>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Driver&apos;s License</p>
+                      <p className="text-white text-sm mt-1">
+                        {applicant.file_201_data.hasDriversLicense === 'Yes' ? `Yes — ${applicant.file_201_data.driversLicenseNumber || ''} (Exp: ${applicant.file_201_data.driversLicenseExpiration || '—'})` : applicant.file_201_data.hasDriversLicense === 'No' ? 'No' : '—'}
+                      </p>
+                    </div>
                   </div>
                 </section>
               )}

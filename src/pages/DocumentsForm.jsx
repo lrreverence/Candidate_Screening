@@ -31,6 +31,8 @@ const DocumentsForm = () => {
   const [selectedDocumentType, setSelectedDocumentType] = useState('')
   const [requiredDocuments, setRequiredDocuments] = useState([])
   const [availableDocumentTypes, setAvailableDocumentTypes] = useState(DOCUMENT_TYPES)
+  // Checkbox per category: user must confirm each required category before Submit is enabled
+  const [confirmedCategories, setConfirmedCategories] = useState({})
 
   // Fetch job requirements
   useEffect(() => {
@@ -305,6 +307,27 @@ const DocumentsForm = () => {
     }
   }
 
+  // Required categories: only from job requirements; if none, we only require at least one upload
+  const requiredCategories =
+    requiredDocuments.length > 0
+      ? requiredDocuments.map((d) => d.document_type)
+      : []
+
+  const hasUploadForCategory = (type) => uploadedFiles.some((f) => f.file_type === type)
+  const isCategoryConfirmed = (type) => !!confirmedCategories[type]
+
+  const allRequiredComplete =
+    requiredCategories.length > 0
+      ? requiredCategories.every(
+          (type) => hasUploadForCategory(type) && isCategoryConfirmed(type)
+        )
+      : uploadedFiles.length > 0
+
+  const toggleCategoryConfirmed = (type) => {
+    if (!hasUploadForCategory(type)) return
+    setConfirmedCategories((prev) => ({ ...prev, [type]: !prev[type] }))
+  }
+
   const handleRemoveFile = async (fileToRemove) => {
     try {
       // Remove from storage
@@ -330,8 +353,13 @@ const DocumentsForm = () => {
         }
       }
 
-      // Remove from state
-      setUploadedFiles(prev => prev.filter(f => f.id !== fileToRemove.id))
+      // Remove from state and unconfirm category if no files left for that type
+      const remaining = uploadedFiles.filter((f) => f.id !== fileToRemove.id)
+      setUploadedFiles(remaining)
+      const typeRemoved = fileToRemove.file_type
+      if (typeRemoved && !remaining.some((f) => f.file_type === typeRemoved)) {
+        setConfirmedCategories((prev) => ({ ...prev, [typeRemoved]: false }))
+      }
     } catch (error) {
       console.error('Error removing file:', error)
       alert('Failed to remove file. Please try again.')
@@ -341,8 +369,8 @@ const DocumentsForm = () => {
   const handleNext = async (e) => {
     e.preventDefault()
 
-    if (uploadedFiles.length === 0) {
-      alert('Please upload at least one document before proceeding.')
+    if (!allRequiredComplete) {
+      alert('Please upload at least one file for each document category and check the box to confirm each one before proceeding.')
       return
     }
 
@@ -438,12 +466,12 @@ const DocumentsForm = () => {
             <div className="flex gap-6 justify-between items-end">
               <div>
                 <p className="text-slate-900 dark:text-white text-lg font-bold leading-normal">Application Progress</p>
-                <p className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">Step 3 of 5: Document Upload</p>
+                <p className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">Step 4 of 6: Document Upload</p>
               </div>
               <span className="material-symbols-outlined text-primary text-3xl">upload_file</span>
             </div>
             <div className="rounded-full bg-gray-200 dark:bg-[#2563eb] h-3 overflow-hidden">
-              <div className="h-full rounded-full bg-primary relative w-3/5">
+              <div className="h-full rounded-full bg-primary relative w-2/3">
                 <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/30 animate-pulse"></div>
               </div>
             </div>
@@ -601,6 +629,63 @@ const DocumentsForm = () => {
               )}
             </div>
 
+            {/* Per-category checklist: must upload and check each before Submit (only when job has required documents) */}
+            {requiredCategories.length > 0 && (
+            <div className="bg-surface-light dark:bg-surface-dark rounded-xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-[#2563eb]">
+              <h3 className="text-slate-900 dark:text-white text-xl font-bold mb-2 flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">checklist</span>
+                Document checklist
+              </h3>
+              <p className="text-slate-600 dark:text-[#93c5fd] text-sm mb-4">
+                Upload at least one file per category below, then check the box to confirm. Next Step is only available when every required category is uploaded and confirmed.
+              </p>
+              <div className="space-y-3">
+                {requiredCategories.map((type) => {
+                  const hasUpload = hasUploadForCategory(type)
+                  const confirmed = isCategoryConfirmed(type)
+                  const count = uploadedFiles.filter((f) => f.file_type === type).length
+                  return (
+                    <div
+                      key={type}
+                      className={`flex items-center gap-3 p-3 rounded-lg border ${
+                        confirmed
+                          ? 'border-green-500/50 dark:border-green-500/50 bg-green-50/50 dark:bg-green-900/10'
+                          : hasUpload
+                            ? 'border-primary/50 dark:border-primary/50 bg-primary/5'
+                            : 'border-gray-200 dark:border-[#2563eb] bg-gray-50/50 dark:bg-[#1e293b]/50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        id={`confirm-${type}`}
+                        checked={confirmed}
+                        disabled={!hasUpload}
+                        onChange={() => toggleCategoryConfirmed(type)}
+                        className="h-5 w-5 rounded border-gray-400 dark:border-[#2563eb] text-primary focus:ring-primary focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      <label
+                        htmlFor={`confirm-${type}`}
+                        className={`flex-1 cursor-pointer text-sm font-medium ${
+                          hasUpload ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-gray-400'
+                        }`}
+                      >
+                        {type}
+                      </label>
+                      <span className="text-xs font-medium text-slate-600 dark:text-[#93c5fd]">
+                        {hasUpload ? `${count} file(s) uploaded` : 'No file uploaded'}
+                      </span>
+                      {confirmed && (
+                        <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-lg" title="Confirmed">
+                          check_circle
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            )}
+
             {/* Navigation Footer */}
             <div className="flex justify-between items-center pt-6 pb-20">
               <button
@@ -613,7 +698,7 @@ const DocumentsForm = () => {
               </button>
               <button
                 type="submit"
-                disabled={loading || uploading || uploadedFiles.length === 0}
+                disabled={loading || uploading || !allRequiredComplete}
                 className="group flex items-center gap-2 px-8 py-3 rounded-full bg-primary text-[#0f172a] font-bold shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] hover:bg-[#2563eb] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Saving...' : 'Next Step'}

@@ -349,9 +349,9 @@ const ApplicationForm = () => {
 
       console.log('[FORM] Success! Applicant ID:', result.applicantId)
 
-      // Navigate to step 2 (ID Picture Upload)
-      console.log('[FORM] Navigating to ID picture upload page...')
-      navigate(`/apply/${jobId || ''}/id-picture`)
+      // Navigate to step 2 (Work Experience)
+      console.log('[FORM] Navigating to Work Experience page...')
+      navigate(`/apply/${jobId || ''}/work-experience`)
     } catch (error) {
       console.error('[FORM] Error saving application:', error)
       const errorMessage = error?.message || 'Unknown error occurred'

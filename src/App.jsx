@@ -14,6 +14,7 @@ import Contact from './pages/Contact'
 import JobDetail from './pages/JobDetail'
 import ResetPassword from './pages/ResetPassword'
 import File201Form from './pages/File201Form'
+import WorkExperienceForm from './pages/WorkExperienceForm'
 import ProtectedAdminRoute from './components/ProtectedAdminRoute'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -76,6 +77,14 @@ const App = () => {
       <Route path="/services" element={<OurServices />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route
+        path="/apply/:jobId/work-experience"
+        element={
+          <ProtectedRoute>
+            <WorkExperienceForm />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/apply/:jobId/201-file"
         element={
