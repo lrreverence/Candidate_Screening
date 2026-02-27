@@ -434,7 +434,7 @@ const IdPictureUpload = () => {
       }
 
       // Navigate to documents page
-      navigate(`/apply/${jobId || ''}/documents`)
+      navigate(`/apply/${jobId || ''}/201-file`)
     } catch (error) {
       console.error('Error:', error)
       alert(`Failed to save: ${error.message}. Please try again.`)

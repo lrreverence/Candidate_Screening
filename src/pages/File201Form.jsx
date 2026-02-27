@@ -157,12 +157,12 @@ const File201Form = () => {
         if (uuidRegex.test(jobId)) {
           await supabase
             .from('applications')
-            .update({ current_step: 6 })
+            .update({ current_step: 5 })
             .eq('applicant_id', applicant.id)
             .eq('job_id', jobId)
         }
       }
-      navigate(`/apply/${jobId || ''}/success`)
+      navigate(`/apply/${jobId || ''}/documents`)
     } catch (err) {
       console.error(err)
       alert('Failed to submit. Please try again.')
@@ -172,7 +172,7 @@ const File201Form = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}/documents`)
+    navigate(`/apply/${jobId || ''}/id-picture`)
   }
 
   return (
@@ -198,12 +198,12 @@ const File201Form = () => {
             <div className="flex gap-6 justify-between items-end">
               <div>
                 <p className="text-slate-900 dark:text-white text-lg font-bold leading-normal">Application Progress</p>
-                <p className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">Step 5 of 6: 201 File</p>
+                <p className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">Step 4 of 6: 201 File</p>
               </div>
               <span className="material-symbols-outlined text-primary text-3xl">folder</span>
             </div>
             <div className="rounded-full bg-gray-200 dark:bg-[#2563eb] h-3 overflow-hidden">
-              <div className="h-full rounded-full bg-primary relative w-5/6">
+              <div className="h-full rounded-full bg-primary relative w-2/3">
                 <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/30 animate-pulse"></div>
               </div>
             </div>

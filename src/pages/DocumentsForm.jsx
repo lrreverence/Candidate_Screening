@@ -406,7 +406,7 @@ const DocumentsForm = () => {
         if (uuidRegex.test(jobId)) {
           const { error: appError } = await supabase
             .from('applications')
-            .update({ current_step: 4 })
+            .update({ current_step: 6 })
             .eq('applicant_id', applicant.id)
             .eq('job_id', jobId)
 
@@ -416,8 +416,8 @@ const DocumentsForm = () => {
         }
       }
 
-      // Navigate to 201 File step (Step 4)
-      navigate(`/apply/${jobId || ''}/201-file`)
+      // Navigate to Success (Step 6)
+      navigate(`/apply/${jobId || ''}/success`)
     } catch (error) {
       console.error('[DOCUMENTS] Error:', error)
       alert(`Failed to save: ${error.message}. Please try again.`)
@@ -427,7 +427,7 @@ const DocumentsForm = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}/id-picture`)
+    navigate(`/apply/${jobId || ''}/201-file`)
   }
 
   return (
@@ -466,12 +466,12 @@ const DocumentsForm = () => {
             <div className="flex gap-6 justify-between items-end">
               <div>
                 <p className="text-slate-900 dark:text-white text-lg font-bold leading-normal">Application Progress</p>
-                <p className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">Step 4 of 6: Document Upload</p>
+                <p className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">Step 5 of 6: Document Upload</p>
               </div>
               <span className="material-symbols-outlined text-primary text-3xl">upload_file</span>
             </div>
             <div className="rounded-full bg-gray-200 dark:bg-[#2563eb] h-3 overflow-hidden">
-              <div className="h-full rounded-full bg-primary relative w-2/3">
+              <div className="h-full rounded-full bg-primary relative w-5/6">
                 <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/30 animate-pulse"></div>
               </div>
             </div>
