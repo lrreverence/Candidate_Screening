@@ -1,0 +1,126 @@
+Test ID,Module,Test Case Title,Description,Steps,Expected Result,Priority,Type
+TC001,Home,Home page loads,Verify home page loads with job listings,"1. Navigate to / 2. Wait for load","Home page displays with header, job cards, and footer",High,Functional
+TC002,Home,Job list displays from Supabase,Jobs are fetched from database,"1. Open home 2. Check job cards","Job cards show title, location, salary, category from DB",High,Functional
+TC003,Home,Category filter All Jobs,Filter shows all jobs when All Jobs selected,"1. Select ""All Jobs"" 2. Observe list","All jobs displayed",Medium,Functional
+TC004,Home,Category filter Armed Guard,Filter by Armed Guard category,"1. Select ""Armed Guard"" 2. Observe list","Only Armed Guard jobs shown",Medium,Functional
+TC005,Home,Category filter Unarmed,Filter by Unarmed category,"1. Select ""Unarmed"" 2. Observe list","Only Unarmed jobs shown",Medium,Functional
+TC006,Home,Category filter CCTV Operator,Filter by CCTV Operator,"1. Select ""CCTV Operator"" 2. Observe list","Only CCTV Operator jobs shown",Medium,Functional
+TC007,Home,Category filter Patrol,Filter by Patrol category,"1. Select ""Patrol"" 2. Observe list","Only Patrol jobs shown",Medium,Functional
+TC008,Home,Search by job title,Search filters jobs by title,"1. Type job title in search 2. Submit/search","Matching jobs displayed",High,Functional
+TC009,Home,Search no results,Search with no matches,"1. Type nonexistent text 2. Search","No jobs or empty state shown",Low,Functional
+TC010,Home,Apply button when logged out,Click Apply on job when not logged in,"1. Ensure logged out 2. Click Apply on a job","Login modal opens",High,Functional
+TC011,Home,Apply button when logged in,Click Apply when user is logged in,"1. Log in 2. Click Apply on job","Navigate to /apply/:jobId",High,Functional
+TC012,Home,Already applied badge,Job shows applied state for user who applied,"1. Log in as user who applied 2. View home","Job card shows ""Already applied"" or similar",Medium,Functional
+TC013,Home,Navigation to About Us,Footer/link to About page,"1. Click About Us link","Navigate to /about, About content loads",Low,Functional
+TC014,Home,Navigation to Our Services,Link to Services page,"1. Click Our Services","Navigate to /services, services content loads",Low,Functional
+TC015,Home,Navigation to Contact,Link to Contact page,"1. Click Contact","Navigate to /contact",Low,Functional
+TC016,Home,Navigation to Terms,Link to Terms of Service,"1. Click Terms","Navigate to /terms",Low,Functional
+TC017,Home,Navigation to Privacy,Link to Privacy Policy,"1. Click Privacy Policy","Navigate to /privacy",Low,Functional
+TC018,Home,Admin redirect after login,Admin user redirected to admin after login,"1. Log in as admin 2. From home","Redirect to /admin",High,Functional
+TC019,Home,Job image display,Job card shows image when available,"1. View home with jobs that have images","Job images display correctly",Low,UI
+TC020,Home,Responsive layout mobile,Home displays correctly on mobile,"1. Resize to mobile width 2. Check layout","Layout responsive, no horizontal scroll",Medium,UI
+TC021,Auth,Login with valid email and password,Successful login with correct credentials,"1. Open login modal 2. Enter valid email and password 3. Submit","User logged in, modal closes",High,Functional
+TC022,Auth,Login invalid credentials,Login fails with wrong password,"1. Enter valid email, wrong password 2. Submit","Error message shown, user not logged in",High,Functional
+TC023,Auth,Login empty email,Validation when email is empty,"1. Leave email empty, enter password 2. Submit","Validation error or disable submit",Medium,Functional
+TC024,Auth,Login empty password,Validation when password is empty,"1. Enter email, leave password empty 2. Submit","Validation error or disable submit",Medium,Functional
+TC025,Auth,Login invalid email format,Validation for invalid email format,"1. Enter invalid email (e.g. no @) 2. Submit","Validation error",Low,Functional
+TC026,Auth,Google sign-in,Login with Google OAuth,"1. Click Sign in with Google 2. Complete OAuth flow","User logged in via Google",High,Functional
+TC027,Auth,Forgot password flow,Request password reset,"1. Click Forgot password 2. Enter email 3. Submit","Success message, reset email sent",Medium,Functional
+TC028,Auth,Signup with new user,Register new account,"1. Open signup modal 2. Fill name, email, password 3. Submit","Account created, user logged in",High,Functional
+TC029,Auth,Signup duplicate email,Signup with existing email,"1. Signup with already registered email 2. Submit","Error message, account not created",High,Functional
+TC030,Auth,Signup password confirmation,Password and confirm must match,"1. Signup with different password and confirm 2. Submit","Validation error",Medium,Functional
+TC031,Auth,Logout,User can sign out,"1. Log in 2. Click Logout/Sign out","User signed out, redirect or home state",High,Functional
+TC032,Auth,Protected route redirect,Unauthenticated user cannot access /apply,"1. Log out 2. Navigate to /apply or /apply/:jobId","Redirect to login or home",High,Security
+TC033,Auth,Reset password page valid token,Reset password with valid recovery link,"1. Open reset link from email (valid token) 2. Enter new password 3. Submit","Password updated, success message",High,Functional
+TC034,Auth,Reset password invalid token,Reset page with invalid or expired link,"1. Open /reset-password without valid hash/token","Error: Invalid or expired link",Medium,Functional
+TC035,Auth,Reset password mismatch,New password and confirm don't match,"1. On reset page enter different values 2. Submit","Validation error",Medium,Functional
+TC036,Job Detail,Job detail loads by ID,Job detail page shows correct job,"1. Navigate to /job/:jobId with valid ID","Job title, location, salary, description, requirements, benefits display",High,Functional
+TC037,Job Detail,Job detail invalid ID,Invalid or missing job ID,"1. Navigate to /job/invalid-id or non-existent UUID","Error or 404 handling",Medium,Functional
+TC038,Job Detail,Apply from job detail logged out,Apply button opens login when not logged in,"1. Open job detail logged out 2. Click Apply","Login modal opens",High,Functional
+TC039,Job Detail,Apply from job detail logged in,Navigate to application when logged in,"1. Open job detail logged in 2. Click Apply","Navigate to /apply/:jobId",High,Functional
+TC040,Job Detail,Application status displayed,User sees status if already applied,"1. Log in as user who applied 2. Open same job detail","Status badge shown (Pending, Screening, Interview, Hired, Rejected)",Medium,Functional
+TC041,Job Detail,Back to home,Back or home link from job detail,"1. On job detail 2. Click Back/Home","Navigate to home",Low,Functional
+TC042,Application Form,Application form loads,Identity and contact form loads for apply,"1. Log in 2. Go to /apply or /apply/:jobId","Form with first name, last name, DOB, gender, email, phone, address, licenses, height, weight, civil status, religion",High,Functional
+TC043,Application Form,Load existing applicant data,Draft data loaded if user has existing applicant,"1. Log in as user with saved applicant 2. Open application form","Form pre-filled with saved data",High,Functional
+TC044,Application Form,Required field validation,Submit with missing required fields,"1. Leave required fields empty 2. Submit","Validation errors, submit prevented",High,Functional
+TC045,Application Form,License checkboxes,Select multiple licenses,"1. Check several license options 2. Save/Submit","Selected licenses saved",Medium,Functional
+TC046,Application Form,Save draft,Save application without completing all steps,"1. Fill part of form 2. Click Save/Save draft","Data saved to DB, can resume later",High,Functional
+TC047,Application Form,Submit and continue,Submit form and go to next step,"1. Fill all required fields 2. Submit","Data saved, navigate to id-picture step",High,Functional
+TC048,Application Form,Email format validation,Invalid email in contact section,"1. Enter invalid email 2. Submit","Validation error",Medium,Functional
+TC049,Application Form,Phone format validation,Invalid phone number,"1. Enter invalid phone 2. Submit","Validation error or accepted per business rules",Low,Functional
+TC050,Application Form,Breadcrumbs and progress,Progress indicator shows current step,"1. On application form step","Breadcrumbs and progress show step 1 or identity",Low,UI
+TC051,Id Picture Upload,ID picture page loads,Upload 2x2 ID picture step loads,"1. After application form 2. Land on id-picture","Upload area and instructions visible",High,Functional
+TC052,Id Picture Upload,Upload valid image,Upload accepted image file,"1. Select image (JPEG/PNG) 2. Upload","File uploaded, preview shown",High,Functional
+TC053,Id Picture Upload,Reject invalid file type,Upload non-image file,"1. Select .pdf or .doc 2. Try upload","Error or rejection message",Medium,Functional
+TC054,Id Picture Upload,File size limit,Upload oversized image,"1. Select very large image 2. Upload","Error if over limit, or success if within limit",Low,Functional
+TC055,Id Picture Upload,Continue without upload,Skip or continue without ID picture if allowed,"1. Click Continue without uploading (if available)","Navigate to next step or validation",Medium,Functional
+TC056,Id Picture Upload,Back button,Return to application form,"1. On id-picture 2. Click Back","Navigate to /apply/:jobId",Low,Functional
+TC057,Id Picture Upload,Load existing ID picture,Existing ID picture shown if re-visiting,"1. User who already uploaded 2. Re-open id-picture step","Existing image preview loaded",Medium,Functional
+TC058,Documents Form,Documents page loads,Document upload step loads,"1. After id-picture 2. Land on documents","Document type dropdown and upload area visible",High,Functional
+TC059,Documents Form,Select document type,Choose document type from dropdown,"1. Select type e.g. NBI Clearance 2. Upload file","Type associated with upload",High,Functional
+TC060,Documents Form,Upload single document,Upload one document file,"1. Select type 2. Choose file 3. Upload","File uploaded, listed",High,Functional
+TC061,Documents Form,Upload multiple document types,Upload several different document types,"1. Upload NBI 2. Upload Police Clearance 3. etc.","All listed with correct types",High,Functional
+TC062,Documents Form,Required documents validation,Job requires specific docs; submit without all,"1. Job has required_documents 2. Leave one required missing 3. Submit","Validation or confirm required",High,Functional
+TC063,Documents Form,Confirm categories checkbox,Confirm each required category before submit,"1. Upload docs 2. Check confirm checkboxes 3. Submit","Submit enabled when all confirmed",Medium,Functional
+TC064,Documents Form,Back to id-picture,Back from documents step,"1. On documents 2. Click Back","Navigate to id-picture",Low,Functional
+TC065,Documents Form,Submit documents,Submit and proceed to next step,"1. Upload required docs 2. Confirm 3. Submit","Saved, navigate to work-experience or 201-file or success",High,Functional
+TC066,Work Experience,Work experience page loads,Work experience step loads,"1. Navigate to work-experience step","Form with role, place, year entries",High,Functional
+TC067,Work Experience,Add work experience entry,Add multiple work entries,"1. Click Add 2. Fill role, place, year","New row added",Medium,Functional
+TC068,Work Experience,Remove work experience entry,Remove an entry,"1. Add 2 entries 2. Remove one","Entry removed",Low,Functional
+TC069,Work Experience,At least one entry required,Submit with no valid entries,"1. Leave all empty or invalid 2. Submit","Validation: at least one entry with role, place, year",High,Functional
+TC070,Work Experience,Save work experience,Submit valid work experience,"1. Fill at least one role, place, year 2. Submit","Data saved to applicant, navigate next",High,Functional
+TC071,Work Experience,Load saved work experience,Existing data loaded on re-visit,"1. User with saved work experience 2. Open step","Entries pre-filled",Medium,Functional
+TC072,201 File Form,201 File page loads,File 201 form loads,"1. Navigate to 201-file step","Sections: Security License, NBI, Police, Drug Test, Neuro, Vaccination, Driver's License",High,Functional
+TC073,201 File Form,Security license section,Fill security license details and upload,"1. Select has license 2. Category, number, expiration 3. Upload file","Data and file saved",High,Functional
+TC074,201 File Form,NBI clearance section,NBI expiration and file,"1. Fill NBI expiration 2. Upload NBI file","Saved",Medium,Functional
+TC075,201 File Form,Drug test required,Drug test date and file required,"1. Fill drug test date 2. Upload file","Validation passes when filled",High,Functional
+TC076,201 File Form,Neuro test required,Neuro test date and file required,"1. Fill neuro test date 2. Upload file","Validation passes when filled",High,Functional
+TC077,201 File Form,COVID vaccination optional, Vaccination yes/no and optional card,"1. Select vaccinated 2. Optionally upload card","Saved",Medium,Functional
+TC078,201 File Form,Driver's license optional,Driver's license details and file,"1. Fill driver license number, expiration 2. Upload","Saved",Medium,Functional
+TC079,201 File Form,Validation errors shown,Submit with missing required 201 fields,"1. Leave required 201 fields empty 2. Submit","Errors shown per field",High,Functional
+TC080,201 File Form,Submit 201 file,Complete and submit 201 form,"1. Fill all required 2. Submit","Data and files saved, navigate to success or next",High,Functional
+TC081,Application Success,Success page loads,Final success step loads,"1. Complete application flow 2. Land on success","Success message and reference code displayed",High,Functional
+TC082,Application Success,Reference code displayed,Reference code shown and copyable,"1. On success page 2. Check reference code","Reference code visible (e.g. REF-YYYY-XXX)",High,Functional
+TC083,Application Success,Copy reference code,Copy button copies reference to clipboard,"1. Click Copy reference 2. Paste elsewhere","Reference code in clipboard",Medium,Functional
+TC084,Application Success,Back to home from success,Link to return home,"1. On success 2. Click Back to Home","Navigate to /",Low,Functional
+TC085,Application Success,No applicant record,Open success without completing application,"1. Manually go to /apply/:id/success without applicant data","Redirect or error, no crash",Medium,Functional
+TC086,Admin,Admin route protected,Non-admin cannot access /admin,"1. Log in as regular user 2. Navigate to /admin","Redirect or access denied",High,Security
+TC087,Admin,Dashboard loads,Admin dashboard loads with stats,"1. Log in as admin 2. Open /admin","Dashboard with total applicants, pending, for interview, license expiring, active jobs",High,Functional
+TC088,Admin,Dashboard recent applications,Recent applications list on dashboard,"1. On admin dashboard","Last 5 (or N) recent applications with name, job, link",Medium,Functional
+TC089,Admin,Applicants list loads,Applicants management page loads,"1. Go to /admin/applicants","Table/list of applicants with search and filters",High,Functional
+TC090,Admin,Applicants search,Search applicants by name or reference,"1. Type name or reference code in search 2. Apply","Filtered results",High,Functional
+TC091,Admin,Applicants filter by status,Filter by application status,"1. Select status e.g. Pending 2. Apply","Only matching status shown",Medium,Functional
+TC092,Admin,Applicants filter by date range,Filter by applied date from/to,"1. Set date from and to 2. Apply","Applications in date range",Medium,Functional
+TC093,Admin,Applicants sort,Sort by applied date or other column,"1. Click sort 2. Change direction","List re-ordered",Low,Functional
+TC094,Admin,Applicant detail opens,Click applicant to view detail,"1. Click row/link on applicant 2. Open detail","Applicant detail view with tabs",High,Functional
+TC095,Admin,Applicant detail tabs,Switch between Profile Documents 201 file tabs,"1. On applicant detail 2. Click each tab","Content switches correctly",Medium,Functional
+TC096,Admin,Update application status,Change status to Screening/Interview/Hired/Rejected,"1. On applicant detail 2. Select new status 3. Save","Status updated in DB, UI reflects",High,Functional
+TC097,Admin,Rejection reason,Set rejection reason when status Rejected,"1. Set status to Rejected 2. Enter reason 3. Save","Reason saved and shown to applicant if applicable",Medium,Functional
+TC098,Admin,Document viewer in detail,View uploaded documents in applicant detail,"1. Open Documents tab 2. Select document","Document preview or download",Medium,Functional
+TC099,Admin,Jobs list loads,Jobs management page loads,"1. Go to /admin/jobs","List of jobs with stats",High,Functional
+TC100,Admin,Create new job,Add new job with all fields,"1. Click Add/New Job 2. Fill title, location, department, type, description, requirements, salary, status 3. Save","Job created, appears in list",High,Functional
+TC101,Admin,Edit job,Edit existing job,"1. Click Edit on a job 2. Change fields 3. Save","Job updated",High,Functional
+TC102,Admin,Job image upload,Upload or change job image,"1. In job form 2. Select image file 3. Save","Image uploaded and displayed",Medium,Functional
+TC103,Admin,Job required documents,Set required documents for job,"1. In job form 2. Select required document types 3. Save","Required docs saved for job",Medium,Functional
+TC104,Admin,Job required credentials,Set required credentials/licenses for job,"1. In job form 2. Select required credentials 3. Save","Required credentials saved",Medium,Functional
+TC105,Admin,Job status active/closed,Set job status to active or closed,"1. Edit job 2. Set status 3. Save","Status updated, filtering works",Medium,Functional
+TC106,Admin,Delete job,Delete a job,"1. Click Delete on job 2. Confirm","Job removed from list",Medium,Functional
+TC107,Admin,Settings profile tab,Update admin profile in Settings,"1. Go to /admin/settings 2. Profile tab 3. Change name/phone 4. Save","Profile updated",Medium,Functional
+TC108,Admin,Settings system,Change system settings if available,"1. Settings > System 2. Toggle notifications or site name 3. Save","Settings saved",Low,Functional
+TC109,Admin,Sidebar navigation,Navigate via admin sidebar,"1. Click Applicants, Jobs, Settings, Dashboard","Correct page loads",Low,Functional
+TC110,Admin,Mobile sidebar toggle,Open/close sidebar on mobile,"1. Resize to mobile 2. Click menu 3. Open sidebar 4. Click link or close","Sidebar opens and closes",Low,UI
+TC111,Contact,Contact form loads,Contact page with form loads,"1. Navigate to /contact","Form with name, email, phone, subject, message",Low,Functional
+TC112,Contact,Contact form validation,Submit with empty required fields,"1. Leave required fields empty 2. Submit","Validation errors",Low,Functional
+TC113,Contact,Contact form submit,Submit valid contact form,"1. Fill all fields 2. Submit","Success message, form reset or confirmation",Low,Functional
+TC114,Contact,Contact subject pre-fill,Subject pre-filled from application-support link,"1. Navigate to /contact?subject=application-support","Subject set to application-support",Low,Functional
+TC115,Terms,Terms page loads,Terms of Service page loads,"1. Navigate to /terms","Terms content displayed",Low,Functional
+TC116,Privacy,Privacy page loads,Privacy Policy page loads,"1. Navigate to /privacy","Privacy content displayed",Low,Functional
+TC117,About,About page loads,About Us page loads,"1. Navigate to /about","About content displayed",Low,Functional
+TC118,Services,Our Services page loads,Our Services page loads,"1. Navigate to /services","Services content displayed",Low,Functional
+TC119,Application,Help button in flow,Help button visible during application,"1. On any application step 2. Look for Help","Help button/link visible, opens help or contact",Low,UI
+TC120,Admin,Admin notification bell,Notification bell in admin header,"1. Log in as admin 2. Check header","Notification bell icon visible",Low,UI
+TC121,Integration,Supabase jobs sync,Jobs on home match Supabase jobs table,"1. Add job in Supabase 2. Refresh home","New job appears on home",High,Integration
+TC122,Integration,Application saved to Supabase,Application form save creates/updates applicant,"1. Submit application form 2. Check Supabase applicants","Record exists with correct data",High,Integration
+TC123,Security,Admin role check,Only admin role can access admin routes,"1. Set user role to user in DB 2. Try /admin","Access denied or redirect",High,Security
+TC124,UI,Dark/light theme if supported,Theme toggle or system theme,"1. Toggle theme or change system preference","UI respects theme",Low,UI
+TC125,Performance,Home load time,Home page loads within acceptable time,"1. Clear cache 2. Load home 3. Measure","Page interactive within 3–5 seconds",Medium,Performance
