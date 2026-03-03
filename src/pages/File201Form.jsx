@@ -61,6 +61,56 @@ const File201Form = () => {
     update(field, file)
   }
 
+  /** Returns true only when all required questions are answered and conditional fields are filled. */
+  const isFormComplete = () => {
+    // A. Security License — must answer; if Yes, all sub-fields required
+    if (formData.hasSecurityLicense !== 'Yes' && formData.hasSecurityLicense !== 'No') return false
+    if (formData.hasSecurityLicense === 'Yes') {
+      if (!formData.securityLicenseCategory?.trim()) return false
+      if (!formData.securityLicenseNumber?.trim()) return false
+      if (!formData.securityLicenseExpiration?.trim()) return false
+      if (!formData.securityLicenseFile) return false
+    }
+
+    // B. NBI Clearance
+    if (formData.hasNBIClearance !== 'Yes' && formData.hasNBIClearance !== 'No') return false
+    if (formData.hasNBIClearance === 'Yes') {
+      if (!formData.nbiClearanceExpiration?.trim()) return false
+      if (!formData.nbiClearanceFile) return false
+    }
+
+    // C. Police Clearance
+    if (formData.hasPoliceClearance !== 'Yes' && formData.hasPoliceClearance !== 'No') return false
+    if (formData.hasPoliceClearance === 'Yes') {
+      if (!formData.policeClearanceExpiration?.trim()) return false
+      if (!formData.policeClearanceFile) return false
+    }
+
+    // D. Drug Test (always required)
+    if (!formData.drugTestDate?.trim()) return false
+    if (!formData.drugTestFile) return false
+
+    // E. Neuro Test (always required)
+    if (!formData.neuroTestDate?.trim()) return false
+    if (!formData.neuroTestFile) return false
+
+    // F. COVID-19
+    if (formData.isVaccinatedCovid !== 'Yes' && formData.isVaccinatedCovid !== 'No') return false
+    if (formData.isVaccinatedCovid === 'No') {
+      if (!formData.covidNotVaccinatedReason?.trim()) return false
+    }
+
+    // G. Driver's License
+    if (formData.hasDriversLicense !== 'Yes' && formData.hasDriversLicense !== 'No') return false
+    if (formData.hasDriversLicense === 'Yes') {
+      if (!formData.driversLicenseNumber?.trim()) return false
+      if (!formData.driversLicenseExpiration?.trim()) return false
+      if (!formData.driversLicenseFile) return false
+    }
+
+    return true
+  }
+
   const validate = () => {
     const newErrors = {}
 
@@ -573,7 +623,7 @@ const File201Form = () => {
               </button>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !isFormComplete()}
                 className="group flex items-center gap-2 px-8 py-3 rounded-full bg-primary text-[#0f172a] font-bold shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] hover:bg-[#2563eb] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Submitting...' : 'Next Step'}

@@ -368,12 +368,6 @@ const DocumentsForm = () => {
 
   const handleNext = async (e) => {
     e.preventDefault()
-
-    if (!allRequiredComplete) {
-      alert('Please upload at least one file for each document category and check the box to confirm each one before proceeding.')
-      return
-    }
-
     setLoading(true)
 
     try {
@@ -483,7 +477,7 @@ const DocumentsForm = () => {
               Upload Documents
             </h1>
             <p className="text-slate-600 dark:text-[#93c5fd] text-base md:text-lg font-normal leading-relaxed max-w-2xl">
-              Upload your supporting documents (PDF or images: JPEG, PNG, GIF, WebP; max 10MB per file). Documents are saved immediately to secure storage.
+              Upload your supporting documents (PDF or images: JPEG, PNG, GIF, WebP; max 10MB per file). Documents are saved immediately to secure storage. You may skip this step and proceed without uploading.
             </p>
           </div>
 
@@ -637,7 +631,7 @@ const DocumentsForm = () => {
                 Document checklist
               </h3>
               <p className="text-slate-600 dark:text-[#93c5fd] text-sm mb-4">
-                Upload at least one file per category below, then check the box to confirm. Next Step is only available when every required category is uploaded and confirmed.
+                You may upload at least one file per category and check the box to confirm, or skip and proceed without uploading.
               </p>
               <div className="space-y-3">
                 {requiredCategories.map((type) => {
@@ -698,7 +692,7 @@ const DocumentsForm = () => {
               </button>
               <button
                 type="submit"
-                disabled={loading || uploading || !allRequiredComplete}
+                disabled={loading || uploading}
                 className="group flex items-center gap-2 px-8 py-3 rounded-full bg-primary text-[#0f172a] font-bold shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] hover:bg-[#2563eb] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Saving...' : 'Next Step'}
