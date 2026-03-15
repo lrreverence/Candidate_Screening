@@ -95,7 +95,6 @@ const Dashboard = () => {
     const statusMap = {
       'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
       'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
-      'screening': { bg: 'bg-blue-100', text: 'text-navy', label: 'Screening' },
       'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
       'hired': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Hired' },
       'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' }

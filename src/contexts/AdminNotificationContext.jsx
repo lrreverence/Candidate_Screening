@@ -12,7 +12,7 @@ export function AdminNotificationProvider({ children }) {
       const { count, error } = await supabase
         .from('applications')
         .select('*', { count: 'exact', head: true })
-        .in('status', ['pending', 'submitted'])
+        .in('status', ['Pending', 'pending', 'submitted'])
 
       if (error) throw error
       setNewApplicationsCount(count ?? 0)

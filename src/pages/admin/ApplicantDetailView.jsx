@@ -219,7 +219,6 @@ const ApplicantDetailView = () => {
     const statusMap = {
       'pending': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Pending Review' },
       'submitted': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Pending Review' },
-      'screening': { bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/20', label: 'Screening' },
       'interview': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Interview' },
       'hired': { bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/20', label: 'Hired' },
       'rejected': { bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20', label: 'Rejected' }
@@ -545,17 +544,6 @@ const ApplicantDetailView = () => {
                 <span className="material-symbols-outlined text-[20px]">history</span>
                 <span className="text-sm font-bold tracking-wide">HISTORY</span>
               </button>
-              <button
-                onClick={() => setActiveTab('screening')}
-                className={`flex items-center gap-2 border-b-[3px] pb-3 pt-2 transition-all ${
-                  activeTab === 'screening'
-                    ? 'border-primary text-white'
-                    : 'border-transparent text-[#92a4c9] hover:text-white'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[20px]">fact_check</span>
-                <span className="text-sm font-bold tracking-wide">SCREENING</span>
-              </button>
             </div>
           </div>
 
@@ -740,14 +728,6 @@ const ApplicantDetailView = () => {
                       </div>
                     </div>
                   )}
-                  {applicant?.license_type && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">License Type</p>
-                        <p className="text-white font-medium text-sm mt-1">{applicant.license_type}</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </section>
 
@@ -825,11 +805,6 @@ const ApplicantDetailView = () => {
             </div>
           )}
 
-          {activeTab === 'screening' && (
-            <div className="p-6 pb-32">
-              <p className="text-[#92a4c9] text-sm">Screening results will be displayed here.</p>
-            </div>
-          )}
         </aside>
 
         {/* RIGHT PANEL: Document Viewer */}

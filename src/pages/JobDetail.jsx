@@ -9,7 +9,6 @@ import { supabase } from '../lib/supabase'
 const APPLICATION_STATUS_LABELS = {
   pending: { label: 'Pending Review', icon: 'schedule', className: 'text-yellow-500' },
   submitted: { label: 'Submitted', icon: 'check_circle', className: 'text-primary' },
-  screening: { label: 'Screening', icon: 'manage_search', className: 'text-blue-400' },
   interview: { label: 'Accepted – Next step: Interview', icon: 'event_available', className: 'text-green-500' },
   hired: { label: 'Accepted – Hired', icon: 'verified_user', className: 'text-green-500' },
   rejected: { label: 'Not selected', icon: 'cancel', className: 'text-red-400' }

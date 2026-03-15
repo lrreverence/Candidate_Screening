@@ -146,7 +146,7 @@ const ApplicationSuccess = () => {
     {
       icon: 'perm_contact_calendar',
       title: 'Interview',
-      description: 'Qualified candidates are invited for screening.'
+      description: 'Qualified candidates are invited for interview.'
     },
     {
       icon: 'verified_user',

@@ -268,8 +268,8 @@ const QualificationsForm = () => {
               </div>
               <span className="material-symbols-outlined text-primary text-3xl">verified</span>
             </div>
-            <div className="rounded-full bg-gray-200 dark:bg-[#2563eb] h-3 overflow-hidden">
-              <div className="h-full rounded-full bg-primary relative w-1/2">
+            <div className="rounded-full bg-gray-200 dark:bg-slate-700 h-3 overflow-hidden">
+              <div className="h-full rounded-full bg-primary dark:bg-blue-500 relative w-1/2">
                 <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/30 animate-pulse"></div>
               </div>
             </div>

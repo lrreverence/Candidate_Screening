@@ -9,8 +9,6 @@ const ApplicantsManagement = () => {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState({
-    licenseType: '',
-    trainingLevel: '',
     applicationStatus: '',
     appliedDateFrom: '',
     appliedDateTo: ''
@@ -33,18 +31,40 @@ const ApplicantsManagement = () => {
 
   const fetchStats = async () => {
     try {
-      const { data: applicants, error } = await supabase
+      // Total applicants
+      const { count: totalApplicants, error: applicantsError } = await supabase
         .from('applicants')
-        .select('status, license_status')
+        .select('*', { count: 'exact', head: true })
+      if (applicantsError) throw applicantsError
 
-      if (error) throw error
+      // Application status counts (match filter: Pending = Pending + submitted)
+      const { data: applications, error: appsError } = await supabase
+        .from('applications')
+        .select('status')
+      if (appsError) throw appsError
 
-      const total = applicants?.length || 0
-      const pending = applicants?.filter(app => app.status === 'Pending' || app.status === 'pending').length || 0
-      const hired = applicants?.filter(app => app.status === 'Hired' || app.status === 'hired').length || 0
-      const expiring = applicants?.filter(app => app.license_status === 'expired' || app.license_status === 'expiring').length || 0
+      const pending = applications?.filter(
+        app => ['Pending', 'pending', 'submitted'].includes(app?.status)
+      ).length || 0
+      const hired = applications?.filter(
+        app => (app?.status || '').toLowerCase() === 'hired'
+      ).length || 0
 
-      setStats({ total, pending, hired, expiring })
+      // Expiring licenses from applicants
+      const { data: applicants, error: expError } = await supabase
+        .from('applicants')
+        .select('license_status')
+      if (expError) throw expError
+      const expiring = applicants?.filter(
+        app => app?.license_status === 'expired' || app?.license_status === 'expiring'
+      ).length || 0
+
+      setStats({
+        total: totalApplicants ?? 0,
+        pending,
+        hired,
+        expiring
+      })
     } catch (error) {
       console.error('Error fetching stats:', error)
     }
@@ -66,9 +86,7 @@ const ApplicantsManagement = () => {
             phone,
             reference_code,
             status,
-            license_type,
             license_status,
-            training_level,
             licenses,
             documents (file_type, application_id)
           ),
@@ -80,9 +98,14 @@ const ApplicantsManagement = () => {
         `)
         .order('created_at', { ascending: false })
 
-      // Apply filters
+      // Apply filters — DB stores 'Pending' | 'submitted' | 'Interview' | 'Hired' | 'Rejected'
       if (filters.applicationStatus) {
-        query = query.eq('status', filters.applicationStatus.toLowerCase())
+        if (filters.applicationStatus === 'Pending') {
+          query = query.in('status', ['Pending', 'pending', 'submitted'])
+        } else {
+          const s = filters.applicationStatus
+          query = query.in('status', [s, s.toLowerCase()])
+        }
       }
 
       const { data, error } = await query
@@ -92,18 +115,6 @@ const ApplicantsManagement = () => {
       // Filter by search query and additional filters
       let filtered = data || []
       
-      // Filter by license type and training level (from applicant)
-      if (filters.licenseType) {
-        filtered = filtered.filter(app => 
-          app.applicants?.license_type === filters.licenseType
-        )
-      }
-      if (filters.trainingLevel) {
-        filtered = filtered.filter(app => 
-          app.applicants?.training_level === filters.trainingLevel
-        )
-      }
-
       // Filter by search query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase()
@@ -147,8 +158,6 @@ const ApplicantsManagement = () => {
 
   const handleResetFilters = () => {
     setFilters({
-      licenseType: '',
-      trainingLevel: '',
       applicationStatus: '',
       appliedDateFrom: '',
       appliedDateTo: ''
@@ -289,7 +298,6 @@ const ApplicantsManagement = () => {
     const statusMap = {
       'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
       'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
-      'screening': { bg: 'bg-blue-100', text: 'text-navy', label: 'Screening' },
       'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
       'hired': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Hired' },
       'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' }
@@ -439,40 +447,6 @@ const ApplicantsManagement = () => {
           <div className="flex flex-col gap-4 border-b border-gray-200 p-4 lg:p-6 lg:flex-row lg:items-end">
             <div className="flex-1 grid grid-cols-1 gap-4 md:grid-cols-3">
               <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">License Type</span>
-                <div className="relative">
-                  <select
-                    className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
-                    value={filters.licenseType}
-                    onChange={(e) => handleFilterChange('licenseType', e.target.value)}
-                  >
-                    <option value="">All Licenses</option>
-                    <option value="PLTC">PLTC (Private Lady)</option>
-                    <option value="SO">SO (Security Officer)</option>
-                    <option value="SG">SG (Security Guard)</option>
-                    <option value="Class 1A">Class 1A</option>
-                    <option value="Class 1C">Class 1C</option>
-                  </select>
-                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
-                </div>
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Training Level</span>
-                <div className="relative">
-                  <select
-                    className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
-                    value={filters.trainingLevel}
-                    onChange={(e) => handleFilterChange('trainingLevel', e.target.value)}
-                  >
-                    <option value="">All Training</option>
-                    <option value="BOSH">BOSH Certified</option>
-                    <option value="CCTV">CCTV Operator</option>
-                    <option value="VIP">VIP Protection</option>
-                  </select>
-                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
-                </div>
-              </label>
-              <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Application Status</span>
                 <div className="relative">
                   <select
@@ -482,7 +456,6 @@ const ApplicantsManagement = () => {
                   >
                     <option value="">Any Status</option>
                     <option value="Pending">Pending Review</option>
-                    <option value="Screening">Screening</option>
                     <option value="Interview">Interview Scheduled</option>
                     <option value="Hired">Hired</option>
                     <option value="Rejected">Rejected</option>

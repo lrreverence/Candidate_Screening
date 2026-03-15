@@ -15,9 +15,9 @@ const ApplicationProgress = ({ currentStep = 1, totalSteps = 3 }) => {
         <span className="text-primary">{stepLabels[currentStep - 1] || `Step ${currentStep}`}</span>
         <span className="text-gray-400">Step {currentStep} of {totalSteps}</span>
       </div>
-      <div className="w-full bg-gray-200 dark:bg-black/30 rounded-full h-2.5">
+      <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2.5">
         <div 
-          className="bg-primary h-2.5 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)] transition-all duration-300"
+          className="bg-primary dark:bg-blue-500 h-2.5 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)] transition-all duration-300"
           style={{ width: `${progressPercentage}%` }}
         ></div>
       </div>
