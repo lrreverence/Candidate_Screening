@@ -64,35 +64,47 @@ const ApplicationSuccess = () => {
           setReferenceId(finalRefCode)
         }
 
-        // Mark application as submitted (only if jobId is provided and is a valid UUID)
-        if (jobId) {
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-          const isValidUUID = uuidRegex.test(jobId)
-          
-          if (isValidUUID) {
-            const { data: existingApp } = await supabase
-              .from('applications')
-              .select('id')
-              .eq('applicant_id', applicant.id)
-              .eq('job_id', jobId)
-              .maybeSingle()
+        // Mark application as NEW (separate queue from pending review)
+        // Supports both job-specific applications (job_id = job UUID) and general applications (job_id = null).
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        const isValidUUID = !!jobId && uuidRegex.test(jobId)
 
-            if (existingApp) {
-              // Update existing application to submitted
-              const { error: updateAppError } = await supabase
-                .from('applications')
-                .update({
-                  status: 'submitted',
-                  current_step: 6,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', existingApp.id)
+        const findAppQuery = supabase
+          .from('applications')
+          .select('id')
+          .eq('applicant_id', applicant.id)
 
-              if (updateAppError) {
-                console.error('Error updating application:', updateAppError)
-                // Don't throw - application data is already saved
-              }
-            }
+        const { data: existingApp, error: findAppError } = await (isValidUUID
+          ? findAppQuery.eq('job_id', jobId).maybeSingle()
+          : findAppQuery.is('job_id', null).maybeSingle())
+
+        if (findAppError) {
+          console.error('Error finding application:', findAppError)
+        } else if (existingApp) {
+          const { error: updateAppError } = await supabase
+            .from('applications')
+            .update({
+              status: 'NEW',
+              current_step: 6,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingApp.id)
+
+          if (updateAppError) {
+            console.error('Error updating application:', updateAppError)
+          }
+        } else {
+          const { error: insertAppError } = await supabase
+            .from('applications')
+            .insert({
+              applicant_id: applicant.id,
+              job_id: isValidUUID ? jobId : null,
+              status: 'NEW',
+              current_step: 6
+            })
+
+          if (insertAppError) {
+            console.error('Error creating application:', insertAppError)
           }
         }
 

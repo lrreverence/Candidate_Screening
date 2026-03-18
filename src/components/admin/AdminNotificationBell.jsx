@@ -41,7 +41,7 @@ export default function AdminNotificationBell() {
           </div>
           {hasNew ? (
             <Link
-              to="/admin/applicants"
+              to="/admin/applicants?status=NEW"
               onClick={() => setOpen(false)}
               className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left"
             >
@@ -52,7 +52,7 @@ export default function AdminNotificationBell() {
                 <p className="text-sm font-medium text-gray-900">
                   {newApplicationsCount} new application{newApplicationsCount !== 1 ? 's' : ''}
                 </p>
-                <p className="text-xs text-gray-500">Pending review</p>
+                <p className="text-xs text-gray-500">New applicants</p>
               </div>
               <span className="material-symbols-outlined text-gray-400 ml-auto text-lg">chevron_right</span>
             </Link>

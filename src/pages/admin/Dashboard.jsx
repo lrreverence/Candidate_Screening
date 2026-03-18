@@ -31,12 +31,16 @@ const Dashboard = () => {
       if (applicantsError) throw applicantsError
 
       const totalApplicants = applicants?.length || 0
-      const pendingReview = applicants?.filter(app => app.status === 'Pending' || app.status === 'pending').length || 0
+      // Application queues live on the applications table (NEW vs Pending Review)
+      const { data: appStatuses, error: appStatusError } = await supabase
+        .from('applications')
+        .select('status')
 
-      // Count total for interview (scheduled / interview status)
-      const totalForInterview = applicants?.filter(app =>
-        (app.status || '').toLowerCase() === 'interview'
-      ).length || 0
+      if (appStatusError) throw appStatusError
+
+      const newApplicants = appStatuses?.filter(app => (app.status || '').toLowerCase() === 'new').length || 0
+      const pendingReview = appStatuses?.filter(app => ['Pending', 'pending', 'submitted'].includes(app?.status)).length || 0
+      const totalForInterview = appStatuses?.filter(app => (app.status || '').toLowerCase() === 'interview').length || 0
 
       const licenseExpiring = applicants?.filter(app =>
         app.license_status === 'expired' || app.license_status === 'expiring'
@@ -77,6 +81,7 @@ const Dashboard = () => {
 
       setStats({
         totalApplicants,
+        newApplicants,
         pendingReview,
         totalForInterview,
         licenseExpiring,
@@ -93,6 +98,7 @@ const Dashboard = () => {
 
   const getStatusBadge = (status) => {
     const statusMap = {
+      'new': { bg: 'bg-blue-50', text: 'text-blue-700', label: 'New' },
       'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
       'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
       'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
@@ -162,6 +168,27 @@ const Dashboard = () => {
               <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="flex items-start justify-between">
                   <div>
+                    <p className="text-sm font-medium text-gray-500">New Applicants</p>
+                    <p className="mt-2 text-3xl font-bold text-navy">{stats.newApplicants || 0}</p>
+                  </div>
+                  <div className="rounded-md bg-blue-50 p-3 text-blue-600">
+                    <span className="material-symbols-outlined text-2xl">fiber_new</span>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Link
+                    to="/admin/applicants?status=NEW"
+                    className="text-xs text-primary hover:text-navy font-medium flex items-center gap-1"
+                  >
+                    Triage new applicants
+                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  </Link>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div>
                     <p className="text-sm font-medium text-gray-500">Pending Review</p>
                     <p className="mt-2 text-3xl font-bold text-navy">{stats.pendingReview}</p>
                   </div>
@@ -172,22 +199,6 @@ const Dashboard = () => {
                 <div className="mt-4 flex items-center text-xs text-yellow-600">
                   <span className="material-symbols-outlined text-sm">warning</span>
                   <span className="ml-1 font-medium">Requires attention</span>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Total for Interview</p>
-                    <p className="mt-2 text-3xl font-bold text-navy">{stats.totalForInterview}</p>
-                  </div>
-                  <div className="rounded-md bg-blue-50 p-3 text-blue-600">
-                    <span className="material-symbols-outlined text-2xl">event_available</span>
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center text-xs text-blue-600">
-                  <span className="material-symbols-outlined text-sm">schedule</span>
-                  <span className="ml-1 font-medium">Scheduled for interview</span>
                 </div>
               </div>
 

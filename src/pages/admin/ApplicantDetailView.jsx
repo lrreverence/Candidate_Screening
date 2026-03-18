@@ -217,6 +217,7 @@ const ApplicantDetailView = () => {
 
   const getStatusBadge = (status) => {
     const statusMap = {
+      'new': { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', label: 'New' },
       'pending': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Pending Review' },
       'submitted': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Pending Review' },
       'interview': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Interview' },

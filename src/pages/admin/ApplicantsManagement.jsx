@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import AdminNotificationBell from '../../components/admin/AdminNotificationBell'
 import AdminHelpButton from '../../components/admin/AdminHelpButton'
 
 const ApplicantsManagement = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -20,7 +21,7 @@ const ApplicantsManagement = () => {
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
-    hired: 0,
+    new: 0,
     expiring: 0
   })
 
@@ -28,6 +29,17 @@ const ApplicantsManagement = () => {
     fetchApplications()
     fetchStats()
   }, [filters, searchQuery])
+
+  // Allow deep-linking into a queue (e.g. from notifications)
+  useEffect(() => {
+    const status = (searchParams.get('status') || '').trim()
+    if (!status) return
+    setFilters(prev => ({
+      ...prev,
+      applicationStatus: status
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const fetchStats = async () => {
     try {
@@ -37,17 +49,17 @@ const ApplicantsManagement = () => {
         .select('*', { count: 'exact', head: true })
       if (applicantsError) throw applicantsError
 
-      // Application status counts (match filter: Pending = Pending + submitted)
+      // Application status counts (Pending Review = Pending + submitted)
       const { data: applications, error: appsError } = await supabase
         .from('applications')
         .select('status')
       if (appsError) throw appsError
 
+      const newCount = applications?.filter(
+        app => (app?.status || '').toLowerCase() === 'new'
+      ).length || 0
       const pending = applications?.filter(
         app => ['Pending', 'pending', 'submitted'].includes(app?.status)
-      ).length || 0
-      const hired = applications?.filter(
-        app => (app?.status || '').toLowerCase() === 'hired'
       ).length || 0
 
       // Expiring licenses from applicants
@@ -61,8 +73,8 @@ const ApplicantsManagement = () => {
 
       setStats({
         total: totalApplicants ?? 0,
+        new: newCount,
         pending,
-        hired,
         expiring
       })
     } catch (error) {
@@ -100,7 +112,9 @@ const ApplicantsManagement = () => {
 
       // Apply filters — DB stores 'Pending' | 'submitted' | 'Interview' | 'Hired' | 'Rejected'
       if (filters.applicationStatus) {
-        if (filters.applicationStatus === 'Pending') {
+        if (filters.applicationStatus.toUpperCase() === 'NEW') {
+          query = query.in('status', ['NEW', 'new'])
+        } else if (filters.applicationStatus === 'Pending') {
           query = query.in('status', ['Pending', 'pending', 'submitted'])
         } else {
           const s = filters.applicationStatus
@@ -163,6 +177,27 @@ const ApplicantsManagement = () => {
       appliedDateTo: ''
     })
     setSearchQuery('')
+    setSearchParams({})
+  }
+
+  const handleMoveToPendingReview = async (app) => {
+    if (!confirm('Move this application from NEW to Pending Review?')) return
+    try {
+      const { error } = await supabase
+        .from('applications')
+        .update({
+          status: 'submitted',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', app.id)
+
+      if (error) throw error
+      fetchApplications()
+      fetchStats()
+    } catch (err) {
+      console.error('Error updating application status:', err)
+      alert(`Failed to update application: ${err?.message || 'Please try again.'}`)
+    }
   }
 
   const handleSort = (column) => {
@@ -296,6 +331,7 @@ const ApplicantsManagement = () => {
 
   const getStatusBadge = (status) => {
     const statusMap = {
+      'new': { bg: 'bg-blue-50', text: 'text-blue-700', label: 'New' },
       'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
       'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
       'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
@@ -399,6 +435,20 @@ const ApplicantsManagement = () => {
           <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-start justify-between">
               <div>
+                <p className="text-sm font-medium text-gray-500">New Applicants</p>
+                <p className="mt-1 text-2xl font-bold text-navy">{stats.new || 0}</p>
+              </div>
+              <div className="rounded-md bg-blue-50 p-2 text-blue-600">
+                <span className="material-symbols-outlined">fiber_new</span>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center text-xs text-blue-600">
+              <span className="font-medium">Needs triage</span>
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
                 <p className="text-sm font-medium text-gray-500">Pending Review</p>
                 <p className="mt-1 text-2xl font-bold text-navy">{stats.pending}</p>
               </div>
@@ -408,21 +458,6 @@ const ApplicantsManagement = () => {
             </div>
             <div className="mt-2 flex items-center text-xs text-yellow-600">
               <span className="font-medium">Requires immediate attention</span>
-            </div>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">Hired This Month</p>
-                <p className="mt-1 text-2xl font-bold text-navy">{stats.hired}</p>
-              </div>
-              <div className="rounded-md bg-blue-50 p-2 text-blue-600">
-                <span className="material-symbols-outlined">check_circle</span>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center text-xs text-blue-600">
-              <span className="material-symbols-outlined text-sm">trending_up</span>
-              <span className="ml-1 font-medium">+2% vs target</span>
             </div>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
@@ -455,6 +490,7 @@ const ApplicantsManagement = () => {
                     onChange={(e) => handleFilterChange('applicationStatus', e.target.value)}
                   >
                     <option value="">Any Status</option>
+                    <option value="NEW">New Applicants</option>
                     <option value="Pending">Pending Review</option>
                     <option value="Interview">Interview Scheduled</option>
                     <option value="Hired">Hired</option>
@@ -565,6 +601,7 @@ const ApplicantsManagement = () => {
                           {jobApplications.map((app) => {
                             const applicant = app.applicants
                             const compliance = getCompliancePercentage(app)
+                            const isNew = (app.status || '').toLowerCase() === 'new'
                             return (
                               <tr key={app.id} className="group hover:bg-blue-50/30 transition-colors">
                                 <td className="whitespace-nowrap px-6 py-4">
@@ -608,6 +645,16 @@ const ApplicantsManagement = () => {
                                 </td>
                                 <td className="whitespace-nowrap px-6 py-4 text-right">
                                   <div className="flex items-center justify-end gap-2">
+                                    {isNew && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveToPendingReview(app)}
+                                        className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                                        title="Move to Pending Review"
+                                      >
+                                        Triage
+                                      </button>
+                                    )}
                                     <Link
                                       to={`/admin/applicants/${app.id}`}
                                       className="rounded p-1.5 text-gray-500 hover:bg-white hover:text-navy hover:shadow-sm transition-all"
