@@ -248,12 +248,12 @@ const File201Form = () => {
             <div className="flex gap-6 justify-between items-end">
               <div>
                 <p className="text-slate-900 dark:text-white text-lg font-bold leading-normal">Application Progress</p>
-                <p className="text-slate-500 dark:text-[#93c5fd] text-sm font-normal">Step 4 of 6: 201 File</p>
+                <p className="text-green-700 dark:text-green-300 text-sm font-normal">Step 4 of 6: 201 File</p>
               </div>
-              <span className="material-symbols-outlined text-primary text-3xl">folder</span>
+              <span className="material-symbols-outlined text-green-500 text-3xl">folder</span>
             </div>
             <div className="rounded-full bg-gray-200 dark:bg-slate-700 h-3 overflow-hidden">
-              <div className="h-full rounded-full bg-primary dark:bg-blue-500 relative w-2/3">
+              <div className="h-full rounded-full bg-green-500 dark:bg-green-500 relative w-2/3">
                 <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/30 animate-pulse"></div>
               </div>
             </div>

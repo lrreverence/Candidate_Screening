@@ -366,10 +366,10 @@ const DocumentUploadForm = () => {
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-end">
               <p className="text-white text-base font-medium leading-normal">Step 3 of 4: Document Submission</p>
-              <p className="text-primary text-sm font-bold leading-normal">75%</p>
+              <p className="text-green-500 text-sm font-bold leading-normal">75%</p>
             </div>
             <div className="rounded-full bg-border-dark h-2 overflow-hidden">
-              <div className="h-full rounded-full bg-primary" style={{ width: '75%' }}></div>
+              <div className="h-full rounded-full bg-green-500" style={{ width: '75%' }}></div>
             </div>
           </div>
 
