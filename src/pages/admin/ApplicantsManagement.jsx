@@ -460,20 +460,22 @@ const ApplicantsManagement = () => {
               <span className="font-medium">Requires immediate attention</span>
             </div>
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">License Expiry</p>
-                <p className="mt-1 text-2xl font-bold text-navy">{stats.expiring}</p>
+          {(stats.expiring || 0) > 0 && (
+            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">License Expiry</p>
+                  <p className="mt-1 text-2xl font-bold text-navy">{stats.expiring}</p>
+                </div>
+                <div className="rounded-md bg-red-50 p-2 text-red-600">
+                  <span className="material-symbols-outlined">warning</span>
+                </div>
               </div>
-              <div className="rounded-md bg-red-50 p-2 text-red-600">
-                <span className="material-symbols-outlined">warning</span>
+              <div className="mt-2 flex items-center text-xs text-red-600">
+                <span className="font-medium">Expiring within 30 days</span>
               </div>
             </div>
-            <div className="mt-2 flex items-center text-xs text-red-600">
-              <span className="font-medium">Expiring within 30 days</span>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Main Section */}

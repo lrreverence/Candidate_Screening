@@ -202,20 +202,22 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">License Expiring</p>
-                    <p className="mt-2 text-3xl font-bold text-navy">{stats.licenseExpiring}</p>
+              {stats.licenseExpiring > 0 && (
+                <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">License Expiring</p>
+                      <p className="mt-2 text-3xl font-bold text-navy">{stats.licenseExpiring}</p>
+                    </div>
+                    <div className="rounded-md bg-red-50 p-3 text-red-600">
+                      <span className="material-symbols-outlined text-2xl">warning</span>
+                    </div>
                   </div>
-                  <div className="rounded-md bg-red-50 p-3 text-red-600">
-                    <span className="material-symbols-outlined text-2xl">warning</span>
+                  <div className="mt-4 flex items-center text-xs text-red-600">
+                    <span className="font-medium">Expiring within 30 days</span>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center text-xs text-red-600">
-                  <span className="font-medium">Expiring within 30 days</span>
-                </div>
-              </div>
+              )}
 
               <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="flex items-start justify-between">
