@@ -5,7 +5,7 @@ import AdminNotificationBell from '../../components/admin/AdminNotificationBell'
 import AdminHelpButton from '../../components/admin/AdminHelpButton'
 
 const Settings = () => {
-  const { user, userProfile } = useAuth()
+  const { user, userProfile, refreshUserProfile } = useAuth()
   const [activeTab, setActiveTab] = useState('profile')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
@@ -51,20 +51,27 @@ const Settings = () => {
   }
 
   const handleSaveProfile = async () => {
+    if (!user?.id) {
+      setMessage({ type: 'error', text: 'You must be signed in to update your profile.' })
+      return
+    }
+
     setSaving(true)
     setMessage({ type: '', text: '' })
 
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from('users')
         .update({
-          full_name: profileData.full_name,
-          phone: profileData.phone
+          full_name: profileData.full_name || null,
+          phone: profileData.phone?.trim() || null,
+          updated_at: new Date().toISOString()
         })
         .eq('id', user.id)
 
       if (error) throw error
 
+      await refreshUserProfile?.()
       setMessage({ type: 'success', text: 'Profile updated successfully!' })
     } catch (error) {
       console.error('Error updating profile:', error)
