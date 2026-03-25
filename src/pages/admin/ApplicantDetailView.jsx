@@ -216,16 +216,16 @@ const ApplicantDetailView = () => {
   }
 
   const getStatusBadge = (status) => {
+    const key = status?.toLowerCase() === 'hired' ? 'interview' : status?.toLowerCase()
     const statusMap = {
       'new': { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', label: 'New' },
       'pending': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Pending Review' },
       'submitted': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Pending Review' },
       'interview': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Interview' },
-      'hired': { bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/20', label: 'Hired' },
       'rejected': { bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20', label: 'Rejected' }
     }
 
-    const config = statusMap[status?.toLowerCase()] || statusMap['pending']
+    const config = statusMap[key] || statusMap['pending']
     return (
       <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide ${config.bg} ${config.text} ${config.border} border`}>
         {status === 'pending' || status === 'submitted' ? (
@@ -930,7 +930,7 @@ const ApplicantDetailView = () => {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          {!['interview', 'rejected'].includes(application?.status?.toLowerCase()) && (
+          {!['interview', 'rejected', 'hired'].includes(application?.status?.toLowerCase()) && (
             <>
               <button
                 onClick={handleReject}

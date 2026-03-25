@@ -110,7 +110,7 @@ const ApplicantsManagement = () => {
         `)
         .order('created_at', { ascending: false })
 
-      // Apply filters — DB stores 'Pending' | 'submitted' | 'Interview' | 'Hired' | 'Rejected'
+      // Apply filters — DB may include legacy 'Hired'; admin UI does not expose it as a filter value
       if (filters.applicationStatus) {
         if (filters.applicationStatus.toUpperCase() === 'NEW') {
           query = query.in('status', ['NEW', 'new'])
@@ -330,16 +330,16 @@ const ApplicantsManagement = () => {
   }, [applications, sortBy, sortDirection])
 
   const getStatusBadge = (status) => {
+    const key = status?.toLowerCase() === 'hired' ? 'interview' : status?.toLowerCase()
     const statusMap = {
       'new': { bg: 'bg-blue-50', text: 'text-blue-700', label: 'New' },
       'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
       'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
       'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
-      'hired': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Hired' },
       'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' }
     }
 
-    const config = statusMap[status?.toLowerCase()] || statusMap['pending']
+    const config = statusMap[key] || statusMap['pending']
     return (
       <span className={`inline-flex items-center rounded-md ${config.bg} px-2.5 py-1 text-xs font-semibold ${config.text}`}>
         {config.label}
@@ -495,7 +495,6 @@ const ApplicantsManagement = () => {
                     <option value="NEW">New Applicants</option>
                     <option value="Pending">Pending Review</option>
                     <option value="Interview">Interview Scheduled</option>
-                    <option value="Hired">Hired</option>
                     <option value="Rejected">Rejected</option>
                   </select>
                   <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
