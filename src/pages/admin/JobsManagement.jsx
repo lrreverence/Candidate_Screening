@@ -61,8 +61,6 @@ const JobsManagement = () => {
   const [imageFile, setImageFile] = useState(null) // Store selected file
   const [imagePreview, setImagePreview] = useState(null) // Store preview URL
   const [uploadingImage, setUploadingImage] = useState(false)
-  const [categoryEditorMode, setCategoryEditorMode] = useState('continuous') // continuous | dropdown
-  const [selectedCategoryKey, setSelectedCategoryKey] = useState('Personal Info')
 
   const licenseOptions = [
     { id: 'psa_birth_certificate', label: 'PSA Birth Certificate', subtitle: 'Philippine Statistics Authority' },
@@ -314,8 +312,6 @@ const JobsManagement = () => {
       setImagePreview(null)
     }
     setImageFile(null)
-    setCategoryEditorMode('continuous')
-    setSelectedCategoryKey('Personal Info')
     setShowJobForm(true)
   }
 
@@ -347,8 +343,6 @@ const JobsManagement = () => {
     })
     setImageFile(null)
     setImagePreview(null)
-    setCategoryEditorMode('continuous')
-    setSelectedCategoryKey('Personal Info')
   }
 
   const handleFormChange = (e) => {
@@ -1043,75 +1037,30 @@ const JobsManagement = () => {
                       CATEGORY
                       <span className="text-xs font-normal text-gray-500 ml-2">(Percentages can be modified by Admin)</span>
                     </label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Mode</span>
-                      <select
-                        value={categoryEditorMode}
-                        onChange={(e) => setCategoryEditorMode(e.target.value)}
-                        className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
-                      >
-                        <option value="continuous">Continuous down</option>
-                        <option value="dropdown">Dropdown</option>
-                      </select>
-                    </div>
                   </div>
 
-                  {categoryEditorMode === 'dropdown' ? (
-                    <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
-                        <label className="block">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Category</div>
-                          <select
-                            value={selectedCategoryKey}
-                            onChange={(e) => setSelectedCategoryKey(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
-                          >
-                            {(Array.isArray(formData.category_percentages) ? formData.category_percentages : []).map((row) => (
-                              <option key={row.category} value={row.category}>{row.category}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="block">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Percentage</div>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.1"
-                              value={(Array.isArray(formData.category_percentages) ? formData.category_percentages : []).find(r => r.category === selectedCategoryKey)?.percentage ?? 0}
-                              onChange={(e) => setCategoryPercentage(selectedCategoryKey, e.target.value)}
-                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                            />
-                            <span className="text-sm text-gray-600">%</span>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      {(Array.isArray(formData.category_percentages) ? formData.category_percentages : []).map((row) => (
-                        <div key={row.category} className="flex items-center gap-3 p-3 rounded-md border border-gray-200 bg-white">
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-gray-900">{row.category}</div>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.1"
-                              value={row.percentage ?? 0}
-                              onChange={(e) => setCategoryPercentage(row.category, e.target.value)}
-                              className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                              placeholder="0"
-                            />
-                            <span className="text-sm text-gray-600">%</span>
-                          </div>
+                  <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    {(Array.isArray(formData.category_percentages) ? formData.category_percentages : []).map((row) => (
+                      <div key={row.category} className="flex items-center gap-3 p-3 rounded-md border border-gray-200 bg-white">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900">{row.category}</div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={row.percentage ?? 0}
+                            onChange={(e) => setCategoryPercentage(row.category, e.target.value)}
+                            className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                            placeholder="0"
+                          />
+                          <span className="text-sm text-gray-600">%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
 
                   <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                     <div className="flex items-center justify-between">
@@ -1136,9 +1085,6 @@ const JobsManagement = () => {
                     )}
                   </div>
 
-                  <p className="mt-2 text-xs text-gray-600">
-                    Note: Category – either dropdown or continuous down.
-                  </p>
                 </div>
 
                 <div>
