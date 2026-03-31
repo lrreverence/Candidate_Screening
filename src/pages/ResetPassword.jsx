@@ -3,6 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const ResetPassword = () => {
+  const PASSWORD_MIN = 12
+  const PASSWORD_MAX = 16
+
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
@@ -60,8 +63,8 @@ const ResetPassword = () => {
     setError('')
 
     // Validation
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long')
+    if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
+      setError(`Password must be ${PASSWORD_MIN}–${PASSWORD_MAX} characters`)
       return
     }
 
@@ -170,7 +173,8 @@ const ResetPassword = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN}
+                  maxLength={PASSWORD_MAX}
                   className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                   placeholder="Enter your new password"
                 />
@@ -186,7 +190,8 @@ const ResetPassword = () => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN}
+                  maxLength={PASSWORD_MAX}
                   className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                   placeholder="Confirm your new password"
                 />

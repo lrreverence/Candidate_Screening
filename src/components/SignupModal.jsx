@@ -13,18 +13,21 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
   const [success, setSuccess] = useState(false)
   const { signUp, signInWithGoogle } = useAuth()
 
+  const PASSWORD_MIN = 12
+  const PASSWORD_MAX = 16
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
 
     // Validation
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
+    if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
+      setError(`Password must be ${PASSWORD_MIN}–${PASSWORD_MAX} characters`)
       return
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
       return
     }
 
@@ -185,9 +188,10 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={PASSWORD_MIN}
+                maxLength={PASSWORD_MAX}
                 className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
-                placeholder="At least 6 characters"
+                placeholder={`${PASSWORD_MIN}–${PASSWORD_MAX} characters`}
               />
             </div>
 
@@ -201,7 +205,8 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={PASSWORD_MIN}
+                maxLength={PASSWORD_MAX}
                 className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 placeholder="Confirm your password"
               />
