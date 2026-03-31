@@ -12,7 +12,7 @@ const ContactSection = ({ formData, handleChange }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="email">
-            Email Address
+            Email Address <span className="text-red-500">*</span>
           </label>
           <input
             className="w-full h-14 px-6 rounded-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-primary focus:ring-2 transition-all duration-200 placeholder:text-gray-400 dark:text-white text-base outline-none"
@@ -20,10 +20,15 @@ const ContactSection = ({ formData, handleChange }) => {
             name="email"
             value={formData.email}
             onChange={handleChange}
-            placeholder="john@example.com"
+            placeholder="name@gmail.com or name@yahoo.com"
             type="email"
+            pattern="^[^@\s]+@(?:gmail\.com|yahoo\.com)$"
+            title="Please use an email ending in @gmail.com or @yahoo.com"
             required
           />
+          <p className="text-xs ml-2 text-gray-500 dark:text-gray-400">
+            Required format: <span className="font-semibold">@gmail.com</span> or <span className="font-semibold">@yahoo.com</span>
+          </p>
         </div>
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="phone">

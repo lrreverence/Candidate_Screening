@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -6,6 +6,41 @@ import ApplicationHeader from '../components/application/ApplicationHeader'
 import ApplicationBreadcrumbs from '../components/application/ApplicationBreadcrumbs'
 import ApplicationProgress from '../components/application/ApplicationProgress'
 import ApplicationFooter from '../components/application/ApplicationFooter'
+import Cropper from 'react-easy-crop'
+
+const createImage = (url) =>
+  new Promise((resolve, reject) => {
+    const image = new Image()
+    image.addEventListener('load', () => resolve(image))
+    image.addEventListener('error', (error) => reject(error))
+    image.setAttribute('crossOrigin', 'anonymous')
+    image.src = url
+  })
+
+const getCroppedBlob = async (imageSrc, pixelCrop, { outputType = 'image/jpeg', quality = 0.92 } = {}) => {
+  const image = await createImage(imageSrc)
+  const canvas = document.createElement('canvas')
+  canvas.width = pixelCrop.width
+  canvas.height = pixelCrop.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas is not supported in this browser.')
+
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height
+  )
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, outputType, quality))
+  if (!blob) throw new Error('Failed to crop image.')
+  return blob
+}
 
 const IdPictureUpload = () => {
   const navigate = useNavigate()
@@ -15,6 +50,17 @@ const IdPictureUpload = () => {
   const [uploading, setUploading] = useState(false)
   const [uploadedFile, setUploadedFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [selectedFile, setSelectedFile] = useState(null)
+
+  // Crop/edit state
+  const [isCropOpen, setIsCropOpen] = useState(false)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
+  const [processingCrop, setProcessingCrop] = useState(false)
+
+  const maxUploadSizeBytes = 5 * 1024 * 1024 // 5MB
+  const allowedTypes = useMemo(() => ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'], [])
 
   // Load existing ID picture if available for this specific application
   useEffect(() => {
@@ -91,6 +137,15 @@ const IdPictureUpload = () => {
     loadExistingPicture()
   }, [user?.id])
 
+  // Cleanup preview object URLs on change/unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl && typeof previewUrl === 'string' && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl)
+      }
+    }
+  }, [previewUrl])
+
   // Convert image to JPEG format for compatibility with storage bucket
   const convertImageToJpeg = (file) => {
     return new Promise((resolve, reject) => {
@@ -155,10 +210,7 @@ const IdPictureUpload = () => {
     if (!file) return
 
     // Validate file - image only
-    const maxSize = 5 * 1024 * 1024 // 5MB
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-
-    if (file.size > maxSize) {
+    if (file.size > maxUploadSizeBytes) {
       alert('File size exceeds 5MB. Please upload a smaller image.')
       return
     }
@@ -168,20 +220,70 @@ const IdPictureUpload = () => {
       return
     }
 
-    // Create preview from original file
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setPreviewUrl(reader.result)
-    }
-    reader.readAsDataURL(file)
+    // Reset existing upload state (user is choosing a new file)
+    setUploadedFile(null)
+    setSelectedFile(file)
 
-    // Convert to JPEG if needed and upload
+    // Show preview + open crop editor
+    const objectUrl = URL.createObjectURL(file)
+    if (previewUrl && typeof previewUrl === 'string' && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl)
+    }
+    setPreviewUrl(objectUrl)
+    setIsCropOpen(true)
+  }
+
+  const handleCropComplete = (_croppedArea, croppedAreaPixels) => {
+    setCroppedAreaPixels(croppedAreaPixels)
+  }
+
+  const handleSaveCropAndUpload = async () => {
+    if (!selectedFile || !previewUrl) {
+      alert('Please select an image first.')
+      return
+    }
+    if (!croppedAreaPixels) {
+      alert('Please adjust the crop first.')
+      return
+    }
+
+    setProcessingCrop(true)
     try {
-      const fileToUpload = await convertImageToJpeg(file)
+      // Crop to a square image and convert to JPEG for consistent bucket compatibility
+      const croppedBlob = await getCroppedBlob(previewUrl, croppedAreaPixels, {
+        outputType: 'image/jpeg',
+        quality: 0.92
+      })
+
+      // Size check after crop (important: cropping can still be large)
+      if (croppedBlob.size > maxUploadSizeBytes) {
+        alert('Cropped image is still larger than 5MB. Please zoom out or choose a smaller image.')
+        return
+      }
+
+      const baseName = (selectedFile.name || 'id_picture').replace(/\.[^/.]+$/, '')
+      const croppedFile = new File([croppedBlob], `${baseName}_cropped.jpg`, {
+        type: 'image/jpeg',
+        lastModified: Date.now()
+      })
+
+      // Update preview to the cropped result
+      const croppedPreviewUrl = URL.createObjectURL(croppedFile)
+      if (previewUrl && typeof previewUrl === 'string' && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl)
+      }
+      setPreviewUrl(croppedPreviewUrl)
+
+      setIsCropOpen(false)
+
+      // Upload the cropped file
+      const fileToUpload = await convertImageToJpeg(croppedFile)
       await uploadFile(fileToUpload)
     } catch (error) {
-      console.error('Error converting image:', error)
-      alert('Failed to process image. Please try again.')
+      console.error('Crop/upload error:', error)
+      alert(error?.message || 'Failed to crop/upload image. Please try again.')
+    } finally {
+      setProcessingCrop(false)
     }
   }
 
@@ -509,6 +611,20 @@ const IdPictureUpload = () => {
                       alt="2x2 ID Picture Preview"
                       className="w-full h-auto rounded-lg border-2 border-primary shadow-lg"
                     />
+                    <div className="mt-4 flex items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (selectedFile) setIsCropOpen(true)
+                          else alert('Select a new image to edit/crop.')
+                        }}
+                        className="px-4 py-2 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15 transition-colors text-sm font-semibold"
+                        title="Crop/Edit"
+                      >
+                        Crop / Edit
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -578,6 +694,88 @@ const IdPictureUpload = () => {
                 </div>
               </div>
             </div>
+
+            {/* Crop/Edit Modal */}
+            {isCropOpen && previewUrl && (
+              <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="w-full max-w-2xl bg-white dark:bg-[#0f172a] rounded-2xl border border-gray-200 dark:border-white/10 shadow-2xl overflow-hidden">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-white/10">
+                    <div>
+                      <h3 className="text-lg font-bold">Crop / Edit Picture</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Crop to a square 2x2 format (preview only; requirements remain the same).</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => !processingCrop && setIsCropOpen(false)}
+                      className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+                      title="Close"
+                      disabled={processingCrop}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </div>
+
+                  <div className="p-6 space-y-4">
+                    <div className="relative w-full h-[360px] bg-black rounded-xl overflow-hidden">
+                      <Cropper
+                        image={previewUrl}
+                        crop={crop}
+                        zoom={zoom}
+                        aspect={1}
+                        onCropChange={setCrop}
+                        onZoomChange={setZoom}
+                        onCropComplete={handleCropComplete}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                        Zoom
+                      </label>
+                      <input
+                        type="range"
+                        min={1}
+                        max={3}
+                        step={0.01}
+                        value={zoom}
+                        onChange={(e) => setZoom(Number(e.target.value))}
+                        className="w-full"
+                        disabled={processingCrop}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsCropOpen(false)}
+                        disabled={processingCrop}
+                        className="px-5 py-2.5 rounded-full border border-gray-300 dark:border-white/10 text-gray-700 dark:text-white font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveCropAndUpload}
+                        disabled={processingCrop || uploading}
+                        className="px-6 py-2.5 rounded-full bg-primary text-background-dark font-bold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {processingCrop ? (
+                          <>
+                            <span className="material-symbols-outlined animate-spin">sync</span>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined">crop</span>
+                            Save & Upload
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex items-center justify-between gap-4 pt-6 mt-8 border-t border-gray-100 dark:border-white/10">

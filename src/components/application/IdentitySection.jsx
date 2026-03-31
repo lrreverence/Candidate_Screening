@@ -2,6 +2,23 @@ import React from 'react'
 
 const NAME_EXTENSIONS = ['', 'Jr', 'Sr', 'I', 'II', 'III', 'IV', 'V']
 
+const LANGUAGE_OPTIONS = [
+  'English',
+  'Tagalog',
+  'Bisaya (Cebuano)',
+  'Ilocano',
+  'Kapampangan',
+  'Hiligaynon (Ilonggo)',
+  'Bikol',
+  'Waray',
+  'Pangasinan',
+  'Chavacano',
+  'Chinese',
+  'Japanese',
+  'Korean',
+  'Arabic',
+]
+
 function getAgeFromDOB(dateOfBirth) {
   if (!dateOfBirth) return null
   const dob = new Date(dateOfBirth)
@@ -13,8 +30,23 @@ function getAgeFromDOB(dateOfBirth) {
   return age >= 0 ? age : null
 }
 
-const IdentitySection = ({ formData, handleChange }) => {
+function formatDateYYYYMMDD(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+const IdentitySection = ({ formData, handleChange, handleLanguagesSpokenChange }) => {
+  const MAX_AGE = 65
   const age = getAgeFromDOB(formData.date_of_birth)
+  const today = new Date()
+  const minDob = new Date(today.getFullYear() - MAX_AGE, today.getMonth(), today.getDate())
+  const minDobStr = formatDateYYYYMMDD(minDob)
+  const maxDobStr = formatDateYYYYMMDD(today)
+  const isOverAgeLimit = typeof age === 'number' && age > MAX_AGE
+  const selectedLanguages = Array.isArray(formData.languages_spoken) ? formData.languages_spoken : []
+  const onToggleLanguage = typeof handleLanguagesSpokenChange === 'function' ? handleLanguagesSpokenChange : () => {}
 
   return (
     <>
@@ -111,8 +143,13 @@ const IdentitySection = ({ formData, handleChange }) => {
             value={formData.date_of_birth}
             onChange={handleChange}
             type="date"
+            min={minDobStr}
+            max={maxDobStr}
             required
           />
+          <p className={`text-xs ml-2 ${isOverAgeLimit ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}>
+            Maximum age is {MAX_AGE}. Allowed range: {minDobStr} to {maxDobStr}.
+          </p>
         </div>
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="age">
@@ -125,6 +162,9 @@ const IdentitySection = ({ formData, handleChange }) => {
             value={age != null ? `${age} years old` : '—'}
             tabIndex={-1}
           />
+          <p className={`text-xs ml-2 ${isOverAgeLimit ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}>
+            Up to {MAX_AGE} years old only.
+          </p>
         </div>
         <div className="flex flex-col gap-2">
           <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1" htmlFor="gender">
@@ -223,6 +263,36 @@ const IdentitySection = ({ formData, handleChange }) => {
             type="text"
             required
           />
+        </div>
+      </div>
+
+      {/* Language / Dialogue Spoken */}
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">
+          Language/Dialogue Spoken
+        </label>
+        <p className="text-xs ml-2 text-gray-500 dark:text-gray-400">
+          Select all that apply.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {LANGUAGE_OPTIONS.map((language) => (
+            <label
+              key={language}
+              className={`group relative flex items-center gap-3 p-4 rounded-2xl border cursor-pointer transition-all ${
+                selectedLanguages.includes(language)
+                  ? 'border-primary bg-primary/10'
+                  : 'border-gray-200 dark:border-white/10 bg-background-light dark:bg-background-dark'
+              } hover:border-primary`}
+            >
+              <input
+                type="checkbox"
+                checked={selectedLanguages.includes(language)}
+                onChange={() => onToggleLanguage(language)}
+                className="h-5 w-5 rounded border-gray-400 text-primary focus:ring-primary/50 focus:ring-offset-0 bg-transparent transition-colors"
+              />
+              <span className="text-slate-900 dark:text-white text-sm font-medium">{language}</span>
+            </label>
+          ))}
         </div>
       </div>
     </>

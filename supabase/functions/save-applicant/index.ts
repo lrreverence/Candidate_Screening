@@ -6,6 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const shouldRetryWithoutLanguagesSpoken = (error: any) => {
+  const message = String(error?.message || '').toLowerCase()
+  const code = String(error?.code || '')
+  return code === '42703' || (message.includes('languages_spoken') && message.includes('does not exist'))
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -63,30 +69,42 @@ Deno.serve(async (req: Request) => {
       // Update existing applicant
       applicantId = existingApplicant.id;
       console.log('[API] Updating existing applicant:', applicantId);
-      
-      const { error: updateError } = await supabaseClient
+
+      const updatePayload: Record<string, unknown> = {
+        first_name: formData.first_name,
+        middle_name: formData.middle_name || null,
+        last_name: formData.last_name,
+        name_extension: formData.name_extension || null,
+        phone: formData.phone_number || null,
+        date_of_birth: formData.date_of_birth || null,
+        gender: formData.gender || null,
+        street_address: formData.street_address || null,
+        barangay: formData.barangay || null,
+        city: formData.city || null,
+        province: formData.province || null,
+        zip_code: formData.zip_code || null,
+        licenses: formData.licenses || [],
+        height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
+        weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+        civil_status: formData.civil_status || null,
+        religion: formData.religion || null,
+        languages_spoken: formData.languages_spoken || [],
+        user_id: userId || null
+      };
+
+      let { error: updateError } = await supabaseClient
         .from('applicants')
-        .update({
-          first_name: formData.first_name,
-          middle_name: formData.middle_name || null,
-          last_name: formData.last_name,
-          name_extension: formData.name_extension || null,
-          phone: formData.phone_number || null,
-          date_of_birth: formData.date_of_birth || null,
-          gender: formData.gender || null,
-          street_address: formData.street_address || null,
-          barangay: formData.barangay || null,
-          city: formData.city || null,
-          province: formData.province || null,
-          zip_code: formData.zip_code || null,
-          licenses: formData.licenses || [],
-          height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-          weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-          civil_status: formData.civil_status || null,
-          religion: formData.religion || null,
-          user_id: userId || null
-        })
+        .update(updatePayload)
         .eq('id', applicantId);
+
+      if (updateError && shouldRetryWithoutLanguagesSpoken(updateError)) {
+        delete updatePayload.languages_spoken
+        const retry = await supabaseClient
+          .from('applicants')
+          .update(updatePayload)
+          .eq('id', applicantId);
+        updateError = retry.error
+      }
 
       if (updateError) {
         console.error('[API] Error updating applicant:', updateError);
@@ -114,33 +132,47 @@ Deno.serve(async (req: Request) => {
         referenceCode = `REF-${year}-${timestamp.slice(0, 3)}`;
       }
 
-      const { data: newApplicant, error: insertError } = await supabaseClient
+      const insertPayload: Record<string, unknown> = {
+        reference_code: referenceCode,
+        first_name: formData.first_name,
+        middle_name: formData.middle_name || null,
+        last_name: formData.last_name,
+        name_extension: formData.name_extension || null,
+        email: formData.email,
+        phone: formData.phone_number || null,
+        date_of_birth: formData.date_of_birth || null,
+        gender: formData.gender || null,
+        street_address: formData.street_address || null,
+        barangay: formData.barangay || null,
+        city: formData.city || null,
+        province: formData.province || null,
+        zip_code: formData.zip_code || null,
+        licenses: formData.licenses || [],
+        height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
+        weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+        civil_status: formData.civil_status || null,
+        religion: formData.religion || null,
+        languages_spoken: formData.languages_spoken || [],
+        user_id: userId || null,
+        status: 'Pending'
+      }
+
+      let { data: newApplicant, error: insertError } = await supabaseClient
         .from('applicants')
-        .insert({
-          reference_code: referenceCode,
-          first_name: formData.first_name,
-          middle_name: formData.middle_name || null,
-          last_name: formData.last_name,
-          name_extension: formData.name_extension || null,
-          email: formData.email,
-          phone: formData.phone_number || null,
-          date_of_birth: formData.date_of_birth || null,
-          gender: formData.gender || null,
-          street_address: formData.street_address || null,
-          barangay: formData.barangay || null,
-          city: formData.city || null,
-          province: formData.province || null,
-          zip_code: formData.zip_code || null,
-          licenses: formData.licenses || [],
-          height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-          weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-          civil_status: formData.civil_status || null,
-          religion: formData.religion || null,
-          user_id: userId || null,
-          status: 'Pending'
-        })
+        .insert(insertPayload)
         .select()
         .single();
+
+      if (insertError && shouldRetryWithoutLanguagesSpoken(insertError)) {
+        delete insertPayload.languages_spoken
+        const retry = await supabaseClient
+          .from('applicants')
+          .insert(insertPayload)
+          .select()
+          .single()
+        newApplicant = retry.data
+        insertError = retry.error
+      }
 
       if (insertError) {
         // If duplicate email error, try to update instead
@@ -154,29 +186,42 @@ Deno.serve(async (req: Request) => {
           
           if (fetchedApplicant) {
             applicantId = fetchedApplicant.id;
-            const { error: updateError } = await supabaseClient
+
+            const updatePayload: Record<string, unknown> = {
+              first_name: formData.first_name,
+              middle_name: formData.middle_name || null,
+              last_name: formData.last_name,
+              name_extension: formData.name_extension || null,
+              phone: formData.phone_number || null,
+              date_of_birth: formData.date_of_birth || null,
+              gender: formData.gender || null,
+              street_address: formData.street_address || null,
+              barangay: formData.barangay || null,
+              city: formData.city || null,
+              province: formData.province || null,
+              zip_code: formData.zip_code || null,
+              licenses: formData.licenses || [],
+              height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
+              weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+              civil_status: formData.civil_status || null,
+              religion: formData.religion || null,
+              languages_spoken: formData.languages_spoken || [],
+              user_id: userId || null
+            };
+
+            let { error: updateError } = await supabaseClient
               .from('applicants')
-              .update({
-                first_name: formData.first_name,
-                middle_name: formData.middle_name || null,
-                last_name: formData.last_name,
-                name_extension: formData.name_extension || null,
-                phone: formData.phone_number || null,
-                date_of_birth: formData.date_of_birth || null,
-                gender: formData.gender || null,
-                street_address: formData.street_address || null,
-                barangay: formData.barangay || null,
-                city: formData.city || null,
-                province: formData.province || null,
-                zip_code: formData.zip_code || null,
-                licenses: formData.licenses || [],
-                height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-                weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-                civil_status: formData.civil_status || null,
-                religion: formData.religion || null,
-                user_id: userId || null
-              })
+              .update(updatePayload)
               .eq('id', applicantId);
+
+            if (updateError && shouldRetryWithoutLanguagesSpoken(updateError)) {
+              delete updatePayload.languages_spoken
+              const retry = await supabaseClient
+                .from('applicants')
+                .update(updatePayload)
+                .eq('id', applicantId);
+              updateError = retry.error
+            }
             
             if (updateError) {
               throw updateError;

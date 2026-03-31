@@ -11,6 +11,9 @@ import ApplicationFooter from '../components/application/ApplicationFooter'
 import ApplicationHelp from '../components/application/ApplicationHelp'
 
 const ApplicationForm = () => {
+  const MAX_AGE = 65
+  const ALLOWED_EMAIL_DOMAINS = ['gmail.com', 'yahoo.com']
+
   const navigate = useNavigate()
   const { jobId } = useParams()
   const { user } = useAuth()
@@ -25,6 +28,7 @@ const ApplicationForm = () => {
     gender: '',
     email: '',
     phone_number: '',
+    phone_number_alt: '',
     street_address: '',
     barangay: '',
     city: '',
@@ -35,6 +39,7 @@ const ApplicationForm = () => {
     weight_kg: '',
     civil_status: '',
     religion: '',
+    languages_spoken: [],
   })
 
   const licenseOptions = [
@@ -56,6 +61,21 @@ const ApplicationForm = () => {
         ? prev.licenses.filter(id => id !== licenseId)
         : [...prev.licenses, licenseId]
     }))
+  }
+
+  const handleLanguagesSpokenChange = (language) => {
+    setFormData(prev => ({
+      ...prev,
+      languages_spoken: Array.isArray(prev.languages_spoken) && prev.languages_spoken.includes(language)
+        ? prev.languages_spoken.filter(l => l !== language)
+        : [...(Array.isArray(prev.languages_spoken) ? prev.languages_spoken : []), language]
+    }))
+  }
+
+  const shouldRetryWithoutLanguagesSpoken = (error) => {
+    const message = String(error?.message || '').toLowerCase()
+    const code = String(error?.code || '')
+    return code === '42703' || (message.includes('languages_spoken') && message.includes('does not exist'))
   }
 
   // Load existing applicant data from database
@@ -110,6 +130,7 @@ const ApplicationForm = () => {
             gender: applicant.gender || '',
             email: applicant.email || user.email || '',
             phone_number: applicant.phone || '',
+            phone_number_alt: '',
             street_address: applicant.street_address || '',
             barangay: applicant.barangay || '',
             city: applicant.city || '',
@@ -120,6 +141,7 @@ const ApplicationForm = () => {
             weight_kg: applicant.weight_kg || '',
             civil_status: applicant.civil_status || '',
             religion: applicant.religion || '',
+            languages_spoken: applicant.languages_spoken || [],
           })
         } else {
           console.log('[APPLICATION] No existing applicant found, using defaults')
@@ -142,14 +164,55 @@ const ApplicationForm = () => {
     loadExistingData()
   }, [user?.id])
 
+  const formatPhilippineMobile = (raw) => {
+    const digits = String(raw || '').replace(/\D/g, '').slice(0, 11)
+    const p1 = digits.slice(0, 4) // 09XX
+    const p2 = digits.slice(4, 7) // XXX
+    const p3 = digits.slice(7, 11) // XXXX
+    if (digits.length <= 4) return p1
+    if (digits.length <= 7) return `${p1}-${p2}`
+    return `${p1}-${p2}-${p3}`
+  }
+
+  const isValidPhilippineMobile = (value) => /^09\d{2}-\d{3}-\d{4}$/.test(String(value || ''))
+
   const handleChange = (e) => {
     const { name, value } = e.target
+    if (name === 'phone_number' || name === 'phone_number_alt') {
+      setFormData(prev => ({ ...prev, [name]: formatPhilippineMobile(value) }))
+      return
+    }
     setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
+  const getAgeFromDOB = (dateOfBirth) => {
+    if (!dateOfBirth) return null
+    const dob = new Date(dateOfBirth)
+    if (Number.isNaN(dob.getTime())) return null
+    const today = new Date()
+    let age = today.getFullYear() - dob.getFullYear()
+    const m = today.getMonth() - dob.getMonth()
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1
+    return age >= 0 ? age : null
+  }
+
+  const isAllowedEmail = (email) => {
+    if (!email) return false
+    const normalized = String(email).trim().toLowerCase()
+    const atIndex = normalized.lastIndexOf('@')
+    if (atIndex <= 0) return false
+    const domain = normalized.slice(atIndex + 1)
+    return ALLOWED_EMAIL_DOMAINS.includes(domain)
   }
 
   const handleSaveDraft = async () => {
     setSaving(true)
     try {
+      if (!isAllowedEmail(formData.email)) {
+        alert(`Email must end with @gmail.com or @yahoo.com`)
+        return
+      }
+
       // Check if applicant exists
       let applicantId = null
       if (user?.id) {
@@ -166,58 +229,93 @@ const ApplicationForm = () => {
         if (existingApplicant) {
           applicantId = existingApplicant.id
           // Update applicant
-          await supabase
+          const updatePayload = {
+            first_name: formData.first_name,
+            middle_name: formData.middle_name || null,
+            last_name: formData.last_name,
+            name_extension: formData.name_extension || null,
+            phone: formData.phone_number,
+            date_of_birth: formData.date_of_birth || null,
+            gender: formData.gender || null,
+            street_address: formData.street_address || null,
+            barangay: formData.barangay || null,
+            city: formData.city || null,
+            province: formData.province || null,
+            zip_code: formData.zip_code || null,
+            licenses: formData.licenses || [],
+            height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
+            weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+            civil_status: formData.civil_status || null,
+            religion: formData.religion || null,
+            languages_spoken: formData.languages_spoken || [],
+          }
+
+          const { error: updateError } = await supabase
             .from('applicants')
-            .update({
-              first_name: formData.first_name,
-              middle_name: formData.middle_name || null,
-              last_name: formData.last_name,
-              name_extension: formData.name_extension || null,
-              phone: formData.phone_number,
-              date_of_birth: formData.date_of_birth || null,
-              gender: formData.gender || null,
-              street_address: formData.street_address || null,
-              barangay: formData.barangay || null,
-              city: formData.city || null,
-              province: formData.province || null,
-              zip_code: formData.zip_code || null,
-              licenses: formData.licenses || [],
-              height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-              weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-              civil_status: formData.civil_status || null,
-              religion: formData.religion || null,
-            })
+            .update(updatePayload)
             .eq('id', applicantId)
+
+          if (updateError && shouldRetryWithoutLanguagesSpoken(updateError)) {
+            const { languages_spoken, ...fallbackPayload } = updatePayload
+            const { error: fallbackError } = await supabase
+              .from('applicants')
+              .update(fallbackPayload)
+              .eq('id', applicantId)
+            if (fallbackError) throw fallbackError
+          } else if (updateError) {
+            throw updateError
+          }
         } else {
           // Create new applicant with temporary reference code
           const tempRef = `TEMP-${Date.now()}`
-          const { data: newApplicant, error: applicantError } = await supabase
-            .from('applicants')
-            .insert({
-              reference_code: tempRef,
-              first_name: formData.first_name,
-              middle_name: formData.middle_name || null,
-              last_name: formData.last_name,
-              name_extension: formData.name_extension || null,
-              email: formData.email,
-              phone: formData.phone_number || null,
-              date_of_birth: formData.date_of_birth || null,
-              gender: formData.gender || null,
-              street_address: formData.street_address || null,
-              barangay: formData.barangay || null,
-              city: formData.city || null,
-              province: formData.province || null,
-              zip_code: formData.zip_code || null,
-              licenses: formData.licenses || [],
-              height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-              weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-              civil_status: formData.civil_status || null,
-              religion: formData.religion || null,
-              user_id: user.id,
-              status: 'Pending'
-            })
-            .select()
-            .single()
+          const insertPayload = {
+            reference_code: tempRef,
+            first_name: formData.first_name,
+            middle_name: formData.middle_name || null,
+            last_name: formData.last_name,
+            name_extension: formData.name_extension || null,
+            email: formData.email,
+            phone: formData.phone_number || null,
+            date_of_birth: formData.date_of_birth || null,
+            gender: formData.gender || null,
+            street_address: formData.street_address || null,
+            barangay: formData.barangay || null,
+            city: formData.city || null,
+            province: formData.province || null,
+            zip_code: formData.zip_code || null,
+            licenses: formData.licenses || [],
+            height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
+            weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+            civil_status: formData.civil_status || null,
+            religion: formData.religion || null,
+            languages_spoken: formData.languages_spoken || [],
+            user_id: user.id,
+            status: 'Pending'
+          }
+
+          let newApplicant = null
+          let applicantError = null
+
+          {
+            const { data, error } = await supabase
+              .from('applicants')
+              .insert(insertPayload)
+              .select()
+              .single()
+            newApplicant = data
+            applicantError = error
+          }
+
+          if (applicantError && shouldRetryWithoutLanguagesSpoken(applicantError)) {
+            const { languages_spoken, ...fallbackPayload } = insertPayload
+            const { data, error } = await supabase
+              .from('applicants')
+              .insert(fallbackPayload)
+              .select()
+              .single()
+            newApplicant = data
+            applicantError = error
+          }
           
           if (applicantError) throw applicantError
           applicantId = newApplicant.id
@@ -283,8 +381,25 @@ const ApplicationForm = () => {
       alert('Please fill in all required fields (First Name, Last Name, Email)')
       return
     }
+    if (!isAllowedEmail(formData.email)) {
+      alert('Email must end with @gmail.com or @yahoo.com')
+      return
+    }
+    if (!isValidPhilippineMobile(formData.phone_number)) {
+      alert('Please enter a valid contact number in the format 09XX-XXX-XXXX.')
+      return
+    }
+    if (formData.phone_number_alt && !isValidPhilippineMobile(formData.phone_number_alt)) {
+      alert('Your additional contact number must follow the format 09XX-XXX-XXXX.')
+      return
+    }
     if (!formData.middle_name || !formData.date_of_birth || !formData.height_cm || !formData.weight_kg || !formData.civil_status || !formData.religion) {
       alert('Please complete Personal Information: Middle Name, Date of Birth, Height, Weight, Status (Civil Status), and Religion are required.')
+      return
+    }
+    const age = getAgeFromDOB(formData.date_of_birth)
+    if (typeof age === 'number' && age > MAX_AGE) {
+      alert(`Applicants must be ${MAX_AGE} years old or younger.`)
       return
     }
 
@@ -327,7 +442,8 @@ const ApplicationForm = () => {
             height_cm: formData.height_cm,
             weight_kg: formData.weight_kg,
             civil_status: formData.civil_status,
-            religion: formData.religion
+            religion: formData.religion,
+            languages_spoken: formData.languages_spoken
           },
           jobId: jobId || null,
           userId: user?.id || null
@@ -386,7 +502,11 @@ const ApplicationForm = () => {
         {/* Main Form Card */}
         <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 md:p-10 border border-gray-200 dark:border-white/5 shadow-xl">
           <form onSubmit={handleNextStep} className="space-y-8">
-            <IdentitySection formData={formData} handleChange={handleChange} />
+            <IdentitySection
+              formData={formData}
+              handleChange={handleChange}
+              handleLanguagesSpokenChange={handleLanguagesSpokenChange}
+            />
             <ContactSection formData={formData} handleChange={handleChange} />
 
             {/* Actions */}
