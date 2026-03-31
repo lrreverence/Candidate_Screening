@@ -2,12 +2,15 @@ import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
+const NAME_EXTENSIONS = ['', 'Jr', 'Sr', 'I', 'II', 'III', 'IV', 'V']
+
 const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [nameExtension, setNameExtension] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -34,12 +37,13 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
     setLoading(true)
 
     try {
-      const fullName = `${firstName} ${lastName}`.trim()
+      const fullName = `${firstName} ${lastName}${nameExtension ? ` ${nameExtension}` : ''}`.trim()
 
       const { data, error } = await signUp(email, password, {
         full_name: fullName,
         first_name: firstName,
         last_name: lastName,
+        name_extension: nameExtension || null,
       })
 
       if (error) {
@@ -65,6 +69,7 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
             setConfirmPassword('')
             setFirstName('')
             setLastName('')
+            setNameExtension('')
             setSuccess(false)
           }, 3000)
         } else if (data?.session) {
@@ -77,6 +82,7 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
             setConfirmPassword('')
             setFirstName('')
             setLastName('')
+            setNameExtension('')
             setSuccess(false)
           }, 2000)
         } else {
@@ -160,6 +166,29 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                   className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                   placeholder="Doe"
                 />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="nameExtension" className="block text-sm font-medium text-white mb-2">
+                Name Extension
+              </label>
+              <div className="relative">
+                <select
+                  id="nameExtension"
+                  value={nameExtension}
+                  onChange={(e) => setNameExtension(e.target.value)}
+                  className="w-full px-4 py-3 bg-[#0f172a] border border-secondary rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition appearance-none"
+                >
+                  {NAME_EXTENSIONS.map((ext) => (
+                    <option key={ext || 'none'} value={ext} className="bg-[#0f172a] text-white">
+                      {ext || 'None (Jr, Sr, I, II, etc.)'}
+                    </option>
+                  ))}
+                </select>
+                <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+                  expand_more
+                </span>
               </div>
             </div>
 

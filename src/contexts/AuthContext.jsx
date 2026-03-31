@@ -282,6 +282,7 @@ const AuthProvider = ({ children }) => {
                   full_name: metadata.full_name || '',
                   first_name: metadata.first_name || '',
                   last_name: metadata.last_name || '',
+                  name_extension: metadata.name_extension || null,
                   role: 'applicant' // Always assign applicant role
                 })
 
@@ -299,6 +300,7 @@ const AuthProvider = ({ children }) => {
             // Create applicant record in applicants table
             const firstName = metadata.first_name || ''
             const lastName = metadata.last_name || ''
+            const nameExtension = metadata.name_extension || null
             
             // Check if applicant already exists for this user
             const { data: existingApplicant } = await supabase
@@ -327,6 +329,7 @@ const AuthProvider = ({ children }) => {
                   reference_code: referenceCode,
                   first_name: firstName,
                   last_name: lastName,
+                  name_extension: nameExtension,
                   email: data.user.email || email,
                   user_id: data.user.id,
                   status: 'Pending'
