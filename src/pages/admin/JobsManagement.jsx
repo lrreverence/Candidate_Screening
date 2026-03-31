@@ -44,13 +44,25 @@ const JobsManagement = () => {
     requirements: '',
     salary_range: '',
     status: 'active',
+    open_until: '', // YYYY-MM-DD
+    posting_priority: 'Pooling', // Urgent | Pooling
     required_credentials: [],
     required_documents: [],
+    category_percentages: [
+      { category: 'Personal Info', percentage: 25 },
+      { category: 'Educational Attainment', percentage: 10 },
+      { category: 'Employment Record', percentage: 10 },
+      { category: 'Licenses, Training/ Certificates', percentage: 30 },
+      { category: 'Clearances', percentage: 15 },
+      { category: 'Others', percentage: 10 }
+    ],
     image: null // Store image path
   })
   const [imageFile, setImageFile] = useState(null) // Store selected file
   const [imagePreview, setImagePreview] = useState(null) // Store preview URL
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [categoryEditorMode, setCategoryEditorMode] = useState('continuous') // continuous | dropdown
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState('Personal Info')
 
   const licenseOptions = [
     { id: 'psa_birth_certificate', label: 'PSA Birth Certificate', subtitle: 'Philippine Statistics Authority' },
@@ -207,6 +219,49 @@ const JobsManagement = () => {
   const handleOpenJobForm = async (job = null) => {
     if (job) {
       setEditingJob(job)
+      const openUntilValue = (() => {
+        // Best-effort: support either date-only ("YYYY-MM-DD") or ISO timestamp.
+        const raw = job.open_until || job.job_open_until || job.openUntil || job.deadline || ''
+        if (!raw) return ''
+        const d = new Date(raw)
+        if (Number.isNaN(d.getTime())) return ''
+        return d.toISOString().slice(0, 10)
+      })()
+
+      const postingPriority = (() => {
+        const raw = (job.posting_priority || job.priority || job.urgency || '').toString().trim()
+        if (raw) return /urgent/i.test(raw) ? 'Urgent' : 'Pooling'
+        // If badge says urgent, treat as urgent; otherwise pooling.
+        if ((job.badge_text || '').toString().toLowerCase().includes('urgent')) return 'Urgent'
+        return 'Pooling'
+      })()
+
+      const categoryPercentages = (() => {
+        const raw =
+          job.category_percentages ||
+          job.categoryPercentages ||
+          job.category_weights ||
+          job.categoryWeights ||
+          null
+        if (Array.isArray(raw) && raw.length > 0) return raw
+        if (typeof raw === 'string') {
+          try {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed
+          } catch {
+            // ignore
+          }
+        }
+        return [
+          { category: 'Personal Info', percentage: 25 },
+          { category: 'Educational Attainment', percentage: 10 },
+          { category: 'Employment Record', percentage: 10 },
+          { category: 'Licenses, Training/ Certificates', percentage: 30 },
+          { category: 'Clearances', percentage: 15 },
+          { category: 'Others', percentage: 10 }
+        ]
+      })()
+
       setFormData({
         title: job.title || '',
         location: job.location || '',
@@ -216,8 +271,11 @@ const JobsManagement = () => {
         requirements: job.requirements || '',
         salary_range: job.salary || job.salary_range || '', // Map salary to salary_range
         status: job.status || 'active',
+        open_until: openUntilValue,
+        posting_priority: postingPriority,
         required_credentials: Array.isArray(job.required_credentials) ? job.required_credentials : [],
         required_documents: Array.isArray(job.required_documents) ? job.required_documents : [],
+        category_percentages: categoryPercentages,
         image: job.image || null
       })
       
@@ -239,13 +297,25 @@ const JobsManagement = () => {
         requirements: '',
         salary_range: '',
         status: 'active',
+        open_until: '',
+        posting_priority: 'Pooling',
         required_credentials: [],
         required_documents: [],
+        category_percentages: [
+          { category: 'Personal Info', percentage: 25 },
+          { category: 'Educational Attainment', percentage: 10 },
+          { category: 'Employment Record', percentage: 10 },
+          { category: 'Licenses, Training/ Certificates', percentage: 30 },
+          { category: 'Clearances', percentage: 15 },
+          { category: 'Others', percentage: 10 }
+        ],
         image: null
       })
       setImagePreview(null)
     }
     setImageFile(null)
+    setCategoryEditorMode('continuous')
+    setSelectedCategoryKey('Personal Info')
     setShowJobForm(true)
   }
 
@@ -261,12 +331,24 @@ const JobsManagement = () => {
       requirements: '',
       salary_range: '',
       status: 'active',
+      open_until: '',
+      posting_priority: 'Pooling',
       required_credentials: [],
       required_documents: [],
+      category_percentages: [
+        { category: 'Personal Info', percentage: 25 },
+        { category: 'Educational Attainment', percentage: 10 },
+        { category: 'Employment Record', percentage: 10 },
+        { category: 'Licenses, Training/ Certificates', percentage: 30 },
+        { category: 'Clearances', percentage: 15 },
+        { category: 'Others', percentage: 10 }
+      ],
       image: null
     })
     setImageFile(null)
     setImagePreview(null)
+    setCategoryEditorMode('continuous')
+    setSelectedCategoryKey('Personal Info')
   }
 
   const handleFormChange = (e) => {
@@ -318,6 +400,29 @@ const JobsManagement = () => {
     return formData.required_documents.reduce((sum, doc) => sum + (parseFloat(doc.percentage) || 0), 0)
   }
 
+  const getCategoryTotal = () => {
+    const items = Array.isArray(formData.category_percentages) ? formData.category_percentages : []
+    return items.reduce((sum, row) => sum + (parseFloat(row.percentage) || 0), 0)
+  }
+
+  const setCategoryPercentage = (category, value) => {
+    const numValue = parseFloat(value)
+    const safe = Number.isFinite(numValue) ? Math.max(0, Math.min(100, numValue)) : 0
+    setFormData(prev => ({
+      ...prev,
+      category_percentages: (Array.isArray(prev.category_percentages) ? prev.category_percentages : []).map(row =>
+        row.category === category ? { ...row, percentage: safe } : row
+      )
+    }))
+  }
+
+  const normalizePostingPriorityToBadge = (priority) => {
+    if (priority === 'Urgent') {
+      return { badge_text: 'Urgent Hiring', badge_icon: 'priority_high', badge_color: 'primary' }
+    }
+    return { badge_text: 'Pooling', badge_icon: 'group', badge_color: 'secondary' }
+  }
+
   const handleImageChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -364,6 +469,12 @@ const JobsManagement = () => {
     }
 
     try {
+      const categoryTotal = getCategoryTotal()
+      if (Math.round(categoryTotal * 10) / 10 !== 100) {
+        alert('Category total must equal 100%')
+        return
+      }
+
       let imagePath = formData.image
 
       // Upload new image if one was selected
@@ -388,6 +499,7 @@ const JobsManagement = () => {
       }
 
       // Prepare data for submission - map form fields to database columns
+      const badge = normalizePostingPriorityToBadge(formData.posting_priority)
       const submitData = {
         title: formData.title,
         location: formData.location || null,
@@ -397,32 +509,68 @@ const JobsManagement = () => {
         description: formData.description || null,
         requirements: formData.requirements || null,
         status: formData.status || 'active',
+        // Optional fields (best-effort; will be removed if DB doesn't support them)
+        // Store as a date-only string if supported by DB (avoids timezone day-shift)
+        open_until: formData.open_until || null,
+        posting_priority: formData.posting_priority || 'Pooling',
+        category_percentages: Array.isArray(formData.category_percentages) ? formData.category_percentages : [],
+        badge_text: badge.badge_text,
+        badge_icon: badge.badge_icon,
+        badge_color: badge.badge_color,
         required_credentials: Array.isArray(formData.required_credentials) ? formData.required_credentials : [],
         required_documents: Array.isArray(formData.required_documents) ? formData.required_documents : [],
         image: imagePath || null
       }
 
-      if (editingJob) {
-        // Update existing job
-        const { error } = await supabase
-          .from('jobs')
-          .update(submitData)
-          .eq('id', editingJob.id)
+      const stripUnknownColumnFromError = (errorMessage) => {
+        // Example: "column \"open_until\" of relation \"jobs\" does not exist"
+        const m = /column\s+"([^"]+)"/i.exec(errorMessage || '')
+        return m?.[1] || null
+      }
 
-        if (error) {
-          console.error('Update error:', error)
-          throw error
+      if (editingJob) {
+        // Update existing job (best-effort: retry without unknown columns)
+        let payload = { ...submitData }
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const { error } = await supabase
+            .from('jobs')
+            .update(payload)
+            .eq('id', editingJob.id)
+
+          if (!error) break
+          const msg = error?.message || ''
+          const unknownCol = stripUnknownColumnFromError(msg)
+          if (!unknownCol || !(unknownCol in payload)) {
+            console.error('Update error:', error)
+            throw error
+          }
+          delete payload[unknownCol]
+          if (attempt === 3) {
+            console.error('Update error (after retries):', error)
+            throw error
+          }
         }
         alert('Job updated successfully!')
       } else {
-        // Create new job
-        const { error } = await supabase
-          .from('jobs')
-          .insert([submitData])
+        // Create new job (best-effort: retry without unknown columns)
+        let payload = { ...submitData }
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const { error } = await supabase
+            .from('jobs')
+            .insert([payload])
 
-        if (error) {
-          console.error('Insert error:', error)
-          throw error
+          if (!error) break
+          const msg = error?.message || ''
+          const unknownCol = stripUnknownColumnFromError(msg)
+          if (!unknownCol || !(unknownCol in payload)) {
+            console.error('Insert error:', error)
+            throw error
+          }
+          delete payload[unknownCol]
+          if (attempt === 3) {
+            console.error('Insert error (after retries):', error)
+            throw error
+          }
         }
         alert('Job posted successfully!')
       }
@@ -772,7 +920,7 @@ const JobsManagement = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Status
+                      Status (Active/Closed/Draft)
                     </label>
                     <select
                       name="status"
@@ -783,6 +931,35 @@ const JobsManagement = () => {
                       <option value="active">Active</option>
                       <option value="closed">Closed</option>
                       <option value="draft">Draft</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Job Open Until
+                    </label>
+                    <input
+                      type="date"
+                      name="open_until"
+                      value={formData.open_until}
+                      onChange={handleFormChange}
+                      className="w-full rounded-md border border-gray-300 px-4 py-2.5 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                    />
+                    <p className="mt-1 text-[11px] text-gray-500">Format: mm/dd/yyyy (saved as a date)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Posting Status (Urgent/Pooling)
+                    </label>
+                    <select
+                      name="posting_priority"
+                      value={formData.posting_priority}
+                      onChange={handleFormChange}
+                      className="w-full rounded-md border border-gray-300 px-4 py-2.5 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                    >
+                      <option value="Urgent">Urgent</option>
+                      <option value="Pooling">Pooling</option>
                     </select>
                   </div>
                 </div>
@@ -858,6 +1035,110 @@ const JobsManagement = () => {
                     className="w-full rounded-md border border-gray-300 px-4 py-2.5 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
                     placeholder="List the qualifications and requirements..."
                   />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <label className="block text-sm font-medium text-gray-700">
+                      CATEGORY
+                      <span className="text-xs font-normal text-gray-500 ml-2">(Percentages can be modified by Admin)</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Mode</span>
+                      <select
+                        value={categoryEditorMode}
+                        onChange={(e) => setCategoryEditorMode(e.target.value)}
+                        className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                      >
+                        <option value="continuous">Continuous down</option>
+                        <option value="dropdown">Dropdown</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {categoryEditorMode === 'dropdown' ? (
+                    <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+                        <label className="block">
+                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Category</div>
+                          <select
+                            value={selectedCategoryKey}
+                            onChange={(e) => setSelectedCategoryKey(e.target.value)}
+                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                          >
+                            {(Array.isArray(formData.category_percentages) ? formData.category_percentages : []).map((row) => (
+                              <option key={row.category} value={row.category}>{row.category}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block">
+                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Percentage</div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={(Array.isArray(formData.category_percentages) ? formData.category_percentages : []).find(r => r.category === selectedCategoryKey)?.percentage ?? 0}
+                              onChange={(e) => setCategoryPercentage(selectedCategoryKey, e.target.value)}
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                            <span className="text-sm text-gray-600">%</span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      {(Array.isArray(formData.category_percentages) ? formData.category_percentages : []).map((row) => (
+                        <div key={row.category} className="flex items-center gap-3 p-3 rounded-md border border-gray-200 bg-white">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900">{row.category}</div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={row.percentage ?? 0}
+                              onChange={(e) => setCategoryPercentage(row.category, e.target.value)}
+                              className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                              placeholder="0"
+                            />
+                            <span className="text-sm text-gray-600">%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">
+                        Total: <span className={`font-bold ${getCategoryTotal() === 100 ? 'text-green-600' : getCategoryTotal() > 100 ? 'text-red-600' : 'text-blue-600'}`}>
+                          {getCategoryTotal().toFixed(1)}%
+                        </span>
+                      </span>
+                      {getCategoryTotal() !== 100 && (
+                        <span className="text-xs text-gray-500">
+                          {getCategoryTotal() < 100
+                            ? `Add ${(100 - getCategoryTotal()).toFixed(1)}% more`
+                            : `Reduce by ${(getCategoryTotal() - 100).toFixed(1)}%`}
+                        </span>
+                      )}
+                    </div>
+                    {getCategoryTotal() === 100 && (
+                      <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">check_circle</span>
+                        Total equals 100%
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="mt-2 text-xs text-gray-600">
+                    Note: Category – either dropdown or continuous down.
+                  </p>
                 </div>
 
                 <div>

@@ -16,6 +16,7 @@ const Home = () => {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showSignupModal, setShowSignupModal] = useState(false)
   const [pendingJobId, setPendingJobId] = useState(null)
+  const [pendingRedirectTo, setPendingRedirectTo] = useState(null)
   const [appliedJobIds, setAppliedJobIds] = useState(new Set())
   const [checkingApplications, setCheckingApplications] = useState(false)
 
@@ -193,6 +194,7 @@ const Home = () => {
     if (!user) {
       // Store the jobId to redirect after login
       setPendingJobId(jobId)
+      setPendingRedirectTo(jobId ? `/apply/${jobId}` : '/apply')
       // Show login modal if not logged in
       setShowLoginModal(true)
       return
@@ -220,6 +222,12 @@ const Home = () => {
                   <span className="material-symbols-outlined text-[18px]">account_circle</span>
                   <span>{user.email}</span>
                 </div>
+                <Link
+                  to="/apply"
+                  className="flex h-10 px-6 cursor-pointer items-center justify-center rounded-full border border-secondary bg-card-dark text-white text-sm font-bold hover:bg-secondary transition-colors"
+                >
+                  Resume / Profile
+                </Link>
                 <button
                   onClick={async (e) => {
                     e.preventDefault()
@@ -244,6 +252,16 @@ const Home = () => {
               </>
             ) : (
               <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingRedirectTo('/apply')
+                    setShowLoginModal(true)
+                  }}
+                  className="hidden sm:flex h-10 px-6 cursor-pointer items-center justify-center rounded-full border border-secondary bg-card-dark text-white text-sm font-bold hover:bg-secondary transition-colors"
+                >
+                  Resume / Profile
+                </button>
                 <button
                   onClick={() => setShowLoginModal(true)}
                   className="hidden sm:flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#1e3a8a] transition-colors"
@@ -566,12 +584,13 @@ const Home = () => {
         onClose={() => {
           setShowLoginModal(false)
           setPendingJobId(null)
+          setPendingRedirectTo(null)
         }}
         onSwitchToSignup={() => {
           setShowLoginModal(false)
           setShowSignupModal(true)
         }}
-        redirectTo={pendingJobId ? `/apply/${pendingJobId}` : null}
+        redirectTo={pendingRedirectTo || (pendingJobId ? `/apply/${pendingJobId}` : null)}
       />
       <SignupModal
         isOpen={showSignupModal}
