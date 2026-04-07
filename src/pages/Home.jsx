@@ -253,16 +253,6 @@ const Home = () => {
             ) : (
               <>
                 <button
-                  type="button"
-                  onClick={() => {
-                    setPendingRedirectTo('/profile/resume')
-                    setShowLoginModal(true)
-                  }}
-                  className="hidden sm:flex h-10 px-6 cursor-pointer items-center justify-center rounded-full border border-secondary bg-card-dark text-white text-sm font-bold hover:bg-secondary transition-colors"
-                >
-                  Resume / Profile
-                </button>
-                <button
                   onClick={() => setShowLoginModal(true)}
                   className="hidden sm:flex h-10 px-6 cursor-pointer items-center justify-center rounded-full bg-secondary text-white text-sm font-bold hover:bg-[#1e3a8a] transition-colors"
                 >
