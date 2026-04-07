@@ -64,7 +64,7 @@ const WorkExperienceForm = () => {
         .maybeSingle()
       if (applicantError || !applicant) {
         alert('Please complete Step 1 (Personal Information) first.')
-        navigate(`/apply/${jobId || ''}`)
+        navigate(`/profile/personalinformation/${jobId || ''}`)
         return
       }
       const workExperience = valid.map(entry => ({
@@ -87,7 +87,7 @@ const WorkExperienceForm = () => {
             .eq('job_id', jobId)
         }
       }
-      navigate(`/apply/${jobId || ''}/id-picture`)
+      navigate(`/apply/${jobId || ''}/201-file`)
     } catch (err) {
       console.error(err)
       alert('Failed to save. Please try again.')
@@ -97,7 +97,7 @@ const WorkExperienceForm = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}`)
+    navigate(`/profile/personalinformation/${jobId || ''}`)
   }
 
   return (
@@ -122,12 +122,12 @@ const WorkExperienceForm = () => {
             <div className="flex gap-6 justify-between items-end">
               <div>
                 <p className="text-slate-900 dark:text-white text-lg font-bold leading-normal">Application Progress</p>
-                <p className="text-green-700 dark:text-green-300 text-sm font-normal">Step 2 of 6: Work Experience</p>
+                <p className="text-green-700 dark:text-green-300 text-sm font-normal">Step 2 of 5: Work Experience</p>
               </div>
               <span className="material-symbols-outlined text-green-500 text-3xl">work</span>
             </div>
             <div className="rounded-full bg-gray-200 dark:bg-slate-700 h-3 overflow-hidden">
-              <div className="h-full rounded-full bg-green-500 dark:bg-green-500 relative w-1/3">
+              <div className="h-full rounded-full bg-green-500 dark:bg-green-500 relative w-2/5">
                 <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/30 animate-pulse"></div>
               </div>
             </div>

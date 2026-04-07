@@ -45,13 +45,113 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required field: userId' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
     let applicantId = null;
 
-    // Step 1: Check if applicant exists by email
+    // Step 1: Persist personal info to public.users (source of truth)
+    // NOTE: We intentionally store personal info on users, not applicants.
+    // We do NOT update users.email here because it's unique and should be managed by auth.
+    const { data: currentUserRow, error: currentUserErr } = await supabaseClient
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (currentUserErr) {
+      console.error('[API] Error loading current user row:', currentUserErr)
+      return new Response(
+        JSON.stringify({ error: currentUserErr.message }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    if (!currentUserRow) {
+      return new Response(
+        JSON.stringify({ error: 'User row not found' }),
+        {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    // If user tried to change email, reject (prevents unique constraint collisions).
+    if (formData.email && currentUserRow.email && formData.email !== currentUserRow.email) {
+      return new Response(
+        JSON.stringify({ error: 'Email cannot be changed here. Please use your account email.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    const userUpdatePayload: Record<string, unknown> = {
+      first_name: formData.first_name || null,
+      middle_name: formData.middle_name || null,
+      last_name: formData.last_name || null,
+      name_extension: formData.name_extension || null,
+      phone: formData.phone_number || null,
+      date_of_birth: formData.date_of_birth || null,
+      gender: formData.gender || null,
+      street_address: formData.street_address || null,
+      barangay: formData.barangay || null,
+      city: formData.city || null,
+      province: formData.province || null,
+      zip_code: formData.zip_code || null,
+      licenses: formData.licenses || [],
+      height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
+      weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+      civil_status: formData.civil_status || null,
+      religion: formData.religion || null,
+      languages_spoken: formData.languages_spoken || [],
+      updated_at: new Date().toISOString(),
+    }
+
+    let { error: userUpdateError } = await supabaseClient
+      .from('users')
+      .update(userUpdatePayload)
+      .eq('id', userId)
+
+    // If languages_spoken column doesn't exist yet in some environments, retry without it.
+    if (userUpdateError && shouldRetryWithoutLanguagesSpoken(userUpdateError)) {
+      delete userUpdatePayload.languages_spoken
+      const retry = await supabaseClient
+        .from('users')
+        .update(userUpdatePayload)
+        .eq('id', userId)
+      userUpdateError = retry.error
+    }
+
+    if (userUpdateError) {
+      console.error('[API] Error updating user profile:', userUpdateError)
+      return new Response(
+        JSON.stringify({ error: userUpdateError.message }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    // Step 2: Ensure applicants record exists for application tracking / documents linkage.
+    // We keep applicants as the "application entity" referenced by applications/documents.
     const { data: existingApplicant, error: checkError } = await supabaseClient
       .from('applicants')
       .select('id')
-      .eq('email', formData.email)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (checkError && checkError.code !== 'PGRST116') {
@@ -71,40 +171,16 @@ Deno.serve(async (req: Request) => {
       console.log('[API] Updating existing applicant:', applicantId);
 
       const updatePayload: Record<string, unknown> = {
-        first_name: formData.first_name,
-        middle_name: formData.middle_name || null,
-        last_name: formData.last_name,
-        name_extension: formData.name_extension || null,
+        email: formData.email,
         phone: formData.phone_number || null,
-        date_of_birth: formData.date_of_birth || null,
-        gender: formData.gender || null,
-        street_address: formData.street_address || null,
-        barangay: formData.barangay || null,
-        city: formData.city || null,
-        province: formData.province || null,
-        zip_code: formData.zip_code || null,
-        licenses: formData.licenses || [],
-        height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-        weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-        civil_status: formData.civil_status || null,
-        religion: formData.religion || null,
-        languages_spoken: formData.languages_spoken || [],
-        user_id: userId || null
+        user_id: userId,
+        updated_at: new Date().toISOString(),
       };
 
       let { error: updateError } = await supabaseClient
         .from('applicants')
         .update(updatePayload)
         .eq('id', applicantId);
-
-      if (updateError && shouldRetryWithoutLanguagesSpoken(updateError)) {
-        delete updatePayload.languages_spoken
-        const retry = await supabaseClient
-          .from('applicants')
-          .update(updatePayload)
-          .eq('id', applicantId);
-        updateError = retry.error
-      }
 
       if (updateError) {
         console.error('[API] Error updating applicant:', updateError);
@@ -134,26 +210,9 @@ Deno.serve(async (req: Request) => {
 
       const insertPayload: Record<string, unknown> = {
         reference_code: referenceCode,
-        first_name: formData.first_name,
-        middle_name: formData.middle_name || null,
-        last_name: formData.last_name,
-        name_extension: formData.name_extension || null,
         email: formData.email,
         phone: formData.phone_number || null,
-        date_of_birth: formData.date_of_birth || null,
-        gender: formData.gender || null,
-        street_address: formData.street_address || null,
-        barangay: formData.barangay || null,
-        city: formData.city || null,
-        province: formData.province || null,
-        zip_code: formData.zip_code || null,
-        licenses: formData.licenses || [],
-        height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-        weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-        civil_status: formData.civil_status || null,
-        religion: formData.religion || null,
-        languages_spoken: formData.languages_spoken || [],
-        user_id: userId || null,
+        user_id: userId,
         status: 'Pending'
       }
 
@@ -163,17 +222,6 @@ Deno.serve(async (req: Request) => {
         .select()
         .single();
 
-      if (insertError && shouldRetryWithoutLanguagesSpoken(insertError)) {
-        delete insertPayload.languages_spoken
-        const retry = await supabaseClient
-          .from('applicants')
-          .insert(insertPayload)
-          .select()
-          .single()
-        newApplicant = retry.data
-        insertError = retry.error
-      }
-
       if (insertError) {
         // If duplicate email error, try to update instead
         if (insertError.code === '23505') {
@@ -181,47 +229,23 @@ Deno.serve(async (req: Request) => {
           const { data: fetchedApplicant } = await supabaseClient
             .from('applicants')
             .select('id')
-            .eq('email', formData.email)
+            .eq('user_id', userId)
             .single();
           
           if (fetchedApplicant) {
             applicantId = fetchedApplicant.id;
 
             const updatePayload: Record<string, unknown> = {
-              first_name: formData.first_name,
-              middle_name: formData.middle_name || null,
-              last_name: formData.last_name,
-              name_extension: formData.name_extension || null,
+              email: formData.email,
               phone: formData.phone_number || null,
-              date_of_birth: formData.date_of_birth || null,
-              gender: formData.gender || null,
-              street_address: formData.street_address || null,
-              barangay: formData.barangay || null,
-              city: formData.city || null,
-              province: formData.province || null,
-              zip_code: formData.zip_code || null,
-              licenses: formData.licenses || [],
-              height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-              weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-              civil_status: formData.civil_status || null,
-              religion: formData.religion || null,
-              languages_spoken: formData.languages_spoken || [],
-              user_id: userId || null
+              user_id: userId,
+              updated_at: new Date().toISOString(),
             };
 
-            let { error: updateError } = await supabaseClient
+            const { error: updateError } = await supabaseClient
               .from('applicants')
               .update(updatePayload)
               .eq('id', applicantId);
-
-            if (updateError && shouldRetryWithoutLanguagesSpoken(updateError)) {
-              delete updatePayload.languages_spoken
-              const retry = await supabaseClient
-                .from('applicants')
-                .update(updatePayload)
-                .eq('id', applicantId);
-              updateError = retry.error
-            }
             
             if (updateError) {
               throw updateError;

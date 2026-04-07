@@ -33,7 +33,7 @@ const ApplicationSuccess = () => {
 
         if (!applicant) {
           alert('No applicant record found. Please complete the application form first.')
-          navigate(`/apply/${jobId || ''}`)
+          navigate(`/profile/personalinformation/${jobId || ''}`)
           return
         }
 
@@ -85,7 +85,7 @@ const ApplicationSuccess = () => {
             .from('applications')
             .update({
               status: 'NEW',
-              current_step: 6,
+              current_step: 5,
               updated_at: new Date().toISOString()
             })
             .eq('id', existingApp.id)
@@ -100,7 +100,7 @@ const ApplicationSuccess = () => {
               applicant_id: applicant.id,
               job_id: isValidUUID ? jobId : null,
               status: 'NEW',
-              current_step: 6
+              current_step: 5
             })
 
           if (insertAppError) {

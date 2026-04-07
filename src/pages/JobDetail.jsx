@@ -171,7 +171,7 @@ const JobDetail = () => {
       return
     }
     // Navigate to application form if logged in
-    navigate(`/apply/${jobId}`)
+    navigate(`/profile/personalinformation/${jobId}`)
   }
 
   if (loading || supabaseLoading) {
@@ -411,7 +411,7 @@ const JobDetail = () => {
           setShowLoginModal(false)
           // Could add signup modal here if needed
         }}
-        redirectTo={jobId ? `/apply/${jobId}` : null}
+        redirectTo={jobId ? `/profile/personalinformation/${jobId}` : null}
       />
     </div>
   )

@@ -1,8 +1,7 @@
 import React from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
 import ApplicationForm from './pages/ApplicationForm'
-import IdPictureUpload from './pages/IdPictureUpload'
 import DocumentsForm from './pages/DocumentsForm'
 import ApplicationSuccess from './pages/ApplicationSuccess'
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -17,6 +16,8 @@ import File201Form from './pages/File201Form'
 import WorkExperienceForm from './pages/WorkExperienceForm'
 import ProtectedAdminRoute from './components/ProtectedAdminRoute'
 import ProtectedRoute from './components/ProtectedRoute'
+import ResumeProfile from './pages/ResumeProfile'
+import IdPictureUpload from './pages/IdPictureUpload'
 
 const App = () => {
   return (
@@ -24,7 +25,15 @@ const App = () => {
       <Route path="/" element={<Home />} />
       <Route path="/job/:jobId" element={<JobDetail />} />
       <Route
-        path="/apply"
+        path="/profile/resume"
+        element={
+          <ProtectedRoute>
+            <ResumeProfile />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile/personalinformation"
         element={
           <ProtectedRoute>
             <ApplicationForm />
@@ -32,21 +41,24 @@ const App = () => {
         }
       />
       <Route
-        path="/apply/:jobId"
-        element={
-          <ProtectedRoute>
-            <ApplicationForm />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/apply/:jobId/id-picture"
+        path="/profile/id-picture"
         element={
           <ProtectedRoute>
             <IdPictureUpload />
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/profile/personalinformation/:jobId"
+        element={
+          <ProtectedRoute>
+            <ApplicationForm />
+          </ProtectedRoute>
+        }
+      />
+      {/* Backwards compatible (old step-1 route) */}
+      <Route path="/apply" element={<Navigate to="/profile/personalinformation" replace />} />
+      <Route path="/apply/:jobId" element={<Navigate to="/profile/personalinformation/:jobId" replace />} />
       <Route
         path="/apply/:jobId/documents"
         element={

@@ -232,7 +232,7 @@ const DocumentUploadForm = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}`)
+    navigate(`/profile/personalinformation/${jobId || ''}`)
   }
 
   const handleNext = async (e) => {
@@ -270,7 +270,7 @@ const DocumentUploadForm = () => {
 
       if (!applicantId) {
         alert('Please complete previous steps first')
-        navigate(`/apply/${jobId || ''}`)
+        navigate(`/profile/personalinformation/${jobId || ''}`)
         return
       }
 

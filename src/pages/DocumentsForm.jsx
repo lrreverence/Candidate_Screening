@@ -165,7 +165,7 @@ const DocumentsForm = () => {
       if (!applicant) {
         console.warn('[DOCUMENTS] No applicant found for user')
         alert('Please complete Step 1 (Personal Information) first')
-        navigate(`/apply/${jobId || ''}`)
+        navigate(`/profile/personalinformation/${jobId || ''}`)
         setUploading(false)
         return
       }
@@ -198,7 +198,7 @@ const DocumentsForm = () => {
                 applicant_id: applicantId,
                 job_id: jobId,
                 status: 'Pending',
-                current_step: 3
+                current_step: 4
               })
               .select('id')
               .single()
@@ -400,7 +400,7 @@ const DocumentsForm = () => {
         if (uuidRegex.test(jobId)) {
           const { error: appError } = await supabase
             .from('applications')
-            .update({ current_step: 6 })
+            .update({ current_step: 5 })
             .eq('applicant_id', applicant.id)
             .eq('job_id', jobId)
 
@@ -460,12 +460,12 @@ const DocumentsForm = () => {
             <div className="flex gap-6 justify-between items-end">
               <div>
                 <p className="text-slate-900 dark:text-white text-lg font-bold leading-normal">Application Progress</p>
-                <p className="text-green-700 dark:text-green-300 text-sm font-normal">Step 5 of 6: Document Upload</p>
+                <p className="text-green-700 dark:text-green-300 text-sm font-normal">Step 4 of 5: Document Upload</p>
               </div>
               <span className="material-symbols-outlined text-green-500 text-3xl">upload_file</span>
             </div>
             <div className="rounded-full bg-gray-200 dark:bg-slate-700 h-3 overflow-hidden">
-              <div className="h-full rounded-full bg-green-500 dark:bg-green-500 relative w-5/6">
+              <div className="h-full rounded-full bg-green-500 dark:bg-green-500 relative w-4/5">
                 <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/30 animate-pulse"></div>
               </div>
             </div>

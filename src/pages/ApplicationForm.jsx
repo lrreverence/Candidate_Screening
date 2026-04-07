@@ -94,61 +94,67 @@ const ApplicationForm = () => {
       setLoading(true)
 
       try {
-        console.log('[APPLICATION] Loading existing applicant data for user:', user.id)
+        console.log('[APPLICATION] Loading existing personal info for user:', user.id)
 
-        // Skip session check - we already have authenticated user from AuthContext
-        console.log('[APPLICATION] Starting applicants query...')
         const startTime = Date.now()
 
-        // Fetch applicant data
-        console.log('[APPLICATION] Executing query NOW...')
-        const { data: applicant, error } = await supabase
-          .from('applicants')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle()
+        // For persistence: profile/resume reads from applicants; start there.
+        const [{ data: applicantRow, error: applicantErr }, { data: profileRow, error: profileErr }] = await Promise.all([
+          supabase
+            .from('applicants')
+            .select('*')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle(),
+        ])
 
         const elapsed = Date.now() - startTime
         console.log(`[APPLICATION] Query completed in ${elapsed}ms`, {
-          hasData: !!applicant,
-          error: error?.message,
-          applicantId: applicant?.id
+          hasApplicant: !!applicantRow,
+          hasProfile: !!profileRow,
+          applicantError: applicantErr?.message,
+          profileError: profileErr?.message,
         })
 
-        if (error) {
-          console.error('[APPLICATION] Error loading applicant:', error)
-          // Continue - user can still fill the form
-        } else if (applicant) {
-          console.log('[APPLICATION] Found existing applicant data:', applicant.id)
-          // Populate form with existing data
+        if (applicantErr) {
+          console.error('[APPLICATION] Error loading applicant row:', applicantErr)
+        }
+        if (profileErr) {
+          console.error('[APPLICATION] Error loading user profile:', profileErr)
+        }
+
+        const source = applicantRow || profileRow
+        if (source) {
+          console.log('[APPLICATION] Hydrating form from:', applicantRow ? 'applicants' : 'users')
           setFormData({
-            first_name: applicant.first_name || '',
-            middle_name: applicant.middle_name || '',
-            last_name: applicant.last_name || '',
-            name_extension: applicant.name_extension || '',
-            date_of_birth: applicant.date_of_birth || '',
-            gender: applicant.gender || '',
-            email: applicant.email || user.email || '',
-            phone_number: applicant.phone || '',
+            first_name: source.first_name || '',
+            middle_name: source.middle_name || '',
+            last_name: source.last_name || '',
+            name_extension: source.name_extension || '',
+            date_of_birth: source.date_of_birth || '',
+            gender: source.gender || '',
+            email: source.email || user.email || '',
+            phone_number: source.phone || source.phone_number || '',
             phone_number_alt: '',
-            street_address: applicant.street_address || '',
-            barangay: applicant.barangay || '',
-            city: applicant.city || '',
-            province: applicant.province || '',
-            zip_code: applicant.zip_code || '',
-            licenses: applicant.licenses || [],
-            height_cm: applicant.height_cm || '',
-            weight_kg: applicant.weight_kg || '',
-            civil_status: applicant.civil_status || '',
-            religion: applicant.religion || '',
-            languages_spoken: applicant.languages_spoken || [],
+            street_address: source.street_address || '',
+            barangay: source.barangay || '',
+            city: source.city || '',
+            province: source.province || '',
+            zip_code: source.zip_code || '',
+            licenses: source.licenses || [],
+            height_cm: source.height_cm || '',
+            weight_kg: source.weight_kg || '',
+            civil_status: source.civil_status || '',
+            religion: source.religion || '',
+            languages_spoken: source.languages_spoken || [],
           })
         } else {
-          console.log('[APPLICATION] No existing applicant found, using defaults')
-          // Set email from user
-          if (user?.email) {
-            setFormData(prev => ({ ...prev, email: user.email }))
-          }
+          console.log('[APPLICATION] No existing rows found, using defaults')
+          if (user?.email) setFormData(prev => ({ ...prev, email: user.email }))
         }
       } catch (error) {
         console.error('[APPLICATION] Exception loading applicant:', error)
@@ -219,7 +225,7 @@ const ApplicationForm = () => {
         const { data: existingApplicant, error: checkError } = await supabase
           .from('applicants')
           .select('id')
-          .eq('email', formData.email)
+          .eq('user_id', user.id)
           .maybeSingle()
         
         if (checkError && checkError.code !== 'PGRST116') {
@@ -234,6 +240,7 @@ const ApplicationForm = () => {
             middle_name: formData.middle_name || null,
             last_name: formData.last_name,
             name_extension: formData.name_extension || null,
+            email: formData.email,
             phone: formData.phone_number,
             date_of_birth: formData.date_of_birth || null,
             gender: formData.gender || null,
@@ -465,9 +472,8 @@ const ApplicationForm = () => {
 
       console.log('[FORM] Success! Applicant ID:', result.applicantId)
 
-      // Navigate to step 2 (Work Experience)
-      console.log('[FORM] Navigating to Work Experience page...')
-      navigate(`/apply/${jobId || ''}/work-experience`)
+      // After saving personal info, return to resume/profile view
+      navigate('/profile/resume')
     } catch (error) {
       console.error('[FORM] Error saving application:', error)
       const errorMessage = error?.message || 'Unknown error occurred'
@@ -487,9 +493,9 @@ const ApplicationForm = () => {
       <ApplicationHeader />
 
       <main className="flex-grow container mx-auto px-4 py-8 max-w-4xl">
+        {/*
         <ApplicationBreadcrumbs />
 
-        {/* Header Section */}
         <div className="mb-10">
           <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">Begin Your Career</h1>
           <p className="text-gray-600 dark:text-gray-400 text-lg">
@@ -498,6 +504,18 @@ const ApplicationForm = () => {
         </div>
 
         <ApplicationProgress currentStep={1} totalSteps={4} />
+        */}
+
+        {/*
+        <div className="mb-10">
+          <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">Begin Your Career</h1>
+          <p className="text-gray-600 dark:text-gray-400 text-lg">
+            Join the elite team at E Power Security. Let's start with your personal details.
+          </p>
+        </div>
+
+        <ApplicationProgress currentStep={1} totalSteps={4} />
+        */}
 
         {/* Main Form Card */}
         <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 md:p-10 border border-gray-200 dark:border-white/5 shadow-xl">
@@ -518,7 +536,7 @@ const ApplicationForm = () => {
               >
                 {loading ? 'Saving...' : (
                   <>
-                    Next Step
+                    Save
                     <span className="material-symbols-outlined">arrow_forward</span>
                   </>
                 )}
@@ -527,7 +545,9 @@ const ApplicationForm = () => {
           </form>
         </div>
 
+        {/*
         <ApplicationHelp />
+        */}
       </main>
 
       <ApplicationFooter />

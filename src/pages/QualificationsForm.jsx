@@ -51,7 +51,7 @@ const QualificationsForm = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}`)
+    navigate(`/profile/personalinformation/${jobId || ''}`)
   }
 
   const handleNext = async (e) => {
@@ -165,7 +165,7 @@ const QualificationsForm = () => {
       if (!applicant || !applicant.id) {
         console.warn('[QUALIFICATIONS] No applicant found for user:', user.id)
         alert('Please complete Step 1 (Personal Information) first')
-        navigate(`/apply/${jobId || ''}`)
+        navigate(`/profile/personalinformation/${jobId || ''}`)
         return
       }
 

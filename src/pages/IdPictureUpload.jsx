@@ -305,7 +305,7 @@ const IdPictureUpload = () => {
 
       if (!applicant) {
         alert('Please complete Step 1 (Personal Information) first')
-        navigate(`/apply/${jobId || ''}`)
+        navigate(`/profile/personalinformation/${jobId || ''}`)
         setUploading(false)
         return
       }

@@ -194,14 +194,14 @@ const Home = () => {
     if (!user) {
       // Store the jobId to redirect after login
       setPendingJobId(jobId)
-      setPendingRedirectTo(jobId ? `/apply/${jobId}` : '/apply')
+      setPendingRedirectTo(jobId ? `/profile/personalinformation/${jobId}` : '/profile/personalinformation')
       // Show login modal if not logged in
       setShowLoginModal(true)
       return
     }
     
     // Navigate to application form if logged in
-    navigate(`/apply/${jobId || ''}`)
+    navigate(`/profile/personalinformation/${jobId || ''}`)
   }
 
   return (
@@ -223,7 +223,7 @@ const Home = () => {
                   <span>{user.email}</span>
                 </div>
                 <Link
-                  to="/apply"
+                  to="/profile/resume"
                   className="flex h-10 px-6 cursor-pointer items-center justify-center rounded-full border border-secondary bg-card-dark text-white text-sm font-bold hover:bg-secondary transition-colors"
                 >
                   Resume / Profile
@@ -255,7 +255,7 @@ const Home = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setPendingRedirectTo('/apply')
+                    setPendingRedirectTo('/profile/resume')
                     setShowLoginModal(true)
                   }}
                   className="hidden sm:flex h-10 px-6 cursor-pointer items-center justify-center rounded-full border border-secondary bg-card-dark text-white text-sm font-bold hover:bg-secondary transition-colors"
@@ -590,7 +590,7 @@ const Home = () => {
           setShowLoginModal(false)
           setShowSignupModal(true)
         }}
-        redirectTo={pendingRedirectTo || (pendingJobId ? `/apply/${pendingJobId}` : null)}
+        redirectTo={pendingRedirectTo || (pendingJobId ? `/profile/personalinformation/${pendingJobId}` : null)}
       />
       <SignupModal
         isOpen={showSignupModal}
