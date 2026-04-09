@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import ApplicationHeader from '../components/application/ApplicationHeader'
@@ -344,6 +344,8 @@ const formatMonthsAsYearsMonths = (months) => {
 
 const ResumeProfile = () => {
   const navigate = useNavigate()
+  const routerLocation = useLocation()
+  const routeParams = useParams()
   const { user, userProfile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [applicant, setApplicant] = useState(null)
@@ -375,6 +377,32 @@ const ResumeProfile = () => {
   const [others, setOthers] = useState(() => normalizeOthersState(null))
   const [othersBusy, setOthersBusy] = useState(false)
   const othersStorageKey = useMemo(() => (user?.id ? `resume_others_${user.id}` : 'resume_others'), [user?.id])
+
+  const isApplyReviewRoute = routerLocation.pathname.startsWith('/profile/apply')
+  const applyJobId = isApplyReviewRoute ? (routeParams.jobId ?? null) : null
+  const [applyJobTitle, setApplyJobTitle] = useState('')
+  const [continueBusy, setContinueBusy] = useState(false)
+
+  useEffect(() => {
+    if (!applyJobId) {
+      setApplyJobTitle('')
+      return
+    }
+    let cancelled = false
+    supabase
+      .from('jobs')
+      .select('title')
+      .eq('id', applyJobId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (!error && data?.title) setApplyJobTitle(data.title)
+        else setApplyJobTitle('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [applyJobId])
 
   useEffect(() => {
     let cancelled = false
@@ -1082,6 +1110,391 @@ const ResumeProfile = () => {
     return diffDays(today, d)
   }
 
+  const handleContinueApplication = async () => {
+    if (!user?.id) return
+    if (!applicant?.id) {
+      navigate(applyJobId ? `/profile/personalinformation/${applyJobId}` : '/profile/personalinformation')
+      return
+    }
+    setContinueBusy(true)
+    try {
+      if (applyJobId) {
+        const { data: existingApp, error: existErr } = await supabase
+          .from('applications')
+          .select('id')
+          .eq('applicant_id', applicant.id)
+          .eq('job_id', applyJobId)
+          .maybeSingle()
+        if (existErr && existErr.code !== 'PGRST116') throw existErr
+        if (existingApp?.id) {
+          const { error: upErr } = await supabase
+            .from('applications')
+            .update({
+              current_step: 5,
+              status: 'Pending',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingApp.id)
+          if (upErr) throw upErr
+        } else {
+          const { error: insErr } = await supabase.from('applications').insert({
+            job_id: applyJobId,
+            applicant_id: applicant.id,
+            status: 'Pending',
+            current_step: 5,
+          })
+          if (insErr) throw insErr
+        }
+        navigate(`/apply/${applyJobId}/success`)
+      } else {
+        navigate('/profile/apply')
+      }
+    } catch (err) {
+      console.error('[RESUME_PROFILE] continue application:', err)
+      alert(err?.message || 'Could not continue. Please try again.')
+    } finally {
+      setContinueBusy(false)
+    }
+  }
+
+  const renderApplyReviewTableSection = (s) => {
+    const Ro = ({ children }) => (
+      <span className="text-sm font-semibold text-slate-900 dark:text-white">{children == null || children === '' ? '—' : children}</span>
+    )
+
+    if (s.key === 'education') {
+      return (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#0f172a]">
+          <table className="min-w-[720px] w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-[#0b1220] border-b border-gray-200 dark:border-white/10">
+                {['Level', 'School', 'Course / degree', 'Year graduated', 'Attachment'].map((h) => (
+                  <th
+                    key={h}
+                    className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-white/10">
+              {EDUCATION_LEVELS.flatMap((lvl) => {
+                const rows = (education[lvl.key] || []).filter(
+                  (row) =>
+                    String(row?.school || '').trim() ||
+                    String(row?.course || '').trim() ||
+                    String(row?.year_graduated || '').trim() ||
+                    row?.attachment?.file_name
+                )
+                const displayRows = rows.length ? rows : []
+                if (displayRows.length === 0) {
+                  return (
+                    <tr key={`${lvl.key}-empty`}>
+                      <td className="px-3 py-2 font-extrabold text-slate-800 dark:text-white">{lvl.label}</td>
+                      <td className="px-3 py-2" colSpan={4}>
+                        <Ro>—</Ro>
+                      </td>
+                    </tr>
+                  )
+                }
+                return displayRows.map((row, idx) => (
+                  <tr key={`${lvl.key}-${idx}`}>
+                    <td className="px-3 py-2 font-extrabold text-slate-800 dark:text-white whitespace-nowrap">
+                      {idx === 0 ? lvl.label : ''}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{row.school}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{row.course}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{row.year_graduated}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{row.attachment?.file_name}</Ro>
+                    </td>
+                  </tr>
+                ))
+              })}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    if (s.key === 'licenses') {
+      const rows = (credentials.licenses || []).filter(
+        (row) =>
+          String(row?.category || '').trim() ||
+          String(row?.date_issued || '').trim() ||
+          String(row?.date_expiry || '').trim() ||
+          row?.attachment?.file_name
+      )
+      const list = rows.length ? rows : []
+      return (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#0f172a]">
+          <table className="min-w-[640px] w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-[#0b1220] border-b border-gray-200 dark:border-white/10">
+                {['Category', 'Date issued', 'Date expiry', 'Status', 'Attachment'].map((h) => (
+                  <th
+                    key={h}
+                    className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-white/10">
+              {(list.length ? list : [{}]).map((row, idx) => {
+                const today = new Date()
+                const exp = toDateOnly(row?.date_expiry)
+                const remaining = exp ? diffDays(today, exp) : null
+                const status =
+                  remaining == null ? '—' : remaining < 0 ? 'Expired' : remaining <= 60 ? 'Soon to expire' : 'Valid'
+                return (
+                  <tr key={`lic-${idx}`}>
+                    <td className="px-3 py-2">
+                      <Ro>{row?.category}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{formatDate(row?.date_issued)}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{formatDate(row?.date_expiry)}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{status}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{row?.attachment?.file_name}</Ro>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    if (s.key === 'training') {
+      const rows = (credentials.trainings || []).filter(
+        (row) => String(row?.training_attended || '').trim() || String(row?.date || '').trim()
+      )
+      const list = rows.length ? rows : []
+      return (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#0f172a]">
+          <table className="min-w-[520px] w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-[#0b1220] border-b border-gray-200 dark:border-white/10">
+                <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80">
+                  Training attended
+                </th>
+                <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80">
+                  Date
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-white/10">
+              {(list.length ? list : [{}]).map((row, idx) => (
+                <tr key={`tr-${idx}`}>
+                  <td className="px-3 py-2">
+                    <Ro>{row?.training_attended}</Ro>
+                  </td>
+                  <td className="px-3 py-2">
+                    <Ro>{row?.date}</Ro>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    if (s.key === 'employment') {
+      return (
+        <div className="space-y-5">
+          {[
+            { key: 'job_related', title: 'Employment record (job related)' },
+            { key: 'non_related', title: 'Employment record (non-related)' },
+          ].map((block) => {
+            const rows = (employment?.[block.key] || []).filter(
+              (r) =>
+                String(r?.position || '').trim() ||
+                String(r?.agency || '').trim() ||
+                String(r?.place || '').trim() ||
+                String(r?.from || '').trim() ||
+                String(r?.to || '').trim()
+            )
+            const totalMonths = rows.reduce((sum, r) => sum + diffMonthsInclusive(r?.from, r?.to), 0)
+            return (
+              <div key={block.key} className="rounded-xl bg-white dark:bg-[#0c1527] border border-gray-200 dark:border-white/10 overflow-hidden">
+                <div className="px-4 sm:px-5 py-3 border-b border-gray-200 dark:border-white/10">
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-900 dark:text-white">{block.title}</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-[860px] w-full border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-[#08101f]">
+                        {['Position', 'Agency', 'Place', 'From', 'To', 'Total'].map((h) => (
+                          <th
+                            key={h}
+                            className="border border-gray-200 dark:border-white/10 px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-[#93c5fd]"
+                          >
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(rows.length ? rows : [{}]).map((row, idx) => {
+                        const rowMonths = diffMonthsInclusive(row?.from, row?.to)
+                        return (
+                          <tr key={idx} className="bg-white dark:bg-[#0c1527]">
+                            <td className="border border-gray-200 dark:border-white/10 px-2.5 py-2">
+                              <Ro>{row?.position}</Ro>
+                            </td>
+                            <td className="border border-gray-200 dark:border-white/10 px-2.5 py-2">
+                              <Ro>{row?.agency}</Ro>
+                            </td>
+                            <td className="border border-gray-200 dark:border-white/10 px-2.5 py-2">
+                              <Ro>{row?.place}</Ro>
+                            </td>
+                            <td className="border border-gray-200 dark:border-white/10 px-2.5 py-2">
+                              <Ro>{row?.from ? formatDate(row.from) : ''}</Ro>
+                            </td>
+                            <td className="border border-gray-200 dark:border-white/10 px-2.5 py-2">
+                              <Ro>{row?.to ? formatDate(row.to) : ''}</Ro>
+                            </td>
+                            <td className="border border-gray-200 dark:border-white/10 px-3 py-2 whitespace-nowrap font-semibold text-slate-900 dark:text-white">
+                              {formatMonthsAsYearsMonths(rowMonths)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      <tr className="bg-slate-50 dark:bg-[#08101f]">
+                        <td colSpan={5} className="border border-gray-200 dark:border-white/10 px-3 py-2">
+                          <span className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-white">Total</span>
+                        </td>
+                        <td className="border border-gray-200 dark:border-white/10 px-3 py-2 text-right text-sm font-extrabold text-slate-900 dark:text-white whitespace-nowrap">
+                          {formatMonthsAsYearsMonths(totalMonths)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )
+    }
+
+    if (s.key === 'clearances') {
+      return (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#0f172a]">
+          <table className="min-w-[640px] w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-[#0b1220] border-b border-gray-200 dark:border-white/10">
+                {['Category', 'Date issued', 'Date expiry', 'Remaining days', 'Status', 'Attachment'].map((h) => (
+                  <th
+                    key={h}
+                    className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-white/10">
+              {CLEARANCE_TYPES.map((t) => {
+                const row = clearances?.[t.key] || makeEmptyClearanceRow()
+                const remaining = row?.date_expiry ? daysUntil(row.date_expiry) : null
+                const status =
+                  row?.date_expiry && remaining != null
+                    ? remaining >= 0
+                      ? 'Valid'
+                      : 'Expired'
+                    : row?.attachment
+                      ? 'Valid'
+                      : '—'
+                return (
+                  <tr key={t.key}>
+                    <td className="px-3 py-2 font-extrabold text-slate-900 dark:text-white whitespace-nowrap">{t.label}</td>
+                    <td className="px-3 py-2">
+                      <Ro>{formatDate(row.date_issued)}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{formatDate(row.date_expiry)}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{row?.date_expiry && remaining != null ? remaining : '—'}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{status}</Ro>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Ro>{row.attachment?.file_name}</Ro>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    if (s.key === 'others') {
+      const etLabels = (others?.employment_types || [])
+        .map((id) => EMPLOYMENT_TYPE_OPTIONS.find((o) => o.id === id)?.label || id)
+        .join(', ')
+      return (
+        <div className="space-y-4 text-sm">
+          <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-slate-50 dark:bg-[#0b1220] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Skills</p>
+            <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+              {(others?.skills || []).length ? others.skills.join(', ') : '—'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-slate-50 dark:bg-[#0b1220] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Preferred places</p>
+            <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+              {(others?.preferred_places || []).length ? others.preferred_places.join(', ') : '—'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-slate-50 dark:bg-[#0b1220] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Preferred monthly salary</p>
+            <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+              {(others?.preferred_monthly_salary || []).length ? others.preferred_monthly_salary.join(', ') : '—'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-slate-50 dark:bg-[#0b1220] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Availability</p>
+            <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+              {others?.can_start?.asap
+                ? 'ASAP'
+                : others?.can_start?.date
+                  ? formatDate(others.can_start.date)
+                  : '—'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-slate-50 dark:bg-[#0b1220] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Employment type</p>
+            <p className="mt-1 font-semibold text-slate-900 dark:text-white">{etLabels || '—'}</p>
+          </div>
+        </div>
+      )
+    }
+
+    return <p className="text-sm text-slate-600 dark:text-[#93c5fd]/80">Nothing to show for this section.</p>
+  }
+
   const setClearanceField = (key, field, value) => {
     setClearances((prev) => ({
       ...prev,
@@ -1289,48 +1702,99 @@ const ResumeProfile = () => {
     <div className="dark min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display transition-colors duration-200">
       <ApplicationHeader />
 
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-8 flex-grow">
+      <main
+        className={`mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-8 flex-grow ${isApplyReviewRoute ? 'pb-28' : ''}`}
+      >
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-              Resume / Profile
+              {isApplyReviewRoute ? 'Review your profile' : 'Resume / Profile'}
             </h1>
             <p className="mt-1 text-sm text-slate-600 dark:text-[#93c5fd]">
-              Review your details before final submission.
+              {isApplyReviewRoute
+                ? applyJobId
+                  ? applyJobTitle
+                    ? `Applying for: ${applyJobTitle}. Expand each section to verify your information.`
+                    : 'Expand each section to verify your information before you continue.'
+                  : 'General application — expand each section to verify your information.'
+                : 'Review your details before final submission.'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/profile/personalinformation')}
-            className="inline-flex h-10 items-center justify-center rounded-full bg-primary text-[#0f172a] px-6 text-sm font-bold hover:bg-blue-400 transition-colors"
-          >
-            Edit personal info
-          </button>
+          {!isApplyReviewRoute ? (
+            <button
+              type="button"
+              onClick={() => navigate('/profile/personalinformation')}
+              className="inline-flex h-10 items-center justify-center rounded-full bg-primary text-[#0f172a] px-6 text-sm font-bold hover:bg-blue-400 transition-colors"
+            >
+              Edit personal info
+            </button>
+          ) : (
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => navigate('/profile/resume')}
+                className="inline-flex h-10 items-center justify-center rounded-full border border-slate-300 dark:border-white/20 bg-white/80 dark:bg-white/5 px-6 text-sm font-bold text-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-white/10 transition-colors"
+              >
+                Full profile editor
+              </button>
+            </div>
+          )}
         </div>
+
+        {isApplyReviewRoute && !loading && !applicant?.id && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+            <p className="font-bold">No applicant profile found yet.</p>
+            <p className="mt-1 text-amber-800/90 dark:text-amber-200/90">
+              Complete personal information first, then return here to review and continue.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate(applyJobId ? `/profile/personalinformation/${applyJobId}` : '/profile/personalinformation')}
+              className="mt-3 inline-flex h-9 items-center rounded-full bg-primary text-[#0f172a] px-5 text-xs font-bold hover:bg-blue-400 transition-colors"
+            >
+              Go to personal information
+            </button>
+          </div>
+        )}
         {/* Paper card */}
         <section className="overflow-hidden rounded-2xl bg-white dark:bg-[#111827] border border-gray-200 dark:border-[#1e40af]/60 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
           {/* Header block (like screenshot) */}
-          <div className="grid grid-cols-1 gap-4 border-b border-gray-200 dark:border-white/10 p-5 sm:grid-cols-[180px_1fr] sm:gap-6 sm:p-7">
+            <div className="grid grid-cols-1 gap-4 border-b border-gray-200 dark:border-white/10 p-5 sm:grid-cols-[180px_1fr] sm:gap-6 sm:p-7">
             <div className="flex items-start gap-4 sm:block">
-              <button
-                type="button"
-                onClick={() => navigate('/profile/id-picture')}
-                className="relative h-28 w-28 overflow-hidden rounded-xl bg-black sm:h-36 sm:w-36 ring-1 ring-white/10 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 hover:ring-white/20 transition"
-                title="Change picture"
-              >
-                {photoUrl ? (
-                  <img src={photoUrl} alt="Profile" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-white/80">
-                    <span className="text-sm font-bold">Picture</span>
-                  </div>
-                )}
-                <div className="pointer-events-none absolute inset-x-2 bottom-2">
-                  <div className="w-full rounded-lg bg-white/90 px-2.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-900 text-center">
-                    Change
-                  </div>
+              {isApplyReviewRoute ? (
+                <div
+                  className="relative h-28 w-28 overflow-hidden rounded-xl bg-black sm:h-36 sm:w-36 ring-1 ring-white/10"
+                  title="ID photo"
+                >
+                  {photoUrl ? (
+                    <img src={photoUrl} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-white/80">
+                      <span className="text-sm font-bold">Picture</span>
+                    </div>
+                  )}
                 </div>
-              </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navigate('/profile/id-picture')}
+                  className="relative h-28 w-28 overflow-hidden rounded-xl bg-black sm:h-36 sm:w-36 ring-1 ring-white/10 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 hover:ring-white/20 transition"
+                  title="Change picture"
+                >
+                  {photoUrl ? (
+                    <img src={photoUrl} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-white/80">
+                      <span className="text-sm font-bold">Picture</span>
+                    </div>
+                  )}
+                  <div className="pointer-events-none absolute inset-x-2 bottom-2">
+                    <div className="w-full rounded-lg bg-white/90 px-2.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-900 text-center">
+                      Change
+                    </div>
+                  </div>
+                </button>
+              )}
               <div className="sm:hidden">
                 <p className="text-sm font-black leading-tight text-slate-900 dark:text-white">{displayName || '—'}</p>
                 <p className="text-xs text-slate-600 dark:text-[#93c5fd]">{location}</p>
@@ -1452,6 +1916,8 @@ const ResumeProfile = () => {
                               <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{formatList(profile?.languages_spoken)}</p>
                             </div>
                           </div>
+                        ) : isApplyReviewRoute ? (
+                          renderApplyReviewTableSection(s)
                         ) : s.key === 'education' ? (
                           <div className="space-y-4">
                             <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#0f172a]">
@@ -2275,7 +2741,7 @@ const ResumeProfile = () => {
                           </p>
                         )}
 
-                        {s.cta?.to && (
+                        {!isApplyReviewRoute && s.cta?.to && (
                           <div className="mt-4 flex justify-end">
                             <Link
                               to={s.cta.to}
@@ -2303,6 +2769,28 @@ const ResumeProfile = () => {
           </div>
         )}
       </main>
+
+      {isApplyReviewRoute && (
+        <div className="sticky bottom-0 z-40 border-t border-slate-200 dark:border-[#1e40af]/60 bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur-md">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(applyJobId ? `/job/${applyJobId}` : '/')}
+              className="inline-flex h-11 items-center justify-center rounded-full border border-slate-300 dark:border-white/15 px-6 text-sm font-bold text-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+            >
+              Back to jobs
+            </button>
+            <button
+              type="button"
+              onClick={handleContinueApplication}
+              disabled={continueBusy || !applicant?.id}
+              className="inline-flex h-11 items-center justify-center rounded-full bg-primary text-[#0f172a] px-8 text-sm font-bold hover:bg-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {continueBusy ? 'Working…' : 'Submit application'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <ApplicationFooter />
     </div>

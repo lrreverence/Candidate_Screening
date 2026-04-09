@@ -5,6 +5,9 @@ import { useAuth } from '../contexts/AuthContext'
 import LoginModal from '../components/LoginModal'
 import { getJobImageUrl } from '../lib/storageUpload'
 import { supabase } from '../lib/supabase'
+import { useApplicantJobMatchInputs } from '../hooks/useApplicantJobMatchInputs'
+import { computeRequirementMatchPercent } from '../lib/jobMatchScore'
+import JobRequirementMatchPill from '../components/JobRequirementMatchPill'
 
 const APPLICATION_STATUS_LABELS = {
   pending: { label: 'Pending Review', icon: 'schedule', className: 'text-yellow-500' },
@@ -56,7 +59,9 @@ function normalizeJobRow(foundJob, imageUrl) {
     description: foundJob.description || "Join our team and help us provide exceptional security services.",
     requirements: toArray(foundJob.requirements),
     responsibilities: toArray(foundJob.responsibilities),
-    benefits: toArray(foundJob.benefits)
+    benefits: toArray(foundJob.benefits),
+    required_documents: foundJob.required_documents,
+    required_credentials: foundJob.required_credentials
   }
 }
 
@@ -65,6 +70,7 @@ const JobDetail = () => {
   const navigate = useNavigate()
   const { jobs: supabaseJobs, loading: supabaseLoading } = useSupabase()
   const { user } = useAuth()
+  const { loading: jobMatchLoading, data: jobMatchInputs } = useApplicantJobMatchInputs(user?.id)
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
   const [hasApplied, setHasApplied] = useState(false)
@@ -164,6 +170,18 @@ const JobDetail = () => {
     checkApplication()
   }, [user?.id, jobId])
 
+  const requirementMatchPercent =
+    user &&
+    job &&
+    jobMatchInputs &&
+    typeof jobMatchInputs === 'object' &&
+    !jobMatchLoading
+      ? computeRequirementMatchPercent(job, {
+          documents: jobMatchInputs.documents,
+          applicantLicenseIds: jobMatchInputs.licenseIds
+        })
+      : null
+
   const handleApply = () => {
     if (!user) {
       // Show login modal if not logged in
@@ -171,7 +189,7 @@ const JobDetail = () => {
       return
     }
     // Navigate to application form if logged in
-    navigate(`/profile/personalinformation/${jobId}`)
+    navigate(`/profile/apply/${jobId}`)
   }
 
   if (loading || supabaseLoading) {
@@ -305,6 +323,15 @@ const JobDetail = () => {
               {/* Apply Card */}
               <div className="bg-card-dark border border-secondary rounded-2xl p-6 sticky top-24">
                 <h3 className="text-xl font-bold text-white mb-4">Job Details</h3>
+                {requirementMatchPercent !== null && (
+                  <div className="mb-5 pb-5 border-b border-secondary/40">
+                    <p className="text-xs text-text-muted mb-2 uppercase tracking-wide">Your profile vs. requirements</p>
+                    <JobRequirementMatchPill percent={requirementMatchPercent} />
+                    <p className="text-xs text-text-muted mt-2 leading-relaxed">
+                      Based on required documents and credentials configured for this role. This is not a hiring probability or guarantee.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-4 mb-6">
                   <div className="flex items-center gap-3">
                     <span className="material-symbols-outlined text-primary">payments</span>
@@ -411,7 +438,7 @@ const JobDetail = () => {
           setShowLoginModal(false)
           // Could add signup modal here if needed
         }}
-        redirectTo={jobId ? `/profile/personalinformation/${jobId}` : null}
+        redirectTo={jobId ? `/profile/apply/${jobId}` : null}
       />
     </div>
   )

@@ -2,7 +2,7 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
 import ApplicationForm from './pages/ApplicationForm'
-import DocumentsForm from './pages/DocumentsForm'
+import ApplyDocumentsRedirect from './pages/ApplyDocumentsRedirect'
 import ApplicationSuccess from './pages/ApplicationSuccess'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import TermsOfService from './pages/TermsOfService'
@@ -13,7 +13,7 @@ import Contact from './pages/Contact'
 import JobDetail from './pages/JobDetail'
 import ResetPassword from './pages/ResetPassword'
 import File201Form from './pages/File201Form'
-import WorkExperienceForm from './pages/WorkExperienceForm'
+import ApplyWorkExperienceRedirect from './pages/ApplyWorkExperienceRedirect'
 import ProtectedAdminRoute from './components/ProtectedAdminRoute'
 import ProtectedRoute from './components/ProtectedRoute'
 import ResumeProfile from './pages/ResumeProfile'
@@ -26,6 +26,22 @@ const App = () => {
       <Route path="/job/:jobId" element={<JobDetail />} />
       <Route
         path="/profile/resume"
+        element={
+          <ProtectedRoute>
+            <ResumeProfile />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile/apply"
+        element={
+          <ProtectedRoute>
+            <ResumeProfile />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile/apply/:jobId"
         element={
           <ProtectedRoute>
             <ResumeProfile />
@@ -57,13 +73,21 @@ const App = () => {
         }
       />
       {/* Backwards compatible (old step-1 route) */}
-      <Route path="/apply" element={<Navigate to="/profile/personalinformation" replace />} />
-      <Route path="/apply/:jobId" element={<Navigate to="/profile/personalinformation/:jobId" replace />} />
+      <Route path="/apply" element={<Navigate to="/profile/apply" replace />} />
+      <Route path="/apply/:jobId" element={<Navigate to="/profile/apply/:jobId" replace />} />
+      <Route
+        path="/apply/documents"
+        element={
+          <ProtectedRoute>
+            <ApplyDocumentsRedirect />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/apply/:jobId/documents"
         element={
           <ProtectedRoute>
-            <DocumentsForm />
+            <ApplyDocumentsRedirect />
           </ProtectedRoute>
         }
       />
@@ -93,7 +117,7 @@ const App = () => {
         path="/apply/:jobId/work-experience"
         element={
           <ProtectedRoute>
-            <WorkExperienceForm />
+            <ApplyWorkExperienceRedirect />
           </ProtectedRoute>
         }
       />

@@ -215,10 +215,9 @@ const QualificationsForm = () => {
       }
 
       console.log('[QUALIFICATIONS] ===== FORM SUBMIT SUCCESS =====')
-      console.log('[QUALIFICATIONS] Navigating to documents page...')
+      console.log('[QUALIFICATIONS] Navigating to success...')
 
-      // Navigate to next step (documents upload)
-      navigate(`/apply/${jobId || ''}/documents`)
+      navigate(`/apply/${jobId || ''}/success`)
     } catch (error) {
       console.error('[QUALIFICATIONS] ===== FORM SUBMIT ERROR =====')
       console.error('[QUALIFICATIONS] Error details:', error)

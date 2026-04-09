@@ -5,12 +5,16 @@ import { useAuth } from '../contexts/AuthContext'
 import LoginModal from '../components/LoginModal'
 import SignupModal from '../components/SignupModal'
 import { getJobImageUrl } from '../lib/storageUpload'
+import { useApplicantJobMatchInputs } from '../hooks/useApplicantJobMatchInputs'
+import { computeRequirementMatchPercent } from '../lib/jobMatchScore'
+import JobRequirementMatchPill from '../components/JobRequirementMatchPill'
 
 const Home = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { jobs: supabaseJobs, loading: supabaseLoading, error: supabaseError } = useSupabase()
   const { user, userProfile, signOut } = useAuth()
+  const { loading: jobMatchLoading, data: jobMatchInputs } = useApplicantJobMatchInputs(user?.id)
   const [selectedCategory, setSelectedCategory] = useState('All Jobs')
   const [searchQuery, setSearchQuery] = useState('')
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -142,7 +146,9 @@ const Home = () => {
           icon: job.badge_icon,
           color: job.badge_color
         } : null,
-        category: job.category
+        category: job.category,
+        required_documents: job.required_documents,
+        required_credentials: job.required_credentials
       }))
     }
     
@@ -194,14 +200,14 @@ const Home = () => {
     if (!user) {
       // Store the jobId to redirect after login
       setPendingJobId(jobId)
-      setPendingRedirectTo(jobId ? `/profile/personalinformation/${jobId}` : '/profile/personalinformation')
+      setPendingRedirectTo(jobId ? `/profile/apply/${jobId}` : '/profile/apply')
       // Show login modal if not logged in
       setShowLoginModal(true)
       return
     }
     
     // Navigate to application form if logged in
-    navigate(`/profile/personalinformation/${jobId || ''}`)
+    navigate(jobId ? `/profile/apply/${jobId}` : '/profile/apply')
   }
 
   return (
@@ -426,24 +432,41 @@ const Home = () => {
                     </div>
                     <div className="p-5 flex flex-col flex-grow gap-4">
                       <div>
-                        <h3 className="text-xl font-bold text-white mb-1 group-hover:text-primary transition-colors">
-                          {job.title}
-                        </h3>
+                        <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
+                          <h3 className="text-xl font-bold text-white group-hover:text-primary transition-colors">
+                            {job.title}
+                          </h3>
+                          {user &&
+                            jobMatchInputs &&
+                            typeof jobMatchInputs === 'object' &&
+                            !jobMatchLoading && (
+                              <JobRequirementMatchPill
+                                compact
+                                className="shrink-0"
+                                percent={computeRequirementMatchPercent(job, {
+                                  documents: jobMatchInputs.documents,
+                                  applicantLicenseIds: jobMatchInputs.licenseIds
+                                })}
+                              />
+                            )}
+                        </div>
                         <div className="flex items-center text-text-muted text-sm gap-1">
                           <span className="material-symbols-outlined text-[16px]">location_on</span>
                           {job.location}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <span className="bg-secondary/40 text-text-muted text-xs px-2.5 py-1 rounded-md border border-secondary">
-                          {job.salary}
-                        </span>
-                        <span className="bg-secondary/40 text-text-muted text-xs px-2.5 py-1 rounded-md border border-secondary">
-                          {job.type}
-                        </span>
-                        <span className="bg-secondary/40 text-text-muted text-xs px-2.5 py-1 rounded-md border border-secondary">
-                          {job.shift}
-                        </span>
+                        {[job.salary, job.type, job.shift]
+                          .map((v) => (v == null ? '' : String(v).trim()))
+                          .filter(Boolean)
+                          .map((text, i) => (
+                            <span
+                              key={`${job.id}-meta-${i}-${text}`}
+                              className="bg-secondary/40 text-text-muted text-xs px-2.5 py-1 rounded-md border border-secondary"
+                            >
+                              {text}
+                            </span>
+                          ))}
                       </div>
                       <div className="mt-auto flex gap-3 pt-2">
                         <button 
@@ -580,7 +603,7 @@ const Home = () => {
           setShowLoginModal(false)
           setShowSignupModal(true)
         }}
-        redirectTo={pendingRedirectTo || (pendingJobId ? `/profile/personalinformation/${pendingJobId}` : null)}
+        redirectTo={pendingRedirectTo || (pendingJobId ? `/profile/apply/${pendingJobId}` : null)}
       />
       <SignupModal
         isOpen={showSignupModal}

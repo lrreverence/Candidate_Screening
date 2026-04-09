@@ -241,40 +241,23 @@ const ApplicantDetailView = () => {
   }
 
   const getMatchPercentage = () => {
-    // Calculate match percentage based solely on job requirements (documents and credentials)
+    // Match percentage based on credentials only (documents step removed from apply flow).
     const applicant = application?.applicants
     if (!applicant) return 0
     
     const jobData = application?.jobs || job
-    const documents = applicant?.documents || []
     const applicantLicenses = Array.isArray(applicant?.licenses) ? applicant.licenses : []
     
-    // Get required documents and credentials from the job
-    const requiredDocuments = Array.isArray(jobData?.required_documents) ? jobData.required_documents : []
+    // Get required credentials from the job
     const requiredCredentials = Array.isArray(jobData?.required_credentials) ? jobData.required_credentials : []
     
-    // If no requirements are set, return 0 (cannot calculate match)
-    if (requiredDocuments.length === 0 && requiredCredentials.length === 0) {
+    // If no credential requirements are set, return 0 (cannot calculate match)
+    if (requiredCredentials.length === 0) {
       return 0
     }
     
-    let documentScore = 0
-    let documentTotal = 0
     let credentialScore = 0
     let credentialTotal = 0
-    
-    // Calculate document compliance based on assigned percentages
-    if (requiredDocuments.length > 0) {
-      requiredDocuments.forEach(reqDoc => {
-        const percentage = parseFloat(reqDoc.percentage) || 0
-        documentTotal += percentage
-        
-        const hasDocument = documents.some(doc => doc.file_type === reqDoc.document_type)
-        if (hasDocument) {
-          documentScore += percentage
-        }
-      })
-    }
     
     // Calculate credential compliance (each credential has equal weight)
     if (requiredCredentials.length > 0) {
@@ -286,31 +269,7 @@ const ApplicantDetailView = () => {
       credentialScore = matchedCredentials
     }
     
-    // Calculate match percentage
-    // If documents are required and sum to 100%, use them as the primary measure
-    // If credentials are also required, they fill any gap or are averaged
-    let matchPercentage = 0
-    
-    if (documentTotal > 0 && credentialTotal > 0) {
-      // Both documents and credentials are required
-      // Documents contribute their percentage (normalized to 100% if they sum to 100%)
-      // Credentials contribute equally, filling the remainder
-      const documentMatch = documentTotal > 0 ? (documentScore / documentTotal) * 100 : 0
-      const credentialMatch = (credentialScore / credentialTotal) * 100
-      
-      // Weight: documents get their total percentage, credentials get the remainder
-      const documentWeight = Math.min(documentTotal / 100, 1) // Cap at 100%
-      const credentialWeight = Math.max(0, 1 - documentWeight)
-      
-      matchPercentage = (documentMatch * documentWeight) + (credentialMatch * credentialWeight)
-    } else if (documentTotal > 0) {
-      // Only documents are required - use their percentage directly
-      matchPercentage = (documentScore / documentTotal) * 100
-    } else if (credentialTotal > 0) {
-      // Only credentials are required
-      matchPercentage = (credentialScore / credentialTotal) * 100
-    }
-    
+    const matchPercentage = credentialTotal > 0 ? (credentialScore / credentialTotal) * 100 : 0
     return Math.round(Math.min(100, Math.max(0, matchPercentage)))
   }
 
@@ -337,37 +296,6 @@ const ApplicantDetailView = () => {
 
   const applicant = application?.applicants
   const documents = applicant?.documents || []
-  const requiredDocuments = Array.isArray(job?.required_documents) ? job.required_documents : []
-  
-  // Calculate document completion percentage
-  const calculateDocumentCompletion = () => {
-    if (requiredDocuments.length === 0) {
-      // If no required documents specified, return null
-      return null
-    }
-    
-    let completedPercentage = 0
-    let totalPercentage = 0
-    
-    requiredDocuments.forEach(reqDoc => {
-      const percentage = parseFloat(reqDoc.percentage) || 0
-      totalPercentage += percentage
-      const hasDocument = documents.some(doc => doc.file_type === reqDoc.document_type)
-      if (hasDocument) {
-        completedPercentage += percentage
-      }
-    })
-    
-    if (totalPercentage === 0) return null
-    
-    return {
-      completed: completedPercentage,
-      total: totalPercentage,
-      percentage: Math.round((completedPercentage / totalPercentage) * 100)
-    }
-  }
-  
-  const documentCompletion = calculateDocumentCompletion()
   
   const files = documents.map(doc => {
     let fileType = 'pdf'
@@ -474,47 +402,7 @@ const ApplicantDetailView = () => {
                     <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide bg-primary/10 text-primary border border-primary/20">
                       {getMatchPercentage()}% Match
                     </span>
-                    {documentCompletion && (
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide border ${
-                        documentCompletion.percentage === 100
-                          ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                          : documentCompletion.percentage >= 75
-                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                          : documentCompletion.percentage >= 50
-                          ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                          : 'bg-red-500/10 text-red-400 border-red-500/20'
-                      }`}>
-                        {documentCompletion.percentage}% Documents
-                      </span>
-                    )}
                   </div>
-                  {documentCompletion && (
-                    <div className="mt-3 p-3 bg-[#1a2332] rounded-lg border border-[#232f48]">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-[#92a4c9] uppercase tracking-wide">201 File Completion</span>
-                        <span className="text-sm font-bold text-white">{documentCompletion.completed.toFixed(1)}% / {documentCompletion.total.toFixed(1)}%</span>
-                      </div>
-                      <div className="w-full bg-[#232f48] rounded-full h-2 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            documentCompletion.percentage === 100
-                              ? 'bg-green-500'
-                              : documentCompletion.percentage >= 75
-                              ? 'bg-blue-500'
-                              : documentCompletion.percentage >= 50
-                              ? 'bg-yellow-500'
-                              : 'bg-red-500'
-                          }`}
-                          style={{ width: `${documentCompletion.percentage}%` }}
-                        ></div>
-                      </div>
-                      <div className="mt-2 text-xs text-[#92a4c9]">
-                        {requiredDocuments.filter(reqDoc => 
-                          documents.some(doc => doc.file_type === reqDoc.document_type)
-                        ).length} of {requiredDocuments.length} required documents uploaded
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -678,35 +566,6 @@ const ApplicantDetailView = () => {
                   )}
                 </div>
               </section>
-
-              {/* Work Experience Section */}
-              {applicant?.work_experience && Array.isArray(applicant.work_experience) && applicant.work_experience.length > 0 && (
-                <section>
-                  <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                    <span className="w-1 h-3 bg-primary rounded-full"></span> Work Experience
-                  </h3>
-                  <div className="bg-[#161e2c] rounded-lg border border-[#232f48] overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-[#232f48] bg-[#1a2332] text-left">
-                          <th className="p-3 text-[#92a4c9] font-bold uppercase tracking-wide">Work Experience / Role</th>
-                          <th className="p-3 text-[#92a4c9] font-bold uppercase tracking-wide">Place</th>
-                          <th className="p-3 text-[#92a4c9] font-bold uppercase tracking-wide">Year</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {applicant.work_experience.map((entry, idx) => (
-                          <tr key={idx} className="border-b border-[#232f48] last:border-0">
-                            <td className="p-3 text-white font-medium">{entry.role || '—'}</td>
-                            <td className="p-3 text-white">{entry.place || '—'}</td>
-                            <td className="p-3 text-white">{entry.year ?? '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              )}
 
               {/* Credentials Section */}
               <section>

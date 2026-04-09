@@ -535,7 +535,6 @@ const IdPictureUpload = () => {
         }
       }
 
-      // Navigate to documents page
       navigate(`/apply/${jobId || ''}/201-file`)
     } catch (error) {
       console.error('Error:', error)
@@ -546,7 +545,11 @@ const IdPictureUpload = () => {
   }
 
   const handleBack = () => {
-    navigate(`/apply/${jobId || ''}/work-experience`)
+    if (jobId) {
+      navigate(`/profile/apply/${jobId}`)
+    } else {
+      navigate('/profile/apply')
+    }
   }
 
   return (
@@ -564,7 +567,7 @@ const IdPictureUpload = () => {
           </p>
         </div>
 
-        <ApplicationProgress currentStep={3} totalSteps={6} />
+        <ApplicationProgress currentStep={2} totalSteps={3} />
 
         {/* Main Form Card */}
         <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 md:p-10 border border-gray-200 dark:border-white/5 shadow-xl">
