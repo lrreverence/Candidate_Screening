@@ -2,25 +2,225 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { uploadJobImage, deleteJobImage, getJobImageUrl } from '../../lib/storageUpload'
+import {
+  AGE_BRACKETS,
+  DEFAULT_AGE_SCORING,
+  normalizeAgeScoringFromJob
+} from '../../lib/ageScoring'
+import {
+  GENDER_SCORING_OPTIONS,
+  DEFAULT_GENDER_SCORING,
+  normalizeGenderScoringFromJob
+} from '../../lib/genderScoring'
+import {
+  HEIGHT_BRACKETS,
+  WEIGHT_BRACKETS,
+  DEFAULT_HEIGHT_SCORING,
+  DEFAULT_WEIGHT_SCORING,
+  normalizeHeightScoringFromJob,
+  normalizeWeightScoringFromJob
+} from '../../lib/bodyMetricsScoring'
 import AdminNotificationBell from '../../components/admin/AdminNotificationBell'
 import AdminHelpButton from '../../components/admin/AdminHelpButton'
 
-// Document types that can be required for jobs
-const DOCUMENT_TYPES = [
-  'BIO-DATA',
-  'PHOTOCOPY OF SECURITY LICENSE / SBR',
-  'BARANGAY CLEARANCE',
-  'POLICE CLEARANCE',
-  'NBI CLEARANCE',
-  'EMPLOYMENT CERTIFICATE',
-  'DRUG TEST',
-  'NEURO-PSYCHIATRIC TEST / MEDICAL EXAMINATION',
-  'RE-TRAINING CERTIFICATE / GUN',
-  'BIRTH CERTIFICATE',
-  'EDUCATIONAL DIPLOMA\'S / TRANSCRIPT OF RECORD',
-  'OTHER GKE, OPENING AND CLOSING REPORT',
-  'VACCINATION CARD'
+/** Matches resume /profile/resume sections; weights across categories must sum to 100%. */
+const DEFAULT_CATEGORY_WEIGHTS = {
+  personal: 25,
+  education: 10,
+  employment: 10,
+  licenses: 15,
+  training: 15,
+  clearances: 15,
+  others: 10
+}
+
+const JOB_SCORING_SECTIONS = [
+  {
+    key: 'personal',
+    label: 'Personal Information',
+    icon: 'person',
+    fields: [
+      { id: 'full_name', label: 'Full name' },
+      { id: 'address', label: 'Address' },
+      { id: 'licenses_ids', label: 'Licenses / IDs' },
+      { id: 'contact', label: 'Contact (email & phone)' },
+      { id: 'date_of_birth', label: 'Date of birth' },
+      { id: 'gender', label: 'Gender' },
+      { id: 'civil_status', label: 'Civil status' },
+      { id: 'religion', label: 'Religion' },
+      { id: 'height_cm', label: 'Height' },
+      { id: 'weight_kg', label: 'Weight' },
+      { id: 'languages_spoken', label: 'Languages spoken' }
+    ]
+  },
+  {
+    key: 'education',
+    label: 'Educational Attainment',
+    icon: 'school',
+    fields: [
+      { id: 'level', label: 'Level' },
+      { id: 'school', label: 'School' },
+      { id: 'course_degree', label: 'Course / degree / major' },
+      { id: 'year_graduated', label: 'Year graduated' },
+      { id: 'attachment', label: 'Upload / attachment' }
+    ]
+  },
+  {
+    key: 'employment',
+    label: 'Employment Record',
+    icon: 'work',
+    fields: [
+      { id: 'position', label: 'Position' },
+      { id: 'agency', label: 'Agency' },
+      { id: 'place', label: 'Place' },
+      { id: 'from', label: 'From' },
+      { id: 'to', label: 'To' }
+    ]
+  },
+  {
+    key: 'licenses',
+    label: 'Licenses',
+    icon: 'verified',
+    fields: [
+      { id: 'category', label: 'Category' },
+      { id: 'date_issued', label: 'Date issued' },
+      { id: 'date_expiry', label: 'Date expiry' },
+      { id: 'attachment', label: 'Attachment' }
+    ]
+  },
+  {
+    key: 'training',
+    label: 'Training / Certificates',
+    icon: 'workspace_premium',
+    fields: [
+      { id: 'training_attended', label: 'Training attended' },
+      { id: 'date', label: 'Date' }
+    ]
+  },
+  {
+    key: 'clearances',
+    label: 'Clearances',
+    icon: 'gavel',
+    fields: [
+      { id: 'nbi', label: 'NBI' },
+      { id: 'police', label: 'Police clearance' },
+      { id: 'brgy', label: 'Brgy clearance' },
+      { id: 'court', label: 'Court clearance' }
+    ]
+  },
+  {
+    key: 'others',
+    label: 'Others',
+    icon: 'more_horiz',
+    fields: [
+      { id: 'skills', label: 'Skills' },
+      { id: 'preferred_places', label: 'Preferred places' },
+      { id: 'preferred_monthly_salary', label: 'Preferred monthly salary' },
+      { id: 'can_start', label: 'Can start' },
+      { id: 'employment_types', label: 'Employment type' }
+    ]
+  }
 ]
+
+const LEGACY_CATEGORY_TO_KEY = {
+  'Personal Info': 'personal',
+  'Personal Information': 'personal',
+  'Educational Attainment': 'education',
+  'Employment Record': 'employment',
+  Clearances: 'clearances',
+  Others: 'others'
+}
+
+const defaultFieldWeightsForSection = (section) => {
+  const n = section.fields.length
+  if (n === 0) return []
+  const base = Math.floor(1000 / n) / 10
+  let acc = 0
+  return section.fields.map((f, i) => {
+    if (i < n - 1) {
+      acc += base
+      return { field: f.id, percentage: base }
+    }
+    return { field: f.id, percentage: Math.round((100 - acc) * 10) / 10 }
+  })
+}
+
+const buildDefaultCategoryPercentages = () =>
+  JOB_SCORING_SECTIONS.map((sec) => ({
+    category_key: sec.key,
+    category: sec.label,
+    percentage: DEFAULT_CATEGORY_WEIGHTS[sec.key],
+    field_weights: defaultFieldWeightsForSection(sec)
+  }))
+
+const preprocessLegacyCategoryRows = (raw) => {
+  if (!Array.isArray(raw)) return []
+  const list = [...raw]
+  const combinedIdx = list.findIndex(
+    (r) =>
+      typeof r?.category === 'string' &&
+      r.category.includes('Licenses') &&
+      r.category.includes('Training')
+  )
+  if (combinedIdx === -1) return list
+  const combined = list[combinedIdx]
+  const pct = parseFloat(combined.percentage)
+  const safe = Number.isFinite(pct) ? pct : 30
+  const a = Math.round((safe / 2) * 10) / 10
+  const b = Math.round((safe - a) * 10) / 10
+  const next = list.filter((_, i) => i !== combinedIdx)
+  next.push({
+    category_key: 'licenses',
+    category: 'Licenses',
+    percentage: a,
+    field_weights: null
+  })
+  next.push({
+    category_key: 'training',
+    category: 'Training / Certificates',
+    percentage: b,
+    field_weights: null
+  })
+  return next
+}
+
+const normalizeCategoryPercentagesFromJob = (raw) => {
+  const rows = preprocessLegacyCategoryRows(Array.isArray(raw) ? raw : [])
+  const byKey = {}
+  for (const row of rows) {
+    const key = row.category_key || LEGACY_CATEGORY_TO_KEY[row.category]
+    if (!key) continue
+    if (!byKey[key]) byKey[key] = { ...row, category_key: key }
+  }
+
+  return JOB_SCORING_SECTIONS.map((sec) => {
+    const existing = byKey[sec.key]
+    let percentage = existing?.percentage
+    if (percentage == null || !Number.isFinite(Number(percentage))) {
+      percentage = DEFAULT_CATEGORY_WEIGHTS[sec.key]
+    }
+    percentage = Math.max(0, Math.min(100, Math.round(Number(percentage) * 10) / 10))
+
+    let field_weights = existing?.field_weights
+    if (!Array.isArray(field_weights) || field_weights.length === 0) {
+      field_weights = defaultFieldWeightsForSection(sec)
+    } else {
+      const map = new Map(field_weights.map((fw) => [fw.field, parseFloat(fw.percentage)]))
+      field_weights = sec.fields.map((f) => ({
+        field: f.id,
+        percentage: Math.max(0, Math.min(100, (Number.isFinite(map.get(f.id)) ? map.get(f.id) : 0)))
+      }))
+      const sum = field_weights.reduce((s, w) => s + w.percentage, 0)
+      if (sum === 0) field_weights = defaultFieldWeightsForSection(sec)
+    }
+    return {
+      category_key: sec.key,
+      category: sec.label,
+      percentage,
+      field_weights
+    }
+  })
+}
 
 const JobsManagement = () => {
   const [jobs, setJobs] = useState([])
@@ -48,16 +248,14 @@ const JobsManagement = () => {
     posting_priority: 'Pooling', // Urgent | Pooling
     required_credentials: [],
     required_documents: [],
-    category_percentages: [
-      { category: 'Personal Info', percentage: 25 },
-      { category: 'Educational Attainment', percentage: 10 },
-      { category: 'Employment Record', percentage: 10 },
-      { category: 'Licenses, Training/ Certificates', percentage: 30 },
-      { category: 'Clearances', percentage: 15 },
-      { category: 'Others', percentage: 10 }
-    ],
+    category_percentages: buildDefaultCategoryPercentages(),
+    age_scoring: { ...DEFAULT_AGE_SCORING },
+    gender_scoring: { ...DEFAULT_GENDER_SCORING },
+    height_scoring: { ...DEFAULT_HEIGHT_SCORING },
+    weight_scoring: { ...DEFAULT_WEIGHT_SCORING },
     image: null // Store image path
   })
+  const [scoringAccordionKey, setScoringAccordionKey] = useState('personal')
   const [imageFile, setImageFile] = useState(null) // Store selected file
   const [imagePreview, setImagePreview] = useState(null) // Store preview URL
   const [uploadingImage, setUploadingImage] = useState(false)
@@ -241,23 +439,17 @@ const JobsManagement = () => {
           job.category_weights ||
           job.categoryWeights ||
           null
-        if (Array.isArray(raw) && raw.length > 0) return raw
-        if (typeof raw === 'string') {
+        let parsed = null
+        if (Array.isArray(raw) && raw.length > 0) parsed = raw
+        else if (typeof raw === 'string') {
           try {
-            const parsed = JSON.parse(raw)
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed
+            const p = JSON.parse(raw)
+            if (Array.isArray(p) && p.length > 0) parsed = p
           } catch {
             // ignore
           }
         }
-        return [
-          { category: 'Personal Info', percentage: 25 },
-          { category: 'Educational Attainment', percentage: 10 },
-          { category: 'Employment Record', percentage: 10 },
-          { category: 'Licenses, Training/ Certificates', percentage: 30 },
-          { category: 'Clearances', percentage: 15 },
-          { category: 'Others', percentage: 10 }
-        ]
+        return normalizeCategoryPercentagesFromJob(parsed)
       })()
 
       setFormData({
@@ -274,6 +466,10 @@ const JobsManagement = () => {
         required_credentials: Array.isArray(job.required_credentials) ? job.required_credentials : [],
         required_documents: Array.isArray(job.required_documents) ? job.required_documents : [],
         category_percentages: categoryPercentages,
+        age_scoring: normalizeAgeScoringFromJob(job.age_scoring ?? job.ageScoring),
+        gender_scoring: normalizeGenderScoringFromJob(job.gender_scoring ?? job.genderScoring),
+        height_scoring: normalizeHeightScoringFromJob(job.height_scoring ?? job.heightScoring),
+        weight_scoring: normalizeWeightScoringFromJob(job.weight_scoring ?? job.weightScoring),
         image: job.image || null
       })
       
@@ -299,18 +495,16 @@ const JobsManagement = () => {
         posting_priority: 'Pooling',
         required_credentials: [],
         required_documents: [],
-        category_percentages: [
-          { category: 'Personal Info', percentage: 25 },
-          { category: 'Educational Attainment', percentage: 10 },
-          { category: 'Employment Record', percentage: 10 },
-          { category: 'Licenses, Training/ Certificates', percentage: 30 },
-          { category: 'Clearances', percentage: 15 },
-          { category: 'Others', percentage: 10 }
-        ],
+        category_percentages: buildDefaultCategoryPercentages(),
+        age_scoring: { ...DEFAULT_AGE_SCORING },
+        gender_scoring: { ...DEFAULT_GENDER_SCORING },
+        height_scoring: { ...DEFAULT_HEIGHT_SCORING },
+        weight_scoring: { ...DEFAULT_WEIGHT_SCORING },
         image: null
       })
       setImagePreview(null)
     }
+    setScoringAccordionKey('personal')
     setImageFile(null)
     setShowJobForm(true)
   }
@@ -331,18 +525,44 @@ const JobsManagement = () => {
       posting_priority: 'Pooling',
       required_credentials: [],
       required_documents: [],
-      category_percentages: [
-        { category: 'Personal Info', percentage: 25 },
-        { category: 'Educational Attainment', percentage: 10 },
-        { category: 'Employment Record', percentage: 10 },
-        { category: 'Licenses, Training/ Certificates', percentage: 30 },
-        { category: 'Clearances', percentage: 15 },
-        { category: 'Others', percentage: 10 }
-      ],
+      category_percentages: buildDefaultCategoryPercentages(),
+      age_scoring: { ...DEFAULT_AGE_SCORING },
+      gender_scoring: { ...DEFAULT_GENDER_SCORING },
+      height_scoring: { ...DEFAULT_HEIGHT_SCORING },
+      weight_scoring: { ...DEFAULT_WEIGHT_SCORING },
       image: null
     })
+    setScoringAccordionKey('personal')
     setImageFile(null)
     setImagePreview(null)
+  }
+
+  const setAgeScoring = (patch) => {
+    setFormData((prev) => ({
+      ...prev,
+      age_scoring: { ...(prev.age_scoring || DEFAULT_AGE_SCORING), ...patch }
+    }))
+  }
+
+  const setGenderScoring = (patch) => {
+    setFormData((prev) => ({
+      ...prev,
+      gender_scoring: { ...(prev.gender_scoring || DEFAULT_GENDER_SCORING), ...patch }
+    }))
+  }
+
+  const setHeightScoring = (patch) => {
+    setFormData((prev) => ({
+      ...prev,
+      height_scoring: { ...(prev.height_scoring || DEFAULT_HEIGHT_SCORING), ...patch }
+    }))
+  }
+
+  const setWeightScoring = (patch) => {
+    setFormData((prev) => ({
+      ...prev,
+      weight_scoring: { ...(prev.weight_scoring || DEFAULT_WEIGHT_SCORING), ...patch }
+    }))
   }
 
   const handleFormChange = (e) => {
@@ -350,64 +570,59 @@ const JobsManagement = () => {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleCredentialToggle = (credentialId) => {
-    setFormData(prev => ({
-      ...prev,
-      required_credentials: prev.required_credentials.includes(credentialId)
-        ? prev.required_credentials.filter(id => id !== credentialId)
-        : [...prev.required_credentials, credentialId]
-    }))
-  }
-
-  const handleDocumentToggle = (documentType) => {
-    setFormData(prev => {
-      const existing = prev.required_documents.find(doc => doc.document_type === documentType)
-      if (existing) {
-        // Remove if already exists
-        return {
-          ...prev,
-          required_documents: prev.required_documents.filter(doc => doc.document_type !== documentType)
-        }
-      } else {
-        // Add with default 0 percentage
-        return {
-          ...prev,
-          required_documents: [...prev.required_documents, { document_type: documentType, percentage: 0 }]
-        }
-      }
-    })
-  }
-
-  const handleDocumentPercentageChange = (documentType, percentage) => {
-    const numValue = parseFloat(percentage) || 0
-    setFormData(prev => ({
-      ...prev,
-      required_documents: prev.required_documents.map(doc =>
-        doc.document_type === documentType
-          ? { ...doc, percentage: Math.max(0, Math.min(100, numValue)) }
-          : doc
-      )
-    }))
-  }
-
-  const getTotalPercentage = () => {
-    return formData.required_documents.reduce((sum, doc) => sum + (parseFloat(doc.percentage) || 0), 0)
-  }
-
   const getCategoryTotal = () => {
     const items = Array.isArray(formData.category_percentages) ? formData.category_percentages : []
     return items.reduce((sum, row) => sum + (parseFloat(row.percentage) || 0), 0)
   }
 
-  const setCategoryPercentage = (category, value) => {
+  const setCategoryPercentageByKey = (categoryKey, value) => {
     const numValue = parseFloat(value)
     const safe = Number.isFinite(numValue) ? Math.max(0, Math.min(100, numValue)) : 0
     setFormData(prev => ({
       ...prev,
       category_percentages: (Array.isArray(prev.category_percentages) ? prev.category_percentages : []).map(row =>
-        row.category === category ? { ...row, percentage: safe } : row
+        row.category_key === categoryKey ? { ...row, percentage: safe } : row
       )
     }))
+  }
+
+  const setFieldWeight = (categoryKey, fieldId, value) => {
+    const numValue = parseFloat(value)
+    const safe = Number.isFinite(numValue) ? Math.max(0, Math.min(100, numValue)) : 0
+    setFormData(prev => ({
+      ...prev,
+      category_percentages: (Array.isArray(prev.category_percentages) ? prev.category_percentages : []).map(row => {
+        if (row.category_key !== categoryKey) return row
+        return {
+          ...row,
+          field_weights: (Array.isArray(row.field_weights) ? row.field_weights : []).map((fw) =>
+            fw.field === fieldId ? { ...fw, percentage: safe } : fw
+          )
+        }
+      })
+    }))
+  }
+
+  const getFieldWeightsTotal = (categoryKey) => {
+    const row = (Array.isArray(formData.category_percentages) ? formData.category_percentages : []).find(
+      (r) => r.category_key === categoryKey
+    )
+    if (!row?.field_weights?.length) return 0
+    return row.field_weights.reduce((sum, w) => sum + (parseFloat(w.percentage) || 0), 0)
+  }
+
+  /** % of Personal category for a field — drives conditional age/gender/height/weight "max points". */
+  const getPersonalFieldPercent = (fieldId) => {
+    const row = (Array.isArray(formData.category_percentages) ? formData.category_percentages : []).find(
+      (r) => r.category_key === 'personal'
+    )
+    const fw = row?.field_weights?.find((w) => w.field === fieldId)
+    return parseFloat(fw?.percentage) || 0
+  }
+
+  const halfOfPersonalField = (fieldId) => {
+    const v = getPersonalFieldPercent(fieldId)
+    return Math.round((v / 2) * 100) / 100
   }
 
   const normalizePostingPriorityToBadge = (priority) => {
@@ -469,6 +684,18 @@ const JobsManagement = () => {
         return
       }
 
+      const rows = Array.isArray(formData.category_percentages) ? formData.category_percentages : []
+      for (const row of rows) {
+        const fw = row.field_weights || []
+        const subTotal = fw.reduce((s, w) => s + (parseFloat(w.percentage) || 0), 0)
+        if (Math.round(subTotal * 10) / 10 !== 100) {
+          alert(
+            `Within "${row.category}", field weights must total 100% of that category (currently ${subTotal.toFixed(1)}%).`
+          )
+          return
+        }
+      }
+
       let imagePath = formData.image
 
       // Upload new image if one was selected
@@ -513,7 +740,23 @@ const JobsManagement = () => {
         badge_color: badge.badge_color,
         required_credentials: Array.isArray(formData.required_credentials) ? formData.required_credentials : [],
         required_documents: Array.isArray(formData.required_documents) ? formData.required_documents : [],
-        image: imagePath || null
+        image: imagePath || null,
+        age_scoring: normalizeAgeScoringFromJob({
+          ...formData.age_scoring,
+          max_points: getPersonalFieldPercent('date_of_birth')
+        }),
+        gender_scoring: normalizeGenderScoringFromJob({
+          ...formData.gender_scoring,
+          max_points: getPersonalFieldPercent('gender')
+        }),
+        height_scoring: normalizeHeightScoringFromJob({
+          ...formData.height_scoring,
+          max_points: getPersonalFieldPercent('height_cm')
+        }),
+        weight_scoring: normalizeWeightScoringFromJob({
+          ...formData.weight_scoring,
+          max_points: getPersonalFieldPercent('weight_kg')
+        })
       }
 
       const stripUnknownColumnFromError = (errorMessage) => {
@@ -821,7 +1064,7 @@ const JobsManagement = () => {
       {/* Job Form Modal */}
       {showJobForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[92vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
               <h3 className="text-xl font-bold text-navy">
                 {editingJob ? 'Edit Job Posting' : 'Create New Job Posting'}
@@ -1032,40 +1275,449 @@ const JobsManagement = () => {
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="mb-3">
                     <label className="block text-sm font-medium text-gray-700">
-                      CATEGORY
-                      <span className="text-xs font-normal text-gray-500 ml-2">(Percentages can be modified by Admin)</span>
+                      Resume scoring weights
                     </label>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Match the resume profile layout: each section can expand. Assign how much of the overall 100% each
+                      section gets; inside each section, assign how that section&apos;s share splits across fields (must
+                      total 100% within the section).
+                    </p>
                   </div>
 
-                  <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    {(Array.isArray(formData.category_percentages) ? formData.category_percentages : []).map((row) => (
-                      <div key={row.category} className="flex items-center gap-3 p-3 rounded-md border border-gray-200 bg-white">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-gray-900">{row.category}</div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.1"
-                            value={row.percentage ?? 0}
-                            onChange={(e) => setCategoryPercentage(row.category, e.target.value)}
-                            className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                            placeholder="0"
-                          />
-                          <span className="text-sm text-gray-600">%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                    <div className="divide-y divide-gray-200">
+                      {JOB_SCORING_SECTIONS.map((sec) => {
+                        const row = (Array.isArray(formData.category_percentages) ? formData.category_percentages : []).find(
+                          (r) => r.category_key === sec.key
+                        )
+                        const isOpen = scoringAccordionKey === sec.key
+                        const fieldTotal = getFieldWeightsTotal(sec.key)
+                        const fieldTotalOk = Math.round(fieldTotal * 10) / 10 === 100
+                        return (
+                          <div key={sec.key}>
+                            <button
+                              type="button"
+                              onClick={() => setScoringAccordionKey((prev) => (prev === sec.key ? null : sec.key))}
+                              className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left sm:px-5 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <span className="material-symbols-outlined text-[20px] text-gray-500">{sec.icon}</span>
+                                <span className="truncate text-sm font-extrabold uppercase tracking-wide text-gray-900">
+                                  {sec.label}
+                                </span>
+                                <span className="hidden sm:inline text-xs font-semibold text-gray-500 whitespace-nowrap">
+                                  · {row?.percentage ?? 0}% of total
+                                </span>
+                              </div>
+                              <span
+                                className={`material-symbols-outlined text-[22px] text-gray-500 transition-transform shrink-0 ${
+                                  isOpen ? 'rotate-180' : ''
+                                }`}
+                                aria-hidden="true"
+                              >
+                                expand_more
+                              </span>
+                            </button>
+
+                            {isOpen && (
+                              <div className="px-4 pb-4 sm:px-5">
+                                <div className="rounded-xl border border-gray-200 bg-slate-50 p-4">
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                                    <div>
+                                      <p className="text-xs font-bold uppercase tracking-wider text-gray-600">
+                                        Category weight
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] text-gray-500">
+                                        Share of the overall 100% across all sections
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        step="0.1"
+                                        value={row?.percentage ?? 0}
+                                        onChange={(e) => setCategoryPercentageByKey(sec.key, e.target.value)}
+                                        className="w-24 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-center focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                                      />
+                                      <span className="text-sm text-gray-600">%</span>
+                                    </div>
+                                  </div>
+
+                                  {sec.key === 'personal' && (
+                                    <p className="mb-3 text-[11px] text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                                      <strong>Date of birth, Gender, Height, and Weight</strong> in the table set the{' '}
+                                      <strong>full-credit value</strong> for the conditional rules below (% of this
+                                      category). Outside the chosen bracket / no match = <strong>half</strong> of that
+                                      value.
+                                    </p>
+                                  )}
+
+                                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                                    <table className="min-w-[520px] w-full border-collapse text-sm">
+                                      <thead>
+                                        <tr className="bg-gray-50 border-b border-gray-200">
+                                          <th
+                                            scope="col"
+                                            className="border-b border-gray-200 px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wider text-gray-600"
+                                          >
+                                            Field
+                                          </th>
+                                          <th
+                                            scope="col"
+                                            className="border-b border-gray-200 px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wider text-gray-600 w-[200px]"
+                                          >
+                                            Weight (% of this category)
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {sec.fields.map((f) => {
+                                          const fw = row?.field_weights?.find((w) => w.field === f.id)
+                                          return (
+                                            <tr key={f.id} className="bg-white">
+                                              <td className="border-b border-gray-200 px-3 py-2.5 text-gray-900 font-medium">
+                                                {f.label}
+                                              </td>
+                                              <td className="border-b border-gray-200 px-3 py-2 align-middle">
+                                                <div className="flex items-center gap-2">
+                                                  <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    step="0.1"
+                                                    value={fw?.percentage ?? 0}
+                                                    onChange={(e) => setFieldWeight(sec.key, f.id, e.target.value)}
+                                                    className="w-full max-w-[120px] rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                                                  />
+                                                  <span className="text-sm text-gray-500 shrink-0">%</span>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          )
+                                        })}
+                                        <tr className="bg-slate-50">
+                                          <td className="px-3 py-2.5 text-xs font-black uppercase tracking-widest text-gray-800">
+                                            Total (within category)
+                                          </td>
+                                          <td className="px-3 py-2.5">
+                                            <span
+                                              className={`text-sm font-extrabold ${
+                                                fieldTotalOk ? 'text-green-600' : fieldTotal > 100 ? 'text-red-600' : 'text-blue-600'
+                                              }`}
+                                            >
+                                              {fieldTotal.toFixed(1)}%
+                                            </span>
+                                            {!fieldTotalOk && (
+                                              <span className="ml-2 text-xs text-gray-500">
+                                                {fieldTotal < 100
+                                                  ? `add ${(100 - fieldTotal).toFixed(1)}%`
+                                                  : `reduce ${(fieldTotal - 100).toFixed(1)}%`}
+                                              </span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </div>
+
+                                  {sec.key === 'personal' && (
+                                    <div className="mt-4 space-y-6 border-t border-gray-200 pt-4">
+                                      <div>
+                                        <p className="text-xs font-bold uppercase tracking-wider text-gray-700">
+                                          Conditional scoring
+                                        </p>
+                                        <p className="mt-1 text-[11px] text-gray-500">
+                                          Brackets / targets below; caps come from the matching row in the table above.
+                                        </p>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-xs font-semibold text-gray-800 mb-1">Age</label>
+                                        <p className="text-[11px] text-gray-500 mb-2">
+                                          Linked to <strong>Date of birth</strong> weight. In bracket = full; outside =
+                                          half.
+                                        </p>
+                                        <div className="overflow-x-auto pb-1">
+                                          <div className="inline-flex min-w-full sm:min-w-0 border-2 border-gray-900 rounded-sm bg-white divide-x-2 divide-gray-900 overflow-hidden">
+                                            {AGE_BRACKETS.map((b, idx) => (
+                                              <React.Fragment key={b.id}>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setAgeScoring({ preferred_bracket_id: b.id })}
+                                                  className={`flex-1 min-w-[4.5rem] px-2 py-3 text-center text-xs sm:text-sm font-bold transition-colors ${
+                                                    formData.age_scoring?.preferred_bracket_id === b.id
+                                                      ? 'bg-amber-50 text-gray-900 ring-2 ring-inset ring-orange-500'
+                                                      : 'bg-white text-gray-900 hover:bg-gray-50'
+                                                  }`}
+                                                >
+                                                  {b.label}
+                                                </button>
+                                                {idx === 1 && (
+                                                  <div
+                                                    className="flex flex-col items-center justify-center bg-orange-500 text-white min-w-[4.5rem] px-2 py-2 shrink-0"
+                                                    title="From Date of birth row in table above"
+                                                  >
+                                                    <span className="text-[8px] font-bold uppercase tracking-tight opacity-90 text-center leading-tight">
+                                                      DOB row
+                                                    </span>
+                                                    <span className="text-lg font-extrabold leading-tight">
+                                                      {getPersonalFieldPercent('date_of_birth').toFixed(1)}
+                                                    </span>
+                                                    <span className="text-[9px] opacity-90">% cat.</span>
+                                                  </div>
+                                                )}
+                                              </React.Fragment>
+                                            ))}
+                                          </div>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+                                          <span>
+                                            Bracket:{' '}
+                                            <strong className="text-gray-900">
+                                              {AGE_BRACKETS.find((x) => x.id === formData.age_scoring?.preferred_bracket_id)
+                                                ?.label ?? '—'}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            Full:{' '}
+                                            <strong className="text-orange-600">
+                                              {getPersonalFieldPercent('date_of_birth').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            Outside:{' '}
+                                            <strong className="text-gray-900">
+                                              {halfOfPersonalField('date_of_birth').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-xs font-semibold text-gray-800 mb-1">Gender</label>
+                                        <p className="text-[11px] text-gray-500 mb-2">
+                                          Linked to <strong>Gender</strong> row. Match = full; otherwise = half.
+                                        </p>
+                                        <div className="overflow-x-auto pb-1">
+                                          <div className="inline-flex min-w-full sm:min-w-0 border-2 border-gray-900 rounded-sm bg-white divide-x-2 divide-gray-900 overflow-hidden">
+                                            {GENDER_SCORING_OPTIONS.map((g, idx) => (
+                                              <React.Fragment key={g.id}>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setGenderScoring({ preferred_gender: g.id })}
+                                                  className={`flex-1 min-w-[5.5rem] px-2 py-3 text-center text-xs sm:text-sm font-bold transition-colors ${
+                                                    formData.gender_scoring?.preferred_gender === g.id
+                                                      ? 'bg-amber-50 text-gray-900 ring-2 ring-inset ring-orange-500'
+                                                      : 'bg-white text-gray-900 hover:bg-gray-50'
+                                                  }`}
+                                                >
+                                                  {g.label}
+                                                </button>
+                                                {idx === 1 && (
+                                                  <div
+                                                    className="flex flex-col items-center justify-center bg-orange-500 text-white min-w-[4.5rem] px-2 py-2 shrink-0"
+                                                    title="From Gender row in table above"
+                                                  >
+                                                    <span className="text-[8px] font-bold uppercase tracking-tight opacity-90 text-center leading-tight">
+                                                      Gender row
+                                                    </span>
+                                                    <span className="text-lg font-extrabold leading-tight">
+                                                      {getPersonalFieldPercent('gender').toFixed(1)}
+                                                    </span>
+                                                    <span className="text-[9px] opacity-90">% cat.</span>
+                                                  </div>
+                                                )}
+                                              </React.Fragment>
+                                            ))}
+                                          </div>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+                                          <span>
+                                            Target:{' '}
+                                            <strong className="text-gray-900">
+                                              {GENDER_SCORING_OPTIONS.find(
+                                                (x) => x.id === formData.gender_scoring?.preferred_gender
+                                              )?.label ?? '—'}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            Full:{' '}
+                                            <strong className="text-orange-600">
+                                              {getPersonalFieldPercent('gender').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            No match:{' '}
+                                            <strong className="text-gray-900">
+                                              {halfOfPersonalField('gender').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-xs font-semibold text-gray-800 mb-1">
+                                          Height (cm)
+                                        </label>
+                                        <p className="text-[11px] text-gray-500 mb-2">
+                                          Linked to <strong>Height</strong> row.
+                                        </p>
+                                        <div className="overflow-x-auto pb-1">
+                                          <div className="inline-flex min-w-full sm:min-w-0 border-2 border-gray-900 rounded-sm bg-white divide-x-2 divide-gray-900 overflow-hidden">
+                                            {HEIGHT_BRACKETS.map((b, idx) => (
+                                              <React.Fragment key={b.id}>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setHeightScoring({ preferred_bracket_id: b.id })}
+                                                  className={`flex-1 min-w-[3.75rem] px-1.5 py-3 text-center text-[11px] sm:text-xs font-bold transition-colors ${
+                                                    formData.height_scoring?.preferred_bracket_id === b.id
+                                                      ? 'bg-amber-50 text-gray-900 ring-2 ring-inset ring-orange-500'
+                                                      : 'bg-white text-gray-900 hover:bg-gray-50'
+                                                  }`}
+                                                >
+                                                  {b.label}
+                                                </button>
+                                                {idx === 1 && (
+                                                  <div
+                                                    className="flex flex-col items-center justify-center bg-orange-500 text-white min-w-[4.25rem] px-1.5 py-2 shrink-0"
+                                                    title="From Height row in table above"
+                                                  >
+                                                    <span className="text-[8px] font-bold uppercase tracking-tight opacity-90 text-center leading-tight">
+                                                      Ht row
+                                                    </span>
+                                                    <span className="text-base sm:text-lg font-extrabold leading-tight">
+                                                      {getPersonalFieldPercent('height_cm').toFixed(1)}
+                                                    </span>
+                                                    <span className="text-[9px] opacity-90">% cat.</span>
+                                                  </div>
+                                                )}
+                                              </React.Fragment>
+                                            ))}
+                                          </div>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+                                          <span>
+                                            Bracket:{' '}
+                                            <strong className="text-gray-900">
+                                              {HEIGHT_BRACKETS.find(
+                                                (x) => x.id === formData.height_scoring?.preferred_bracket_id
+                                              )?.label ?? '—'}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            Full:{' '}
+                                            <strong className="text-orange-600">
+                                              {getPersonalFieldPercent('height_cm').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            Outside:{' '}
+                                            <strong className="text-gray-900">
+                                              {halfOfPersonalField('height_cm').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-xs font-semibold text-gray-800 mb-1">
+                                          Weight (kg)
+                                        </label>
+                                        <p className="text-[11px] text-gray-500 mb-2">
+                                          Linked to <strong>Weight</strong> row. &quot;80 above&quot; = 81+ kg.
+                                        </p>
+                                        <div className="overflow-x-auto pb-1">
+                                          <div className="inline-flex min-w-full sm:min-w-0 border-2 border-gray-900 rounded-sm bg-white divide-x-2 divide-gray-900 overflow-hidden">
+                                            {WEIGHT_BRACKETS.map((b, idx) => (
+                                              <React.Fragment key={b.id}>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setWeightScoring({ preferred_bracket_id: b.id })}
+                                                  className={`flex-1 min-w-[3.75rem] px-1.5 py-3 text-center text-[11px] sm:text-xs font-bold transition-colors ${
+                                                    formData.weight_scoring?.preferred_bracket_id === b.id
+                                                      ? 'bg-amber-50 text-gray-900 ring-2 ring-inset ring-orange-500'
+                                                      : 'bg-white text-gray-900 hover:bg-gray-50'
+                                                  }`}
+                                                >
+                                                  {b.label}
+                                                </button>
+                                                {idx === 1 && (
+                                                  <div
+                                                    className="flex flex-col items-center justify-center bg-orange-500 text-white min-w-[4.25rem] px-1.5 py-2 shrink-0"
+                                                    title="From Weight row in table above"
+                                                  >
+                                                    <span className="text-[8px] font-bold uppercase tracking-tight opacity-90 text-center leading-tight">
+                                                      Wt row
+                                                    </span>
+                                                    <span className="text-base sm:text-lg font-extrabold leading-tight">
+                                                      {getPersonalFieldPercent('weight_kg').toFixed(1)}
+                                                    </span>
+                                                    <span className="text-[9px] opacity-90">% cat.</span>
+                                                  </div>
+                                                )}
+                                              </React.Fragment>
+                                            ))}
+                                          </div>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+                                          <span>
+                                            Bracket:{' '}
+                                            <strong className="text-gray-900">
+                                              {WEIGHT_BRACKETS.find(
+                                                (x) => x.id === formData.weight_scoring?.preferred_bracket_id
+                                              )?.label ?? '—'}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            Full:{' '}
+                                            <strong className="text-orange-600">
+                                              {getPersonalFieldPercent('weight_kg').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            Outside:{' '}
+                                            <strong className="text-gray-900">
+                                              {halfOfPersonalField('weight_kg').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
 
                   <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <span className="text-sm font-medium text-gray-700">
-                        Total: <span className={`font-bold ${getCategoryTotal() === 100 ? 'text-green-600' : getCategoryTotal() > 100 ? 'text-red-600' : 'text-blue-600'}`}>
+                        All categories total:{' '}
+                        <span
+                          className={`font-bold ${
+                            getCategoryTotal() === 100
+                              ? 'text-green-600'
+                              : getCategoryTotal() > 100
+                                ? 'text-red-600'
+                                : 'text-blue-600'
+                          }`}
+                        >
                           {getCategoryTotal().toFixed(1)}%
                         </span>
                       </span>
@@ -1080,122 +1732,10 @@ const JobsManagement = () => {
                     {getCategoryTotal() === 100 && (
                       <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                         <span className="material-symbols-outlined text-sm">check_circle</span>
-                        Total equals 100%
+                        Categories total 100%
                       </p>
                     )}
                   </div>
-
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Required Security Credentials
-                    <span className="text-xs font-normal text-gray-500 ml-2">(Select credentials candidates must have)</span>
-                  </label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    {licenseOptions.map((license) => (
-                      <label
-                        key={license.id}
-                        className="flex items-start gap-3 p-3 rounded-md border border-gray-200 bg-white hover:border-primary hover:bg-blue-50/50 cursor-pointer transition-all"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.required_credentials.includes(license.id)}
-                          onChange={() => handleCredentialToggle(license.id)}
-                          className="mt-1 h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2"
-                        />
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-gray-900">{license.label}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">{license.subtitle}</div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                  {formData.required_credentials.length > 0 && (
-                    <p className="mt-2 text-xs text-gray-600">
-                      {formData.required_credentials.length} credential{formData.required_credentials.length !== 1 ? 's' : ''} selected
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Required Documents (201 File Checklist)
-                    <span className="text-xs font-normal text-gray-500 ml-2">(Select documents and set percentage value for each)</span>
-                  </label>
-                  <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    {DOCUMENT_TYPES.map((docType) => {
-                      const isSelected = formData.required_documents.some(doc => doc.document_type === docType)
-                      const docData = formData.required_documents.find(doc => doc.document_type === docType)
-                      const percentage = docData?.percentage || 0
-                      
-                      return (
-                        <div
-                          key={docType}
-                          className={`flex items-center gap-3 p-3 rounded-md border transition-all ${
-                            isSelected
-                              ? 'border-primary bg-blue-50'
-                              : 'border-gray-200 bg-white hover:border-gray-300'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleDocumentToggle(docType)}
-                            className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2 flex-shrink-0"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-gray-900">{docType}</div>
-                          </div>
-                          {isSelected && (
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.1"
-                                value={percentage}
-                                onChange={(e) => handleDocumentPercentageChange(docType, e.target.value)}
-                                className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                                placeholder="0"
-                              />
-                              <span className="text-sm text-gray-600">%</span>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                  {formData.required_documents.length > 0 && (
-                    <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-700">
-                          Total Percentage: <span className={`font-bold ${getTotalPercentage() === 100 ? 'text-green-600' : getTotalPercentage() > 100 ? 'text-red-600' : 'text-blue-600'}`}>
-                            {getTotalPercentage().toFixed(1)}%
-                          </span>
-                        </span>
-                        {getTotalPercentage() !== 100 && (
-                          <span className="text-xs text-gray-500">
-                            {getTotalPercentage() < 100 
-                              ? `Add ${(100 - getTotalPercentage()).toFixed(1)}% more`
-                              : `Reduce by ${(getTotalPercentage() - 100).toFixed(1)}%`
-                            }
-                          </span>
-                        )}
-                      </div>
-                      {getTotalPercentage() === 100 && (
-                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-sm">check_circle</span>
-                          Perfect! Total equals 100%
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {formData.required_documents.length > 0 && (
-                    <p className="mt-2 text-xs text-gray-600">
-                      {formData.required_documents.length} document{formData.required_documents.length !== 1 ? 's' : ''} selected
-                    </p>
-                  )}
                 </div>
               </div>
 
