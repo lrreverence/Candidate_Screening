@@ -15,18 +15,6 @@ const SECTION_DEFS = [
   { key: 'others', label: 'Others', icon: 'more_horiz', cta: null },
 ]
 
-const LICENSE_LABELS = {
-  psa_birth_certificate: 'PSA Birth Certificate',
-  nbi_clearance: 'NBI Clearance',
-  sss_id: 'SSS ID / E-1 Form',
-  philhealth_id: 'PhilHealth ID',
-  pagibig_id: 'Pag-IBIG ID',
-  tin_id: 'TIN ID',
-  drivers_license: "Driver's License",
-  first_aid: 'First Aid Certificate',
-  security_guard_license: 'Security Guard License',
-}
-
 const formatDisplayName = (a, userProfile) => {
   const first = a?.first_name || userProfile?.first_name || ''
   const middle = a?.middle_name || ''
@@ -70,12 +58,25 @@ const formatList = (value) => {
   return value.map((v) => String(v)).filter(Boolean).join(', ') || '—'
 }
 
-const formatLicenses = (value) => {
-  if (!Array.isArray(value) || value.length === 0) return '—'
-  return value
-    .map((id) => LICENSE_LABELS[id] || id)
-    .filter(Boolean)
-    .join(', ') || '—'
+/** PostgREST / Postgres when table missing or not in schema cache yet */
+const isSupabaseMissingTableError = (err) => {
+  const code = String(err?.code || '')
+  if (code === '42P01' || code === 'PGRST205') return true
+  const m = String(err?.message || '').toLowerCase()
+  if (m.includes('relation') && m.includes('does not exist')) return true
+  if (m.includes('could not find the table') && m.includes('schema cache')) return true
+  return false
+}
+
+/** User-facing hint when migrations were not applied to the linked Supabase project */
+const notifyLocalOnlyDbNotReady = (sectionLabel, err) => {
+  console.warn(`[RESUME_PROFILE] ${sectionLabel}: Supabase reported missing or unpublished tables.`, err)
+  window.alert(
+    `${sectionLabel}: the database tables for this section are not available on your Supabase project (or PostgREST cannot see them yet). ` +
+      `Your changes were kept in this browser only.\n\n` +
+      `Fix: in the Supabase dashboard for this project, open the SQL editor and run the migration files from this repo under supabase/migrations ` +
+      `(for licenses and trainings, use the migration that creates applicant_licenses and applicant_trainings). Then save again.`
+  )
 }
 
 const EDUCATION_LEVELS = [
@@ -113,34 +114,105 @@ const normalizeEducationState = (value) => {
   return base
 }
 
-const makeEmptyCredentialRow = () => ({
-  category: '',
-  date_issued: '',
-  date_expiry: '',
-  attachment: null, // { file_name, file_path, mime_type, file_size }
-})
-
 const makeEmptyTrainingRow = () => ({
   training_attended: '',
   date: '',
 })
 
-const normalizeCredentialsState = (value) => {
-  const base = {
-    licenses: [makeEmptyCredentialRow()],
-    trainings: [makeEmptyTrainingRow()],
-  }
-  if (!value || typeof value !== 'object') return base
+/** Fixed license rows (same shape as clearances: dates + attachment). */
+const LICENSE_TYPES = [
+  { key: 'drivers_license', label: 'Drivers License' },
+  { key: 'security_guard_license', label: 'Security Guard License' },
+  { key: 'security_officers_license', label: 'Security Officers License' },
+  { key: 'security_managers_license', label: 'Security Managers License' },
+  { key: 'bank_and_armor_license', label: 'Bank And Armor License' },
+  { key: 'protection_agent', label: 'Protection Agent' },
+]
 
-  const normalizeLicenseList = (arr) => {
-    if (!Array.isArray(arr) || arr.length === 0) return [makeEmptyCredentialRow()]
-    return arr.map((row) => ({
-      category: row?.category || '',
+const makeEmptyLicenseSlotRow = () => ({
+  date_issued: '',
+  date_expiry: '',
+  attachment: null, // { file_name, file_path, mime_type, file_size }
+})
+
+const categoryStringToLicenseKey = (raw) => {
+  const id = String(raw || '').trim()
+  if (!id) return null
+  if (LICENSE_TYPES.some((t) => t.key === id)) return id
+  const s = id.toLowerCase().replace(/\s+/g, ' ').replace(/’/g, "'")
+
+  for (const t of LICENSE_TYPES) {
+    if (s === t.label.toLowerCase()) return t.key
+  }
+
+  const aliases = [
+    { key: 'drivers_license', patterns: ["driver's license", 'driver license'] },
+    { key: 'security_guard_license', patterns: ['security guard license', 'security guard'] },
+    { key: 'security_officers_license', patterns: ['security officers license', 'security officer license'] },
+    { key: 'security_managers_license', patterns: ['security managers license', 'security manager license'] },
+    { key: 'bank_and_armor_license', patterns: ['bank and armor license', 'bank & armor license'] },
+    { key: 'protection_agent', patterns: ['protection agent'] },
+  ]
+  for (const { key, patterns } of aliases) {
+    for (const p of patterns) {
+      if (s === p || s.includes(p)) return key
+    }
+  }
+
+  // Legacy checklist IDs sometimes stored as category
+  if (s === 'drivers_license' || (s.includes('driver') && s.includes('license'))) return 'drivers_license'
+  if (s.includes('security guard') && s.includes('license')) return 'security_guard_license'
+
+  return null
+}
+
+const normalizeLicensesMapFromInput = (licensesInput) => {
+  const base = {}
+  for (const t of LICENSE_TYPES) base[t.key] = makeEmptyLicenseSlotRow()
+
+  if (licensesInput == null) return base
+
+  if (typeof licensesInput === 'object' && !Array.isArray(licensesInput)) {
+    for (const t of LICENSE_TYPES) {
+      const v = licensesInput[t.key]
+      if (v && typeof v === 'object') {
+        base[t.key] = {
+          date_issued: v?.date_issued || '',
+          date_expiry: v?.date_expiry || '',
+          attachment: v?.attachment && typeof v.attachment === 'object' ? v.attachment : null,
+        }
+      }
+    }
+    return base
+  }
+
+  if (!Array.isArray(licensesInput)) return base
+
+  const scoreSlot = (row) =>
+    (row?.attachment ? 4 : 0) +
+    (String(row?.date_expiry || '').trim() ? 2 : 0) +
+    (String(row?.date_issued || '').trim() ? 1 : 0)
+
+  for (const row of licensesInput) {
+    const key = categoryStringToLicenseKey(row?.category)
+    if (!key || !base[key]) continue
+    const slot = {
       date_issued: row?.date_issued || '',
       date_expiry: row?.date_expiry || '',
       attachment: row?.attachment && typeof row.attachment === 'object' ? row.attachment : null,
-    }))
+    }
+    if (scoreSlot(slot) > scoreSlot(base[key])) base[key] = slot
   }
+
+  return base
+}
+
+const normalizeCredentialsState = (value) => {
+  const base = {
+    licenses: normalizeLicensesMapFromInput(null),
+    trainings: [makeEmptyTrainingRow()],
+  }
+  if (!value || typeof value !== 'object') return base
 
   const normalizeTrainingList = (arr) => {
     if (!Array.isArray(arr) || arr.length === 0) return [makeEmptyTrainingRow()]
@@ -151,7 +223,7 @@ const normalizeCredentialsState = (value) => {
   }
 
   return {
-    licenses: normalizeLicenseList(value.licenses),
+    licenses: normalizeLicensesMapFromInput(value.licenses),
     trainings: normalizeTrainingList(value.trainings),
   }
 }
@@ -355,11 +427,10 @@ const ResumeProfile = () => {
 
   const [education, setEducation] = useState(() => normalizeEducationState(null))
   const [educationBusy, setEducationBusy] = useState(false)
-  const [educationUploading, setEducationUploading] = useState(false)
 
   const [credentials, setCredentials] = useState(() => normalizeCredentialsState(null))
   const [credentialsBusy, setCredentialsBusy] = useState(false)
-  const [credentialsUploading, setCredentialsUploading] = useState(false)
+  const [licenseUploadingKey, setLicenseUploadingKey] = useState(null)
 
   const credentialsStorageKey = useMemo(
     () => (user?.id ? `resume_credentials_${user.id}` : 'resume_credentials'),
@@ -561,13 +632,24 @@ const ResumeProfile = () => {
         if (licErr) throw licErr
         if (trErr) throw trErr
 
-        const next = normalizeCredentialsState({
-          licenses: (licRows || []).map((r) => ({
-            category: r?.category || '',
+        const licMap = normalizeLicensesMapFromInput(null)
+        for (const r of licRows || []) {
+          const key = categoryStringToLicenseKey(r?.category)
+          if (!key) continue
+          const slot = {
             date_issued: r?.date_issued || '',
             date_expiry: r?.date_expiry || '',
             attachment: r?.attachment && typeof r.attachment === 'object' ? r.attachment : null,
-          })),
+          }
+          const scoreSlot = (row) =>
+            (row?.attachment ? 4 : 0) +
+            (String(row?.date_expiry || '').trim() ? 2 : 0) +
+            (String(row?.date_issued || '').trim() ? 1 : 0)
+          if (scoreSlot(slot) > scoreSlot(licMap[key])) licMap[key] = slot
+        }
+
+        const next = normalizeCredentialsState({
+          licenses: licMap,
           trainings: (trRows || []).map((r) => ({
             training_attended: r?.training_attended || '',
             date: r?.date || '',
@@ -663,8 +745,7 @@ const ResumeProfile = () => {
         }
         setClearances(base)
       } catch (err) {
-        const msg = String(err?.message || '').toLowerCase()
-        const missingTable = msg.includes('relation') && msg.includes('does not exist')
+        const missingTable = isSupabaseMissingTableError(err)
         if (!missingTable) console.error('[RESUME_PROFILE] load clearances error:', err)
 
         // Fallbacks
@@ -686,6 +767,7 @@ const ResumeProfile = () => {
   }, [applicant?.id, clearancesStorageKey])
 
   useEffect(() => {
+    let cancelled = false
     const loadOthers = async () => {
       if (!applicant?.id) return
       try {
@@ -694,15 +776,17 @@ const ResumeProfile = () => {
           .select('skills,preferred_places,preferred_monthly_salary,can_start_asap,can_start_date,employment_types')
           .eq('applicant_id', applicant.id)
           .maybeSingle()
+        if (cancelled) return
         if (error) throw error
         if (data) {
           setOthers(normalizeOthersState(data))
           return
         }
       } catch (e) {
-        console.warn('[RESUME_PROFILE] load others from DB failed, using local fallback:', e)
+        if (!cancelled) console.warn('[RESUME_PROFILE] load others from DB failed, using local fallback:', e)
       }
 
+      if (cancelled) return
       // Local fallback (only if DB read fails / no row yet)
       try {
         const raw = localStorage.getItem(othersStorageKey)
@@ -713,6 +797,9 @@ const ResumeProfile = () => {
     }
 
     loadOthers()
+    return () => {
+      cancelled = true
+    }
   }, [applicant?.id, othersStorageKey])
 
   const displayName = useMemo(() => formatDisplayName(profile, userProfile), [profile, userProfile])
@@ -748,74 +835,6 @@ const ResumeProfile = () => {
       next[levelKey] = filtered.length ? filtered : [makeEmptyEducationRow()]
       return next
     })
-  }
-
-  const uploadEducationAttachment = async (levelKey, index, file) => {
-    if (!user?.id) {
-      alert('You must be logged in to upload files')
-      return
-    }
-    if (!file) return
-
-    const maxSize = 5 * 1024 * 1024
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-    if (file.size > maxSize) {
-      alert('File size exceeds 5MB. Please upload a smaller file.')
-      return
-    }
-    if (!allowed.includes(file.type)) {
-      alert('Allowed files: jpg/jpeg, png, webp, pdf (max 5MB).')
-      return
-    }
-
-    setEducationUploading(true)
-    try {
-      const { data: a, error: aErr } = await supabase
-        .from('applicants')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (aErr) throw aErr
-      if (!a?.id) {
-        alert('Please complete Personal Information first.')
-        navigate('/profile/personalinformation')
-        return
-      }
-
-      const ts = Date.now()
-      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-      const filePath = `${user.id}/education_${levelKey}_${ts}_${sanitizedName}`
-
-      const { error: uploadErr } = await supabase.storage.from('resumes').upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false,
-      })
-      if (uploadErr) throw uploadErr
-
-      // Optional: track in documents table (keeps ATS view consistent)
-      const fileType = `EDUCATION_${String(levelKey).toUpperCase()}`
-      await supabase.from('documents').insert({
-        applicant_id: a.id,
-        application_id: null,
-        file_path: filePath,
-        file_name: file.name,
-        file_type: fileType,
-        file_size: file.size,
-        mime_type: file.type,
-      })
-
-      setEducationField(levelKey, index, 'attachment', {
-        file_name: file.name,
-        file_path: filePath,
-        mime_type: file.type,
-        file_size: file.size,
-      })
-    } catch (err) {
-      console.error('[RESUME_PROFILE] education upload error:', err)
-      alert(`Upload failed: ${err?.message || 'Unknown error'}`)
-    } finally {
-      setEducationUploading(false)
-    }
   }
 
   const saveEducation = async () => {
@@ -865,38 +884,49 @@ const ResumeProfile = () => {
   }
 
   const setCredentialField = (groupKey, index, field, value) => {
+    if (groupKey !== 'trainings') return
     setCredentials((prev) => {
       const next = { ...prev }
-      const emptyRow = groupKey === 'trainings' ? makeEmptyTrainingRow() : makeEmptyCredentialRow()
-      const rows = Array.isArray(next[groupKey]) ? [...next[groupKey]] : [emptyRow]
-      const current = rows[index] || emptyRow
+      const rows = Array.isArray(next.trainings) ? [...next.trainings] : [makeEmptyTrainingRow()]
+      const current = rows[index] || makeEmptyTrainingRow()
       rows[index] = { ...current, [field]: value }
-      next[groupKey] = rows
+      next.trainings = rows
       return next
     })
   }
 
+  const setLicenseSlotField = (key, field, value) => {
+    setCredentials((prev) => ({
+      ...prev,
+      licenses: {
+        ...normalizeLicensesMapFromInput(prev.licenses),
+        [key]: { ...(prev.licenses?.[key] || makeEmptyLicenseSlotRow()), [field]: value },
+      },
+    }))
+  }
+
   const addCredentialRow = (groupKey) => {
+    if (groupKey !== 'trainings') return
     setCredentials((prev) => {
       const next = { ...prev }
-      const rows = Array.isArray(next[groupKey]) ? [...next[groupKey]] : []
-      next[groupKey] = [...rows, groupKey === 'trainings' ? makeEmptyTrainingRow() : makeEmptyCredentialRow()]
+      const rows = Array.isArray(next.trainings) ? [...next.trainings] : []
+      next.trainings = [...rows, makeEmptyTrainingRow()]
       return next
     })
   }
 
   const deleteCredentialRow = (groupKey, index) => {
+    if (groupKey !== 'trainings') return
     setCredentials((prev) => {
       const next = { ...prev }
-      const rows = Array.isArray(next[groupKey]) ? [...next[groupKey]] : []
+      const rows = Array.isArray(next.trainings) ? [...next.trainings] : []
       const filtered = rows.filter((_, i) => i !== index)
-      const fallback = groupKey === 'trainings' ? makeEmptyTrainingRow() : makeEmptyCredentialRow()
-      next[groupKey] = filtered.length ? filtered : [fallback]
+      next.trainings = filtered.length ? filtered : [makeEmptyTrainingRow()]
       return next
     })
   }
 
-  const uploadCredentialAttachment = async (groupKey, index, file) => {
+  const uploadLicenseSlotAttachment = async (key, file) => {
     if (!user?.id) {
       alert('You must be logged in to upload files')
       return
@@ -914,7 +944,7 @@ const ResumeProfile = () => {
       return
     }
 
-    setCredentialsUploading(true)
+    setLicenseUploadingKey(key)
     try {
       const { data: a, error: aErr } = await supabase
         .from('applicants')
@@ -929,9 +959,17 @@ const ResumeProfile = () => {
         return
       }
 
+      const prevAtt = credentials?.licenses?.[key]?.attachment
+      if (prevAtt?.file_path) {
+        await supabase.storage.from('resumes').remove([prevAtt.file_path])
+      }
+      if (prevAtt?.doc_id) {
+        await supabase.from('documents').delete().eq('id', prevAtt.doc_id)
+      }
+
       const ts = Date.now()
       const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-      const filePath = `${user.id}/credential_${groupKey}_${ts}_${sanitizedName}`
+      const filePath = `${user.id}/credential_license_${key}_${ts}_${sanitizedName}`
 
       const { error: uploadErr } = await supabase.storage.from('resumes').upload(filePath, file, {
         cacheControl: '3600',
@@ -939,28 +977,52 @@ const ResumeProfile = () => {
       })
       if (uploadErr) throw uploadErr
 
-      const fileType = `CREDENTIAL_${String(groupKey).toUpperCase()}`
-      await supabase.from('documents').insert({
-        applicant_id: a.id,
-        application_id: null,
-        file_path: filePath,
-        file_name: file.name,
-        file_type: fileType,
-        file_size: file.size,
-        mime_type: file.type,
-      })
+      const fileType = `LICENSE_${String(key).toUpperCase()}`
+      const { data: docRow } = await supabase
+        .from('documents')
+        .insert({
+          applicant_id: a.id,
+          application_id: null,
+          file_path: filePath,
+          file_name: file.name,
+          file_type: fileType,
+          file_size: file.size,
+          mime_type: file.type,
+        })
+        .select('id')
+        .maybeSingle()
 
-      setCredentialField(groupKey, index, 'attachment', {
+      setLicenseSlotField(key, 'attachment', {
         file_name: file.name,
         file_path: filePath,
         mime_type: file.type,
         file_size: file.size,
+        doc_id: docRow?.id || null,
       })
     } catch (err) {
-      console.error('[RESUME_PROFILE] credential upload error:', err)
+      console.error('[RESUME_PROFILE] license upload error:', err)
       alert(`Upload failed: ${err?.message || 'Unknown error'}`)
     } finally {
-      setCredentialsUploading(false)
+      setLicenseUploadingKey(null)
+    }
+  }
+
+  const removeLicenseSlotAttachment = async (key) => {
+    const existing = credentials?.licenses?.[key]?.attachment
+    if (!existing) return
+    try {
+      setLicenseUploadingKey(key)
+      if (existing?.file_path) {
+        await supabase.storage.from('resumes').remove([existing.file_path])
+      }
+      if (existing?.doc_id) {
+        await supabase.from('documents').delete().eq('id', existing.doc_id)
+      }
+    } catch (err) {
+      console.error('[RESUME_PROFILE] license remove error:', err)
+    } finally {
+      setLicenseSlotField(key, 'attachment', null)
+      setLicenseUploadingKey(null)
     }
   }
 
@@ -968,14 +1030,18 @@ const ResumeProfile = () => {
     if (!user?.id || !applicant?.id) return
     setCredentialsBusy(true)
     try {
-      const licensesToSave = (credentials.licenses || [])
-        .map((r) => ({
-          category: String(r?.category || '').trim(),
+      const licMap = normalizeLicensesMapFromInput(credentials.licenses)
+      const licensesToSave = LICENSE_TYPES.map((t) => {
+        const r = licMap[t.key] || makeEmptyLicenseSlotRow()
+        const hasAny = r?.date_issued || r?.date_expiry || r?.attachment
+        if (!hasAny) return null
+        return {
+          category: t.label,
           date_issued: r?.date_issued || null,
           date_expiry: r?.date_expiry || null,
           attachment: r?.attachment && typeof r.attachment === 'object' ? r.attachment : null,
-        }))
-        .filter((r) => r.category || r.date_issued || r.date_expiry || r.attachment)
+        }
+      }).filter(Boolean)
 
       const trainingsToSave = (credentials.trainings || [])
         .map((r) => ({
@@ -1015,12 +1081,10 @@ const ResumeProfile = () => {
       alert('Licenses / trainings saved.')
     } catch (err) {
       console.error('[RESUME_PROFILE] save credentials error:', err)
-      const msg = String(err?.message || '')
-      const missingTable =
-        msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('does not exist')
+      const missingTable = isSupabaseMissingTableError(err)
       if (missingTable) {
         localStorage.setItem(credentialsStorageKey, JSON.stringify(credentials))
-        alert('Database tables are not ready yet. Saved locally for now.')
+        notifyLocalOnlyDbNotReady('Licenses / trainings', err)
       } else {
         alert(`Save failed: ${err?.message || 'Unknown error'}`)
       }
@@ -1225,20 +1289,13 @@ const ResumeProfile = () => {
     }
 
     if (s.key === 'licenses') {
-      const rows = (credentials.licenses || []).filter(
-        (row) =>
-          String(row?.category || '').trim() ||
-          String(row?.date_issued || '').trim() ||
-          String(row?.date_expiry || '').trim() ||
-          row?.attachment?.file_name
-      )
-      const list = rows.length ? rows : []
+      const licMap = normalizeLicensesMapFromInput(credentials.licenses)
       return (
         <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#0f172a]">
           <table className="min-w-[640px] w-full text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-[#0b1220] border-b border-gray-200 dark:border-white/10">
-                {['Category', 'Date issued', 'Date expiry', 'Status', 'Attachment'].map((h) => (
+                {['Category', 'Date issued', 'Date expiry', 'Remaining days', 'Status', 'Attachment'].map((h) => (
                   <th
                     key={h}
                     className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80"
@@ -1249,28 +1306,34 @@ const ResumeProfile = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-white/10">
-              {(list.length ? list : [{}]).map((row, idx) => {
-                const today = new Date()
-                const exp = toDateOnly(row?.date_expiry)
-                const remaining = exp ? diffDays(today, exp) : null
+              {LICENSE_TYPES.map((t) => {
+                const row = licMap[t.key] || makeEmptyLicenseSlotRow()
+                const remaining = row?.date_expiry ? daysUntil(row.date_expiry) : null
                 const status =
-                  remaining == null ? '—' : remaining < 0 ? 'Expired' : remaining <= 60 ? 'Soon to expire' : 'Valid'
+                  row?.date_expiry && remaining != null
+                    ? remaining >= 0
+                      ? 'Valid'
+                      : 'Expired'
+                    : row?.attachment
+                      ? 'Valid'
+                      : '—'
                 return (
-                  <tr key={`lic-${idx}`}>
+                  <tr key={t.key}>
+                    <td className="px-3 py-2 font-extrabold text-slate-900 dark:text-white whitespace-nowrap">{t.label}</td>
                     <td className="px-3 py-2">
-                      <Ro>{row?.category}</Ro>
+                      <Ro>{formatDate(row.date_issued)}</Ro>
                     </td>
                     <td className="px-3 py-2">
-                      <Ro>{formatDate(row?.date_issued)}</Ro>
+                      <Ro>{formatDate(row.date_expiry)}</Ro>
                     </td>
                     <td className="px-3 py-2">
-                      <Ro>{formatDate(row?.date_expiry)}</Ro>
+                      <Ro>{row?.date_expiry && remaining != null ? remaining : '—'}</Ro>
                     </td>
                     <td className="px-3 py-2">
                       <Ro>{status}</Ro>
                     </td>
                     <td className="px-3 py-2">
-                      <Ro>{row?.attachment?.file_name}</Ro>
+                      <Ro>{row.attachment?.file_name}</Ro>
                     </td>
                   </tr>
                 )
@@ -1635,11 +1698,10 @@ const ResumeProfile = () => {
       alert('Clearances saved.')
     } catch (err) {
       console.error('[RESUME_PROFILE] save clearances error:', err)
-      const msg = String(err?.message || '')
-      const missingTable = msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('does not exist')
+      const missingTable = isSupabaseMissingTableError(err)
       if (missingTable) {
         localStorage.setItem(clearancesStorageKey, JSON.stringify(clearances))
-        alert('Database table is not ready yet. Saved locally for now.')
+        notifyLocalOnlyDbNotReady('Clearances', err)
       } else {
         alert(`Save failed: ${err?.message || 'Unknown error'}`)
       }
@@ -1669,8 +1731,7 @@ const ResumeProfile = () => {
     if (!user?.id || !applicant?.id) return
     setOthersBusy(true)
     try {
-      const payload = {
-        applicant_id: applicant.id,
+      const fields = {
         skills: Array.isArray(others?.skills) ? others.skills : [],
         preferred_places: Array.isArray(others?.preferred_places) ? others.preferred_places : [],
         preferred_monthly_salary: Array.isArray(others?.preferred_monthly_salary) ? others.preferred_monthly_salary : [],
@@ -1680,18 +1741,47 @@ const ResumeProfile = () => {
         updated_at: new Date().toISOString(),
       }
 
-      const { error } = await supabase.from('applicant_others').upsert(payload, { onConflict: 'applicant_id' })
-      if (error) throw error
+      // Avoid upsert: INSERT .. ON CONFLICT DO UPDATE often fails under RLS even when plain insert/update work.
+      const { data: existing, error: existErr } = await supabase
+        .from('applicant_others')
+        .select('applicant_id')
+        .eq('applicant_id', applicant.id)
+        .maybeSingle()
+      if (existErr) throw existErr
+
+      if (existing) {
+        const { error: upErr } = await supabase.from('applicant_others').update(fields).eq('applicant_id', applicant.id)
+        if (upErr) throw upErr
+      } else {
+        const { error: insErr } = await supabase.from('applicant_others').insert({ applicant_id: applicant.id, ...fields })
+        if (insErr) {
+          if (String(insErr.code) === '23505') {
+            const { error: upErr } = await supabase.from('applicant_others').update(fields).eq('applicant_id', applicant.id)
+            if (upErr) throw upErr
+          } else {
+            throw insErr
+          }
+        }
+      }
 
       alert('Others saved.')
     } catch (err) {
       console.error('[RESUME_PROFILE] save others error:', err)
-      alert(`Save failed: ${err?.message || 'Unknown error'}`)
-      // Last-resort fallback so user doesn't lose input
-      try {
-        localStorage.setItem(othersStorageKey, JSON.stringify(others))
-      } catch {
-        // ignore
+      const missingTable = isSupabaseMissingTableError(err)
+      if (missingTable) {
+        try {
+          localStorage.setItem(othersStorageKey, JSON.stringify(others))
+        } catch {
+          // ignore
+        }
+        notifyLocalOnlyDbNotReady('Other profile details', err)
+      } else {
+        alert(`Save failed: ${err?.message || 'Unknown error'}`)
+        try {
+          localStorage.setItem(othersStorageKey, JSON.stringify(others))
+        } catch {
+          // ignore
+        }
       }
     } finally {
       setOthersBusy(false)
@@ -1876,12 +1966,6 @@ const ResumeProfile = () => {
                               </p>
                             </div>
                             <div>
-                              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Licenses / IDs</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                                {formatLicenses(profile?.licenses)}
-                              </p>
-                            </div>
-                            <div>
                               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Contact</p>
                               <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
                                 {email} <span className="text-slate-300 dark:text-white/20 px-1">|</span> {phone}
@@ -1921,7 +2005,7 @@ const ResumeProfile = () => {
                         ) : s.key === 'education' ? (
                           <div className="space-y-4">
                             <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#0f172a]">
-                              <table className="min-w-[1040px] w-full text-sm">
+                              <table className="min-w-[860px] w-full text-sm">
                                 <thead>
                                   <tr className="bg-gray-50 dark:bg-[#0b1220] border-b border-gray-200 dark:border-white/10">
                                     <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[190px]">
@@ -1936,9 +2020,6 @@ const ResumeProfile = () => {
                                     <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[160px]">
                                       Year Graduated
                                     </th>
-                                    <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[190px]">
-                                      Upload
-                                    </th>
                                     <th className="px-3 py-2 text-right text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[120px]">
                                       Action
                                     </th>
@@ -1947,7 +2028,6 @@ const ResumeProfile = () => {
                                 <tbody className="divide-y divide-gray-200 dark:divide-white/10">
                                   {EDUCATION_LEVELS.flatMap((lvl) =>
                                     (education[lvl.key] || [makeEmptyEducationRow()]).map((row, idx) => {
-                                      const inputId = `edu-upload-${lvl.key}-${idx}`
                                       return (
                                         <tr key={`${lvl.key}-${idx}`} className="align-top">
                                           <td className="px-3 py-3 font-extrabold text-slate-900 dark:text-white">
@@ -1976,36 +2056,6 @@ const ResumeProfile = () => {
                                               placeholder="Year"
                                               className="w-full rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-[#93c5fd]/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
                                             />
-                                          </td>
-                                          <td className="px-3 py-2">
-                                            <div className="flex items-center gap-2">
-                                              <button
-                                                type="button"
-                                                onClick={() => document.getElementById(inputId)?.click()}
-                                                disabled={educationUploading}
-                                                className="inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2 text-xs font-bold text-slate-700 dark:text-white hover:bg-gray-50 dark:hover:bg-white/10 transition-colors disabled:opacity-60"
-                                              >
-                                                Upload
-                                              </button>
-                                              <input
-                                                id={inputId}
-                                                type="file"
-                                                className="hidden"
-                                                accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf,.pdf,.jpg,.jpeg,.png,.webp"
-                                                onChange={(e) => uploadEducationAttachment(lvl.key, idx, e.target.files?.[0] || null)}
-                                              />
-                                              <div className="min-w-0">
-                                                {row.attachment?.file_name ? (
-                                                  <p className="text-xs font-semibold text-slate-700 dark:text-[#93c5fd] truncate max-w-[220px]">
-                                                    {row.attachment.file_name}
-                                                  </p>
-                                                ) : (
-                                                  <p className="text-[11px] text-slate-500 dark:text-[#93c5fd]/60">
-                                                    Jpg, jpeg, pdf, webp • 5mb
-                                                  </p>
-                                                )}
-                                              </div>
-                                            </div>
                                           </td>
                                           <td className="px-3 py-2 text-right">
                                             <div className="flex items-center justify-end gap-2">
@@ -2039,7 +2089,7 @@ const ResumeProfile = () => {
                               <button
                                 type="button"
                                 onClick={saveEducation}
-                                disabled={educationBusy || educationUploading}
+                                disabled={educationBusy}
                                 className="min-w-[140px] inline-flex items-center justify-center rounded-md bg-[#155e75] hover:bg-[#0e7490] text-white px-8 py-3 text-sm font-bold tracking-wide shadow-sm disabled:opacity-60"
                               >
                                 {educationBusy ? 'SAVING…' : 'SAVE'}
@@ -2052,128 +2102,124 @@ const ResumeProfile = () => {
                               <table className="min-w-[980px] w-full text-sm">
                                 <thead>
                                   <tr className="bg-gray-50 dark:bg-[#0b1220] border-b border-gray-200 dark:border-white/10">
-                                    <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[240px]">
-                                      Category (License)
-                                    </th>
-                                    <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[165px]">
-                                      Date issued
-                                    </th>
-                                    <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[165px]">
-                                      Date expiry
-                                    </th>
-                                    <th className="px-3 py-2 text-center text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[150px]">
-                                      Remaining days
-                                    </th>
-                                    <th className="px-3 py-2 text-center text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[150px]">
-                                      Status
-                                    </th>
-                                    <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[210px]">
-                                      Upload
-                                    </th>
-                                    <th className="px-3 py-2 text-right text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 w-[140px]">
-                                      Action
-                                    </th>
+                                    {['Category', 'Date issued', 'Date expiry', 'Remaining days', 'Status', 'Upload', ''].map((h, idx) => (
+                                      <th
+                                        key={h + idx}
+                                        className={`px-3 py-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 ${
+                                          idx === 6 ? 'text-right w-[140px]' : 'text-left'
+                                        }`}
+                                      >
+                                        {h}
+                                      </th>
+                                    ))}
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200 dark:divide-white/10">
-                                  {(credentials.licenses || [makeEmptyCredentialRow()]).map((row, idx) => {
-                                    const inputId = `cred-lic-upload-${idx}`
-                                    const today = new Date()
-                                    const exp = toDateOnly(row.date_expiry)
-                                    const remaining = exp ? diffDays(today, exp) : null
+                                  {(() => {
+                                    const licMap = normalizeLicensesMapFromInput(credentials.licenses)
+                                    return LICENSE_TYPES.map((t) => {
+                                    const row = licMap[t.key] || makeEmptyLicenseSlotRow()
+                                    const remaining = row?.date_expiry ? daysUntil(row.date_expiry) : null
                                     const status =
-                                      remaining == null ? '—' : remaining < 0 ? 'Expired' : remaining <= 60 ? 'Soon to expire' : 'VALID'
-                                    const statusClass =
-                                      status === 'Expired'
-                                        ? 'text-red-600 dark:text-red-400'
-                                        : status === 'Soon to expire'
-                                          ? 'text-amber-700 dark:text-amber-300'
-                                          : status === 'VALID'
-                                            ? 'text-green-700 dark:text-green-400'
-                                            : 'text-slate-500 dark:text-[#93c5fd]/70'
-
+                                      row?.date_expiry && remaining != null
+                                        ? remaining >= 0
+                                          ? 'VALID'
+                                          : 'EXPIRED'
+                                        : row?.attachment
+                                          ? 'VALID'
+                                          : 'N/A'
+                                    const inputId = `license-upload-${t.key}`
+                                    const busy = licenseUploadingKey === t.key
                                     return (
-                                      <tr key={`lic-${idx}`} className="align-top">
+                                      <tr key={t.key} className="align-top">
+                                        <td className="px-3 py-3 font-extrabold text-slate-900 dark:text-white whitespace-nowrap">
+                                          {t.label}
+                                        </td>
                                         <td className="px-3 py-2">
                                           <input
-                                            value={row.category}
-                                            onChange={(e) => setCredentialField('licenses', idx, 'category', e.target.value)}
-                                            placeholder="Driver's License / Security Guard / ..."
-                                            className="w-full rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-[#93c5fd]/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                            type="date"
+                                            value={row.date_issued || ''}
+                                            onChange={(e) => setLicenseSlotField(t.key, 'date_issued', e.target.value)}
+                                            className="w-full max-w-[180px] rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40"
                                           />
                                         </td>
                                         <td className="px-3 py-2">
                                           <input
                                             type="date"
-                                            value={row.date_issued}
-                                            onChange={(e) => setCredentialField('licenses', idx, 'date_issued', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                            value={row.date_expiry || ''}
+                                            onChange={(e) => setLicenseSlotField(t.key, 'date_expiry', e.target.value)}
+                                            className="w-full max-w-[180px] rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40"
                                           />
                                         </td>
-                                        <td className="px-3 py-2">
-                                          <input
-                                            type="date"
-                                            value={row.date_expiry}
-                                            onChange={(e) => setCredentialField('licenses', idx, 'date_expiry', e.target.value)}
-                                            className="w-full rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40"
-                                          />
+                                        <td className="px-3 py-3 font-bold text-slate-700 dark:text-[#93c5fd] whitespace-nowrap">
+                                          {row?.date_expiry && remaining != null ? remaining : 'N/A'}
                                         </td>
-                                        <td className="px-3 py-2 text-center font-extrabold text-slate-900 dark:text-white">
-                                          {remaining == null ? '—' : remaining}
+                                        <td className="px-3 py-3">
+                                          <span
+                                            className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${
+                                              status === 'VALID'
+                                                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                                : status === 'EXPIRED'
+                                                  ? 'bg-red-500/10 text-red-700 dark:text-red-300'
+                                                  : 'bg-slate-500/10 text-slate-700 dark:text-slate-300'
+                                            }`}
+                                          >
+                                            {status}
+                                          </span>
                                         </td>
-                                        <td className={`px-3 py-2 text-center font-extrabold ${statusClass}`}>{status}</td>
                                         <td className="px-3 py-2">
                                           <div className="flex items-center gap-2">
                                             <button
                                               type="button"
                                               onClick={() => document.getElementById(inputId)?.click()}
-                                              disabled={credentialsUploading}
+                                              disabled={busy}
                                               className="inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2 text-xs font-bold text-slate-700 dark:text-white hover:bg-gray-50 dark:hover:bg-white/10 transition-colors disabled:opacity-60"
                                             >
-                                              Upload
+                                              {busy ? 'Uploading…' : 'Upload'}
                                             </button>
                                             <input
                                               id={inputId}
                                               type="file"
                                               className="hidden"
                                               accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf,.pdf,.jpg,.jpeg,.png,.webp"
-                                              onChange={(e) => uploadCredentialAttachment('licenses', idx, e.target.files?.[0] || null)}
+                                              onChange={(e) => uploadLicenseSlotAttachment(t.key, e.target.files?.[0] || null)}
                                             />
                                             <div className="min-w-0">
                                               {row.attachment?.file_name ? (
-                                                <p className="text-xs font-semibold text-slate-700 dark:text-[#93c5fd] truncate max-w-[220px]">
+                                                <p className="text-xs font-semibold text-slate-700 dark:text-[#93c5fd] truncate max-w-[260px]">
                                                   {row.attachment.file_name}
                                                 </p>
                                               ) : (
-                                                <p className="text-[11px] text-slate-500 dark:text-[#93c5fd]/60">
-                                                  Jpg, jpeg, pdf, webp • 5mb
-                                                </p>
+                                                <p className="text-[11px] text-slate-500 dark:text-[#93c5fd]/60">Jpg, jpeg, pdf, webp • 5mb</p>
                                               )}
                                             </div>
                                           </div>
                                         </td>
                                         <td className="px-3 py-2 text-right">
-                                          <div className="flex items-center justify-end gap-2">
+                                          {row.attachment ? (
                                             <button
                                               type="button"
-                                              onClick={() => deleteCredentialRow('licenses', idx)}
-                                              className="rounded-md bg-red-500/10 text-red-600 dark:text-red-400 px-3 py-2 text-xs font-extrabold hover:bg-red-500/15 transition-colors"
+                                              onClick={() => removeLicenseSlotAttachment(t.key)}
+                                              disabled={busy}
+                                              className="rounded-md bg-red-500/10 text-red-600 dark:text-red-400 px-4 py-2 text-xs font-extrabold hover:bg-red-500/15 transition-colors disabled:opacity-60"
                                             >
-                                              Remove
+                                              REMOVE
                                             </button>
+                                          ) : (
                                             <button
                                               type="button"
-                                              onClick={() => addCredentialRow('licenses')}
-                                              className="rounded-md bg-primary/10 text-primary px-3 py-2 text-xs font-extrabold hover:bg-primary/15 transition-colors"
-                                              title="Add row"
+                                              onClick={() => document.getElementById(inputId)?.click()}
+                                              disabled={busy}
+                                              className="rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-4 py-2 text-xs font-extrabold hover:bg-emerald-500/15 transition-colors disabled:opacity-60"
                                             >
-                                              +ADD
+                                              ADD
                                             </button>
-                                          </div>
+                                          )}
                                         </td>
                                       </tr>
                                     )
-                                  })}
+                                  })
+                                  })()}
                                 </tbody>
                               </table>
                             </div>
@@ -2181,7 +2227,7 @@ const ResumeProfile = () => {
                               <button
                                 type="button"
                                 onClick={saveCredentials}
-                                disabled={credentialsBusy || credentialsUploading}
+                                disabled={credentialsBusy || !!licenseUploadingKey}
                                 className="min-w-[140px] inline-flex items-center justify-center rounded-md bg-[#155e75] hover:bg-[#0e7490] text-white px-8 py-3 text-sm font-bold tracking-wide shadow-sm disabled:opacity-60"
                               >
                                 {credentialsBusy ? 'SAVING…' : 'SAVE'}
@@ -2247,7 +2293,7 @@ const ResumeProfile = () => {
                               <button
                                 type="button"
                                 onClick={saveCredentials}
-                                disabled={credentialsBusy || credentialsUploading}
+                                disabled={credentialsBusy || !!licenseUploadingKey}
                                 className="min-w-[140px] inline-flex items-center justify-center rounded-md bg-[#155e75] hover:bg-[#0e7490] text-white px-8 py-3 text-sm font-bold tracking-wide shadow-sm disabled:opacity-60"
                               >
                                 {credentialsBusy ? 'SAVING…' : 'SAVE'}

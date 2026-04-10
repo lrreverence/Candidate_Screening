@@ -1,8 +1,6 @@
--- Run this in Supabase SQL Editor (one-off) if you are not using `supabase db push`.
--- The same DDL is tracked as supabase/migrations/20260410120000_create_employment_records.sql.
--- Creates a normalized table for Employment Record rows used by `/profile/resume`.
+-- Employment Record rows for `/profile/resume` (normalized from applicants).
+-- Previously lived only in `supabase/employment_records.sql`; tracked here for `supabase db push` / CI.
 
--- 1) Table
 create table if not exists public.employment_records (
   id uuid primary key default gen_random_uuid(),
   applicant_id uuid not null references public.applicants(id) on delete cascade,
@@ -22,7 +20,6 @@ create index if not exists employment_records_applicant_id_idx
 create index if not exists employment_records_applicant_category_idx
   on public.employment_records (applicant_id, category);
 
--- 2) updated_at trigger
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -38,11 +35,8 @@ create trigger employment_records_set_updated_at
 before update on public.employment_records
 for each row execute function public.set_updated_at();
 
--- 3) RLS
 alter table public.employment_records enable row level security;
 
--- Assumes: applicants.user_id references auth.users.id
--- and the authenticated user can only access their own applicant rows.
 drop policy if exists "employment_records_select_own" on public.employment_records;
 create policy "employment_records_select_own"
 on public.employment_records
@@ -102,4 +96,3 @@ using (
       and a.user_id = auth.uid()
   )
 );
-

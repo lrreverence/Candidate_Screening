@@ -20,6 +20,23 @@ import {
   normalizeHeightScoringFromJob,
   normalizeWeightScoringFromJob
 } from '../../lib/bodyMetricsScoring'
+import {
+  WORK_EXPERIENCE_BRACKETS,
+  DEFAULT_EMPLOYMENT_EXPERIENCE_SCORING,
+  normalizeEmploymentExperienceScoringFromJob
+} from '../../lib/workExperienceScoring'
+import {
+  TRAINING_COUNT_TIER_ROWS,
+  DEFAULT_TRAINING_COUNT_SCORING,
+  normalizeTrainingCountScoringFromJob
+} from '../../lib/trainingCountScoring'
+import {
+  OTHERS_SKILL_OPTIONS,
+  OTHERS_PLACE_OPTIONS,
+  OTHERS_SALARY_OPTIONS,
+  OTHERS_EMPLOYMENT_TYPE_OPTIONS,
+  normalizeOthersScoringFromJob
+} from '../../lib/othersScoring'
 import AdminNotificationBell from '../../components/admin/AdminNotificationBell'
 import AdminHelpButton from '../../components/admin/AdminHelpButton'
 
@@ -42,7 +59,6 @@ const JOB_SCORING_SECTIONS = [
     fields: [
       { id: 'full_name', label: 'Full name' },
       { id: 'address', label: 'Address' },
-      { id: 'licenses_ids', label: 'Licenses / IDs' },
       { id: 'contact', label: 'Contact (email & phone)' },
       { id: 'date_of_birth', label: 'Date of birth' },
       { id: 'gender', label: 'Gender' },
@@ -58,11 +74,10 @@ const JOB_SCORING_SECTIONS = [
     label: 'Educational Attainment',
     icon: 'school',
     fields: [
-      { id: 'level', label: 'Level' },
-      { id: 'school', label: 'School' },
-      { id: 'course_degree', label: 'Course / degree / major' },
-      { id: 'year_graduated', label: 'Year graduated' },
-      { id: 'attachment', label: 'Upload / attachment' }
+      { id: 'elementary', label: 'Elementary' },
+      { id: 'high_school', label: 'High School' },
+      { id: 'vocational', label: 'Vocational' },
+      { id: 'college', label: 'College' }
     ]
   },
   {
@@ -70,11 +85,9 @@ const JOB_SCORING_SECTIONS = [
     label: 'Employment Record',
     icon: 'work',
     fields: [
+      { id: 'total_experience', label: 'Total work experience (cumulative)' },
       { id: 'position', label: 'Position' },
-      { id: 'agency', label: 'Agency' },
-      { id: 'place', label: 'Place' },
-      { id: 'from', label: 'From' },
-      { id: 'to', label: 'To' }
+      { id: 'agency', label: 'Agency' }
     ]
   },
   {
@@ -82,10 +95,12 @@ const JOB_SCORING_SECTIONS = [
     label: 'Licenses',
     icon: 'verified',
     fields: [
-      { id: 'category', label: 'Category' },
-      { id: 'date_issued', label: 'Date issued' },
-      { id: 'date_expiry', label: 'Date expiry' },
-      { id: 'attachment', label: 'Attachment' }
+      { id: 'drivers_license', label: 'Drivers License' },
+      { id: 'security_guard_license', label: 'Security Guard License' },
+      { id: 'security_officers_license', label: 'Security Officers License' },
+      { id: 'security_managers_license', label: 'Security Managers License' },
+      { id: 'bank_and_armor_license', label: 'Bank And Armor License' },
+      { id: 'protection_agent', label: 'Protection Agent' }
     ]
   },
   {
@@ -184,6 +199,48 @@ const preprocessLegacyCategoryRows = (raw) => {
   return next
 }
 
+/**
+ * Keeps only weights for fields currently defined on the section, drops removed keys,
+ * and rescales so the section total is 100% when needed (e.g. legacy rows still had
+ * place/from/to percentages while the UI only shows total_experience, position, agency).
+ */
+const normalizeFieldWeightsForSection = (sec, rawWeights) => {
+  const list = Array.isArray(rawWeights) ? rawWeights : []
+  const map = new Map()
+  for (const fw of list) {
+    if (!fw || typeof fw !== 'object') continue
+    const id = fw.field
+    if (id == null) continue
+    const p = parseFloat(fw.percentage)
+    map.set(String(id), Number.isFinite(p) ? Math.max(0, Math.min(100, p)) : 0)
+  }
+  const definedIds = new Set(sec.fields.map((f) => f.id))
+  const hasStale = [...map.keys()].some((k) => !definedIds.has(k))
+
+  let weights = sec.fields.map((f) => ({
+    field: f.id,
+    percentage: map.has(f.id) ? map.get(f.id) : 0
+  }))
+  const sum = weights.reduce((s, w) => s + w.percentage, 0)
+
+  if (sum <= 0) return defaultFieldWeightsForSection(sec)
+
+  if (hasStale || Math.abs(sum - 100) > 0.02) {
+    const scale = 100 / sum
+    let acc = 0
+    weights = weights.map((w, i) => {
+      if (i < weights.length - 1) {
+        const v = Math.round(w.percentage * scale * 10) / 10
+        acc += v
+        return { field: w.field, percentage: v }
+      }
+      return { field: w.field, percentage: Math.round((100 - acc) * 10) / 10 }
+    })
+  }
+
+  return weights
+}
+
 const normalizeCategoryPercentagesFromJob = (raw) => {
   const rows = preprocessLegacyCategoryRows(Array.isArray(raw) ? raw : [])
   const byKey = {}
@@ -201,18 +258,7 @@ const normalizeCategoryPercentagesFromJob = (raw) => {
     }
     percentage = Math.max(0, Math.min(100, Math.round(Number(percentage) * 10) / 10))
 
-    let field_weights = existing?.field_weights
-    if (!Array.isArray(field_weights) || field_weights.length === 0) {
-      field_weights = defaultFieldWeightsForSection(sec)
-    } else {
-      const map = new Map(field_weights.map((fw) => [fw.field, parseFloat(fw.percentage)]))
-      field_weights = sec.fields.map((f) => ({
-        field: f.id,
-        percentage: Math.max(0, Math.min(100, (Number.isFinite(map.get(f.id)) ? map.get(f.id) : 0)))
-      }))
-      const sum = field_weights.reduce((s, w) => s + w.percentage, 0)
-      if (sum === 0) field_weights = defaultFieldWeightsForSection(sec)
-    }
+    const field_weights = normalizeFieldWeightsForSection(sec, existing?.field_weights)
     return {
       category_key: sec.key,
       category: sec.label,
@@ -253,12 +299,20 @@ const JobsManagement = () => {
     gender_scoring: { ...DEFAULT_GENDER_SCORING },
     height_scoring: { ...DEFAULT_HEIGHT_SCORING },
     weight_scoring: { ...DEFAULT_WEIGHT_SCORING },
+    employment_experience_scoring: { ...DEFAULT_EMPLOYMENT_EXPERIENCE_SCORING },
+    training_count_scoring: { ...DEFAULT_TRAINING_COUNT_SCORING },
+    others_scoring: normalizeOthersScoringFromJob(null),
     image: null // Store image path
   })
   const [scoringAccordionKey, setScoringAccordionKey] = useState('personal')
   const [imageFile, setImageFile] = useState(null) // Store selected file
   const [imagePreview, setImagePreview] = useState(null) // Store preview URL
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [othersTagDraft, setOthersTagDraft] = useState({
+    skills: '',
+    preferred_places: '',
+    preferred_monthly_salary: ''
+  })
 
   const licenseOptions = [
     { id: 'psa_birth_certificate', label: 'PSA Birth Certificate', subtitle: 'Philippine Statistics Authority' },
@@ -269,7 +323,11 @@ const JobsManagement = () => {
     { id: 'tin_id', label: 'TIN ID', subtitle: 'Tax Identification Number' },
     { id: 'drivers_license', label: "Driver's License", subtitle: 'Land Transportation Office (LTO)' },
     { id: 'first_aid', label: 'First Aid Certificate', subtitle: 'BLS/CPR Training' },
-    { id: 'security_guard_license', label: 'Security Guard License', subtitle: 'PASCO / PNP Security Agency' }
+    { id: 'security_guard_license', label: 'Security Guard License', subtitle: 'PASCO / PNP Security Agency' },
+    { id: 'security_officers_license', label: 'Security Officers License', subtitle: 'Supervisory / officer level' },
+    { id: 'security_managers_license', label: 'Security Managers License', subtitle: 'Managerial level' },
+    { id: 'bank_and_armor_license', label: 'Bank And Armor License', subtitle: 'Bank / armored transport' },
+    { id: 'protection_agent', label: 'Protection Agent', subtitle: 'Close protection / escort' }
   ]
 
   useEffect(() => {
@@ -470,6 +528,13 @@ const JobsManagement = () => {
         gender_scoring: normalizeGenderScoringFromJob(job.gender_scoring ?? job.genderScoring),
         height_scoring: normalizeHeightScoringFromJob(job.height_scoring ?? job.heightScoring),
         weight_scoring: normalizeWeightScoringFromJob(job.weight_scoring ?? job.weightScoring),
+        employment_experience_scoring: normalizeEmploymentExperienceScoringFromJob(
+          job.employment_experience_scoring ?? job.employmentExperienceScoring
+        ),
+        training_count_scoring: normalizeTrainingCountScoringFromJob(
+          job.training_count_scoring ?? job.trainingCountScoring
+        ),
+        others_scoring: normalizeOthersScoringFromJob(job.others_scoring ?? job.othersScoring),
         image: job.image || null
       })
       
@@ -500,6 +565,9 @@ const JobsManagement = () => {
         gender_scoring: { ...DEFAULT_GENDER_SCORING },
         height_scoring: { ...DEFAULT_HEIGHT_SCORING },
         weight_scoring: { ...DEFAULT_WEIGHT_SCORING },
+        employment_experience_scoring: { ...DEFAULT_EMPLOYMENT_EXPERIENCE_SCORING },
+        training_count_scoring: { ...DEFAULT_TRAINING_COUNT_SCORING },
+        others_scoring: normalizeOthersScoringFromJob(null),
         image: null
       })
       setImagePreview(null)
@@ -530,11 +598,15 @@ const JobsManagement = () => {
       gender_scoring: { ...DEFAULT_GENDER_SCORING },
       height_scoring: { ...DEFAULT_HEIGHT_SCORING },
       weight_scoring: { ...DEFAULT_WEIGHT_SCORING },
+      employment_experience_scoring: { ...DEFAULT_EMPLOYMENT_EXPERIENCE_SCORING },
+      training_count_scoring: { ...DEFAULT_TRAINING_COUNT_SCORING },
+      others_scoring: normalizeOthersScoringFromJob(null),
       image: null
     })
     setScoringAccordionKey('personal')
     setImageFile(null)
     setImagePreview(null)
+    setOthersTagDraft({ skills: '', preferred_places: '', preferred_monthly_salary: '' })
   }
 
   const setAgeScoring = (patch) => {
@@ -565,6 +637,34 @@ const JobsManagement = () => {
     }))
   }
 
+  const setEmploymentExperienceScoring = (patch) => {
+    setFormData((prev) => ({
+      ...prev,
+      employment_experience_scoring: {
+        ...(prev.employment_experience_scoring || DEFAULT_EMPLOYMENT_EXPERIENCE_SCORING),
+        ...patch
+      }
+    }))
+  }
+
+  const setTrainingCountTierPercentage = (tierIndex, value) => {
+    const numValue = parseFloat(value)
+    const safe = Number.isFinite(numValue) ? Math.max(0, Math.min(100, numValue)) : 0
+    setFormData((prev) => {
+      const cur = normalizeTrainingCountScoringFromJob(prev.training_count_scoring)
+      const next = [...(cur.tier_percentages || [])]
+      if (tierIndex < 0 || tierIndex >= TRAINING_COUNT_TIER_ROWS.length) return prev
+      while (next.length < TRAINING_COUNT_TIER_ROWS.length) {
+        next.push(0)
+      }
+      next[tierIndex] = Math.round(safe * 100) / 100
+      return {
+        ...prev,
+        training_count_scoring: { tier_percentages: next }
+      }
+    })
+  }
+
   const handleFormChange = (e) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
@@ -589,26 +689,39 @@ const JobsManagement = () => {
   const setFieldWeight = (categoryKey, fieldId, value) => {
     const numValue = parseFloat(value)
     const safe = Number.isFinite(numValue) ? Math.max(0, Math.min(100, numValue)) : 0
-    setFormData(prev => ({
+    const section = JOB_SCORING_SECTIONS.find((s) => s.key === categoryKey)
+    if (!section) return
+    setFormData((prev) => ({
       ...prev,
-      category_percentages: (Array.isArray(prev.category_percentages) ? prev.category_percentages : []).map(row => {
+      category_percentages: (Array.isArray(prev.category_percentages) ? prev.category_percentages : []).map((row) => {
         if (row.category_key !== categoryKey) return row
-        return {
-          ...row,
-          field_weights: (Array.isArray(row.field_weights) ? row.field_weights : []).map((fw) =>
-            fw.field === fieldId ? { ...fw, percentage: safe } : fw
-          )
-        }
+        const prevMap = new Map(
+          (Array.isArray(row.field_weights) ? row.field_weights : []).map((fw) => [
+            fw.field,
+            parseFloat(fw.percentage) || 0
+          ])
+        )
+        prevMap.set(fieldId, safe)
+        const field_weights = section.fields.map((f) => ({
+          field: f.id,
+          percentage:
+            f.id === fieldId
+              ? safe
+              : Math.max(0, Math.min(100, Number.isFinite(prevMap.get(f.id)) ? prevMap.get(f.id) : 0))
+        }))
+        return { ...row, field_weights }
       })
     }))
   }
 
   const getFieldWeightsTotal = (categoryKey) => {
+    const sec = JOB_SCORING_SECTIONS.find((s) => s.key === categoryKey)
     const row = (Array.isArray(formData.category_percentages) ? formData.category_percentages : []).find(
       (r) => r.category_key === categoryKey
     )
-    if (!row?.field_weights?.length) return 0
-    return row.field_weights.reduce((sum, w) => sum + (parseFloat(w.percentage) || 0), 0)
+    if (!sec || !row?.field_weights?.length) return 0
+    const map = new Map(row.field_weights.map((w) => [w.field, parseFloat(w.percentage) || 0]))
+    return sec.fields.reduce((sum, f) => sum + (map.get(f.id) || 0), 0)
   }
 
   /** % of Personal category for a field — drives conditional age/gender/height/weight "max points". */
@@ -623,6 +736,78 @@ const JobsManagement = () => {
   const halfOfPersonalField = (fieldId) => {
     const v = getPersonalFieldPercent(fieldId)
     return Math.round((v / 2) * 100) / 100
+  }
+
+  const getEmploymentFieldPercent = (fieldId) => {
+    const row = (Array.isArray(formData.category_percentages) ? formData.category_percentages : []).find(
+      (r) => r.category_key === 'employment'
+    )
+    const fw = row?.field_weights?.find((w) => w.field === fieldId)
+    return parseFloat(fw?.percentage) || 0
+  }
+
+  const halfOfEmploymentField = (fieldId) => {
+    const v = getEmploymentFieldPercent(fieldId)
+    return Math.round((v / 2) * 100) / 100
+  }
+
+  const getOthersFieldPercent = (fieldId) => {
+    const row = (Array.isArray(formData.category_percentages) ? formData.category_percentages : []).find(
+      (r) => r.category_key === 'others'
+    )
+    const fw = row?.field_weights?.find((w) => w.field === fieldId)
+    return parseFloat(fw?.percentage) || 0
+  }
+
+  const toggleOthersScoringListValue = (fieldKey, value) => {
+    const v = String(value || '').trim()
+    if (!v) return
+    setFormData((prev) => {
+      const cur = normalizeOthersScoringFromJob(prev.others_scoring)
+      const list = [...cur[fieldKey]]
+      const i = list.indexOf(v)
+      if (i >= 0) list.splice(i, 1)
+      else list.push(v)
+      return { ...prev, others_scoring: { ...cur, [fieldKey]: list } }
+    })
+  }
+
+  const addOthersScoringCustomValue = (fieldKey, raw) => {
+    const v = String(raw || '').trim()
+    if (!v) return
+    setFormData((prev) => {
+      const cur = normalizeOthersScoringFromJob(prev.others_scoring)
+      const set = new Set(cur[fieldKey])
+      set.add(v)
+      return { ...prev, others_scoring: { ...cur, [fieldKey]: [...set] } }
+    })
+    setOthersTagDraft((d) => ({ ...d, [fieldKey]: '' }))
+  }
+
+  const toggleOthersScoringEmploymentType = (id) => {
+    const v = String(id || '').trim()
+    if (!v) return
+    setFormData((prev) => {
+      const cur = normalizeOthersScoringFromJob(prev.others_scoring)
+      const list = [...cur.employment_types]
+      const i = list.indexOf(v)
+      if (i >= 0) list.splice(i, 1)
+      else list.push(v)
+      return { ...prev, others_scoring: { ...cur, employment_types: list } }
+    })
+  }
+
+  const patchOthersCanStartScoring = (patch) => {
+    setFormData((prev) => {
+      const cur = normalizeOthersScoringFromJob(prev.others_scoring)
+      return {
+        ...prev,
+        others_scoring: {
+          ...cur,
+          can_start: { ...cur.can_start, ...patch },
+        },
+      }
+    })
   }
 
   const normalizePostingPriorityToBadge = (priority) => {
@@ -686,8 +871,10 @@ const JobsManagement = () => {
 
       const rows = Array.isArray(formData.category_percentages) ? formData.category_percentages : []
       for (const row of rows) {
-        const fw = row.field_weights || []
-        const subTotal = fw.reduce((s, w) => s + (parseFloat(w.percentage) || 0), 0)
+        const sec = JOB_SCORING_SECTIONS.find((s) => s.key === row.category_key)
+        if (!sec) continue
+        const map = new Map((row.field_weights || []).map((w) => [w.field, parseFloat(w.percentage) || 0]))
+        const subTotal = sec.fields.reduce((s, f) => s + (map.get(f.id) || 0), 0)
         if (Math.round(subTotal * 10) / 10 !== 100) {
           alert(
             `Within "${row.category}", field weights must total 100% of that category (currently ${subTotal.toFixed(1)}%).`
@@ -756,25 +943,44 @@ const JobsManagement = () => {
         weight_scoring: normalizeWeightScoringFromJob({
           ...formData.weight_scoring,
           max_points: getPersonalFieldPercent('weight_kg')
-        })
+        }),
+        employment_experience_scoring: normalizeEmploymentExperienceScoringFromJob({
+          ...formData.employment_experience_scoring,
+          max_points: getEmploymentFieldPercent('total_experience')
+        }),
+        training_count_scoring: normalizeTrainingCountScoringFromJob(formData.training_count_scoring),
+        others_scoring: normalizeOthersScoringFromJob(formData.others_scoring)
       }
 
       const stripUnknownColumnFromError = (errorMessage) => {
-        // Example: "column \"open_until\" of relation \"jobs\" does not exist"
-        const m = /column\s+"([^"]+)"/i.exec(errorMessage || '')
-        return m?.[1] || null
+        const msg = errorMessage || ''
+        // PostgreSQL: column "open_until" of relation "jobs" does not exist
+        const pg = /column\s+"([^"]+)"/i.exec(msg)
+        if (pg) return pg[1]
+        // PostgREST: Could not find the 'age_scoring' column of 'jobs' in the schema cache
+        const rest = /Could not find the '([^']+)' column of 'jobs'/i.exec(msg)
+        if (rest) return rest[1]
+        return null
       }
+
+      const maxSchemaRetries = 24
 
       if (editingJob) {
         // Update existing job (best-effort: retry without unknown columns)
         let payload = { ...submitData }
-        for (let attempt = 0; attempt < 4; attempt++) {
+        let updated = false
+        let lastUpdateError = null
+        for (let attempt = 0; attempt < maxSchemaRetries; attempt++) {
           const { error } = await supabase
             .from('jobs')
             .update(payload)
             .eq('id', editingJob.id)
 
-          if (!error) break
+          if (!error) {
+            updated = true
+            break
+          }
+          lastUpdateError = error
           const msg = error?.message || ''
           const unknownCol = stripUnknownColumnFromError(msg)
           if (!unknownCol || !(unknownCol in payload)) {
@@ -782,21 +988,27 @@ const JobsManagement = () => {
             throw error
           }
           delete payload[unknownCol]
-          if (attempt === 3) {
-            console.error('Update error (after retries):', error)
-            throw error
-          }
+        }
+        if (!updated) {
+          console.error('Update error (after retries):', lastUpdateError)
+          throw lastUpdateError
         }
         alert('Job updated successfully!')
       } else {
         // Create new job (best-effort: retry without unknown columns)
         let payload = { ...submitData }
-        for (let attempt = 0; attempt < 4; attempt++) {
+        let inserted = false
+        let lastInsertError = null
+        for (let attempt = 0; attempt < maxSchemaRetries; attempt++) {
           const { error } = await supabase
             .from('jobs')
             .insert([payload])
 
-          if (!error) break
+          if (!error) {
+            inserted = true
+            break
+          }
+          lastInsertError = error
           const msg = error?.message || ''
           const unknownCol = stripUnknownColumnFromError(msg)
           if (!unknownCol || !(unknownCol in payload)) {
@@ -804,10 +1016,10 @@ const JobsManagement = () => {
             throw error
           }
           delete payload[unknownCol]
-          if (attempt === 3) {
-            console.error('Insert error (after retries):', error)
-            throw error
-          }
+        }
+        if (!inserted) {
+          console.error('Insert error (after retries):', lastInsertError)
+          throw lastInsertError
         }
         alert('Job posted successfully!')
       }
@@ -1356,6 +1568,53 @@ const JobsManagement = () => {
                                     </p>
                                   )}
 
+                                  {sec.key === 'education' && (
+                                    <p className="mb-3 text-[11px] text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                                      Weights are <strong>per attainment level</strong> (same blocks as the resume:
+                                      Elementary, High School, Vocational, College). They must total 100% of this
+                                      category. Higher emphasis on College, for example, means a larger share of the
+                                      education score comes from that level&apos;s completeness.
+                                    </p>
+                                  )}
+
+                                  {sec.key === 'licenses' && (
+                                    <p className="mb-3 text-[11px] text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                                      <strong>Category weight</strong> is this section&apos;s share of the overall 100%.
+                                      Each row is <strong>point assignment</strong> for that license slot on the resume
+                                      (same six types as the profile). Row weights must total <strong>100%</strong> of
+                                      this category.
+                                    </p>
+                                  )}
+
+                                  {sec.key === 'employment' && (
+                                    <p className="mb-3 text-[11px] text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                                      <strong>Total work experience (cumulative)</strong> is the sum of months from all
+                                      employment rows (job-related and non-related). The weight on that row caps
+                                      conditional scoring below; in the chosen bracket = <strong>full</strong>, otherwise{' '}
+                                      <strong>half</strong>.
+                                    </p>
+                                  )}
+
+                                  {sec.key === 'training' && (
+                                    <p className="mb-3 text-[11px] text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                                      The table above splits <strong>Training attended</strong> and <strong>Date</strong>{' '}
+                                      for per-row completeness (must total 100% of this category).{' '}
+                                      <strong>By count</strong> sets point assignment by how many filled training rows
+                                      the applicant has; each tier is a <strong>% of this category</strong> when that count
+                                      applies (0 trainings = 0 from this rubric).
+                                    </p>
+                                  )}
+
+                                  {sec.key === 'others' && (
+                                    <p className="mb-3 text-[11px] text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                                      The table below splits the <strong>Others</strong> category across each field.
+                                      Under <strong>Conditional scoring</strong>, pick preferred answers; applicants earn
+                                      each row&apos;s weight in proportion to matches (empty preference = full credit for
+                                      that row). <strong>Can start:</strong> check ASAP and/or set a target date — match
+                                      if the applicant chose the same.
+                                    </p>
+                                  )}
+
                                   <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
                                     <table className="min-w-[520px] w-full border-collapse text-sm">
                                       <thead>
@@ -1370,7 +1629,9 @@ const JobsManagement = () => {
                                             scope="col"
                                             className="border-b border-gray-200 px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wider text-gray-600 w-[200px]"
                                           >
-                                            Weight (% of this category)
+                                            {sec.key === 'licenses'
+                                              ? 'Point assignment (% of this category)'
+                                              : 'Weight (% of this category)'}
                                           </th>
                                         </tr>
                                       </thead>
@@ -1423,6 +1684,429 @@ const JobsManagement = () => {
                                       </tbody>
                                     </table>
                                   </div>
+
+                                  {sec.key === 'training' && (
+                                    <div className="mt-4 border-t border-gray-200 pt-4">
+                                      <p className="text-xs font-bold uppercase tracking-wider text-gray-700">
+                                        By count
+                                      </p>
+                                      <p className="mt-1 mb-3 text-[11px] text-gray-500">
+                                        Filled row = training attended or date has a value (same rules as the resume).
+                                        Applicant gets the percentage for the tier that matches their count (6+ uses the
+                                        last row).
+                                      </p>
+                                      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                                        <table className="min-w-[480px] w-full border-collapse text-sm">
+                                          <thead>
+                                            <tr className="bg-gray-50 border-b border-gray-200">
+                                              <th
+                                                scope="col"
+                                                className="border-b border-gray-200 px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wider text-gray-600"
+                                              >
+                                                Count
+                                              </th>
+                                              <th
+                                                scope="col"
+                                                className="border-b border-gray-200 px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wider text-gray-600 w-[220px]"
+                                              >
+                                                Point assignment (% of this category)
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {TRAINING_COUNT_TIER_ROWS.map((tier, idx) => {
+                                              const tcp = normalizeTrainingCountScoringFromJob(
+                                                formData.training_count_scoring
+                                              )
+                                              const pct = tcp.tier_percentages[idx] ?? 0
+                                              return (
+                                                <tr key={tier.label} className="bg-white">
+                                                  <td className="border-b border-gray-200 px-3 py-2.5 text-gray-900 font-medium">
+                                                    {tier.label}
+                                                  </td>
+                                                  <td className="border-b border-gray-200 px-3 py-2 align-middle">
+                                                    <div className="flex items-center gap-2">
+                                                      <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        step="0.1"
+                                                        value={pct}
+                                                        onChange={(e) => setTrainingCountTierPercentage(idx, e.target.value)}
+                                                        className="w-full max-w-[120px] rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                                                      />
+                                                      <span className="text-sm text-gray-500 shrink-0">%</span>
+                                                    </div>
+                                                  </td>
+                                                </tr>
+                                              )
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {sec.key === 'employment' && (
+                                    <div className="mt-4 space-y-4 border-t border-gray-200 pt-4">
+                                      <div>
+                                        <p className="text-xs font-bold uppercase tracking-wider text-gray-700">
+                                          Conditional scoring
+                                        </p>
+                                        <p className="mt-1 text-[11px] text-gray-500">
+                                          Total cumulative months of experience; linked to the{' '}
+                                          <strong>Total work experience (cumulative)</strong> row. In bracket = full;
+                                          outside = half.
+                                        </p>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-xs font-semibold text-gray-800 mb-1">
+                                          Total work experience
+                                        </label>
+                                        <p className="text-[11px] text-gray-500 mb-2">
+                                          Cumulative months from all employment rows (open-ended &quot;to&quot; dates
+                                          count through today).
+                                        </p>
+                                        <div className="overflow-x-auto pb-1">
+                                          <div className="inline-flex min-w-full sm:min-w-0 border-2 border-gray-900 rounded-sm bg-white divide-x-2 divide-gray-900 overflow-hidden">
+                                            {WORK_EXPERIENCE_BRACKETS.map((b, idx) => (
+                                              <React.Fragment key={b.id}>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setEmploymentExperienceScoring({ preferred_bracket_id: b.id })}
+                                                  className={`flex-1 min-w-[3.75rem] px-1.5 py-3 text-center text-[10px] sm:text-xs font-bold transition-colors leading-tight ${
+                                                    formData.employment_experience_scoring?.preferred_bracket_id === b.id
+                                                      ? 'bg-amber-50 text-gray-900 ring-2 ring-inset ring-orange-500'
+                                                      : 'bg-white text-gray-900 hover:bg-gray-50'
+                                                  }`}
+                                                >
+                                                  {b.label}
+                                                </button>
+                                                {idx === 1 && (
+                                                  <div
+                                                    className="flex flex-col items-center justify-center bg-orange-500 text-white min-w-[4rem] px-1.5 py-2 shrink-0"
+                                                    title="From Total work experience row in table above"
+                                                  >
+                                                    <span className="text-[8px] font-bold uppercase tracking-tight opacity-90 text-center leading-tight">
+                                                      Total exp.
+                                                    </span>
+                                                    <span className="text-base sm:text-lg font-extrabold leading-tight">
+                                                      {getEmploymentFieldPercent('total_experience').toFixed(1)}
+                                                    </span>
+                                                    <span className="text-[9px] opacity-90">% cat.</span>
+                                                  </div>
+                                                )}
+                                              </React.Fragment>
+                                            ))}
+                                          </div>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+                                          <span>
+                                            Bracket:{' '}
+                                            <strong className="text-gray-900">
+                                              {WORK_EXPERIENCE_BRACKETS.find(
+                                                (x) => x.id === formData.employment_experience_scoring?.preferred_bracket_id
+                                              )?.label ?? '—'}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            Full:{' '}
+                                            <strong className="text-orange-600">
+                                              {getEmploymentFieldPercent('total_experience').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                          <span className="text-gray-400 hidden sm:inline">|</span>
+                                          <span>
+                                            Outside:{' '}
+                                            <strong className="text-gray-900">
+                                              {halfOfEmploymentField('total_experience').toFixed(1)}
+                                            </strong>
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {sec.key === 'others' &&
+                                    (() => {
+                                      const osc = normalizeOthersScoringFromJob(formData.others_scoring)
+                                      const weightBadge = (fieldId, shortLabel) => (
+                                        <div
+                                          className="flex flex-col items-center justify-center bg-orange-500 text-white min-w-[4.25rem] px-2 py-2 shrink-0 rounded-md"
+                                          title={`From ${shortLabel} row in table above`}
+                                        >
+                                          <span className="text-[8px] font-bold uppercase tracking-tight opacity-90 text-center leading-tight">
+                                            {shortLabel}
+                                          </span>
+                                          <span className="text-base font-extrabold leading-tight">
+                                            {getOthersFieldPercent(fieldId).toFixed(1)}
+                                          </span>
+                                          <span className="text-[9px] opacity-90">% cat.</span>
+                                        </div>
+                                      )
+                                      return (
+                                        <div className="mt-4 space-y-4 border-t border-gray-200 pt-4">
+                                          <div>
+                                            <p className="text-xs font-bold uppercase tracking-wider text-gray-700">
+                                              Conditional scoring
+                                            </p>
+                                            <p className="mt-1 text-[11px] text-gray-500">
+                                              Same options as the applicant resume. Selected tags are what you want for
+                                              this job; scoring uses overlap with the applicant&apos;s selections.
+                                            </p>
+                                          </div>
+
+                                          <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-gray-800">
+                                                  Skills needed
+                                                </p>
+                                                <p className="mt-0.5 text-[11px] text-gray-500">
+                                                  Points scale with how many of your picks match the applicant.
+                                                </p>
+                                              </div>
+                                              {weightBadge('skills', 'Skills')}
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                              {OTHERS_SKILL_OPTIONS.map((opt) => {
+                                                const on = osc.skills.includes(opt)
+                                                return (
+                                                  <button
+                                                    key={opt}
+                                                    type="button"
+                                                    onClick={() => toggleOthersScoringListValue('skills', opt)}
+                                                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                                                      on
+                                                        ? 'border-orange-500 bg-amber-50 text-gray-900'
+                                                        : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'
+                                                    }`}
+                                                  >
+                                                    {on ? '✓ ' : '+ '}
+                                                    {opt}
+                                                  </button>
+                                                )
+                                              })}
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <input
+                                                type="text"
+                                                value={othersTagDraft.skills}
+                                                onChange={(e) =>
+                                                  setOthersTagDraft((d) => ({ ...d, skills: e.target.value }))
+                                                }
+                                                placeholder="Add custom skill"
+                                                className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={() => addOthersScoringCustomValue('skills', othersTagDraft.skills)}
+                                                className="rounded-md bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-900 hover:bg-sky-200"
+                                              >
+                                                Add skill
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-gray-800">
+                                                  Preferred places
+                                                </p>
+                                                <p className="mt-0.5 text-[11px] text-gray-500">
+                                                  City / area preferences you want weighted.
+                                                </p>
+                                              </div>
+                                              {weightBadge('preferred_places', 'Places')}
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                              {OTHERS_PLACE_OPTIONS.map((opt) => {
+                                                const on = osc.preferred_places.includes(opt)
+                                                return (
+                                                  <button
+                                                    key={opt}
+                                                    type="button"
+                                                    onClick={() => toggleOthersScoringListValue('preferred_places', opt)}
+                                                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                                                      on
+                                                        ? 'border-orange-500 bg-amber-50 text-gray-900'
+                                                        : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'
+                                                    }`}
+                                                  >
+                                                    {on ? '✓ ' : '+ '}
+                                                    {opt}
+                                                  </button>
+                                                )
+                                              })}
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <input
+                                                type="text"
+                                                value={othersTagDraft.preferred_places}
+                                                onChange={(e) =>
+                                                  setOthersTagDraft((d) => ({
+                                                    ...d,
+                                                    preferred_places: e.target.value,
+                                                  }))
+                                                }
+                                                placeholder="Add custom place"
+                                                className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  addOthersScoringCustomValue(
+                                                    'preferred_places',
+                                                    othersTagDraft.preferred_places
+                                                  )
+                                                }
+                                                className="rounded-md bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-900 hover:bg-sky-200"
+                                              >
+                                                Add place
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-gray-800">
+                                                  Preferred monthly salary
+                                                </p>
+                                                <p className="mt-0.5 text-[11px] text-gray-500">
+                                                  Salary bands you prefer (same labels as the resume).
+                                                </p>
+                                              </div>
+                                              {weightBadge('preferred_monthly_salary', 'Salary')}
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                              {OTHERS_SALARY_OPTIONS.map((opt) => {
+                                                const on = osc.preferred_monthly_salary.includes(opt)
+                                                return (
+                                                  <button
+                                                    key={opt}
+                                                    type="button"
+                                                    onClick={() =>
+                                                      toggleOthersScoringListValue('preferred_monthly_salary', opt)
+                                                    }
+                                                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                                                      on
+                                                        ? 'border-orange-500 bg-amber-50 text-gray-900'
+                                                        : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'
+                                                    }`}
+                                                  >
+                                                    {on ? '✓ ' : '+ '}
+                                                    {opt}
+                                                  </button>
+                                                )
+                                              })}
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <input
+                                                type="text"
+                                                value={othersTagDraft.preferred_monthly_salary}
+                                                onChange={(e) =>
+                                                  setOthersTagDraft((d) => ({
+                                                    ...d,
+                                                    preferred_monthly_salary: e.target.value,
+                                                  }))
+                                                }
+                                                placeholder="Add custom range label"
+                                                className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  addOthersScoringCustomValue(
+                                                    'preferred_monthly_salary',
+                                                    othersTagDraft.preferred_monthly_salary
+                                                  )
+                                                }
+                                                className="rounded-md bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-900 hover:bg-sky-200"
+                                              >
+                                                Add range
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-gray-800">
+                                                  Can start
+                                                </p>
+                                                <p className="mt-0.5 text-[11px] text-gray-500">
+                                                  Applicant must match ASAP and/or the exact date you set (when not
+                                                  ASAP).
+                                                </p>
+                                              </div>
+                                              {weightBadge('can_start', 'Start')}
+                                            </div>
+                                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-800 cursor-pointer">
+                                              <input
+                                                type="checkbox"
+                                                checked={osc.can_start.want_asap}
+                                                onChange={(e) =>
+                                                  patchOthersCanStartScoring({ want_asap: e.target.checked })
+                                                }
+                                                className="rounded border-gray-300 text-navy focus:ring-navy"
+                                              />
+                                              Prefer ASAP
+                                            </label>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <span className="text-xs text-gray-600">Target date</span>
+                                              <input
+                                                type="date"
+                                                value={osc.can_start.want_date}
+                                                onChange={(e) =>
+                                                  patchOthersCanStartScoring({ want_date: e.target.value })
+                                                }
+                                                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                                              />
+                                            </div>
+                                          </div>
+
+                                          <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-gray-800">
+                                                  Employment type
+                                                </p>
+                                                <p className="mt-0.5 text-[11px] text-gray-500">
+                                                  Types you want for this posting (multi-select).
+                                                </p>
+                                              </div>
+                                              {weightBadge('employment_types', 'Emp. type')}
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                              {OTHERS_EMPLOYMENT_TYPE_OPTIONS.map((opt) => {
+                                                const on = osc.employment_types.includes(opt.id)
+                                                return (
+                                                  <button
+                                                    key={opt.id}
+                                                    type="button"
+                                                    onClick={() => toggleOthersScoringEmploymentType(opt.id)}
+                                                    className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm font-bold transition-colors ${
+                                                      on
+                                                        ? 'border-orange-500 bg-amber-50 text-gray-900'
+                                                        : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'
+                                                    }`}
+                                                  >
+                                                    <span>{opt.label}</span>
+                                                    <span className="material-symbols-outlined text-[18px]">
+                                                      {on ? 'check_circle' : 'add_circle'}
+                                                    </span>
+                                                  </button>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )
+                                    })()}
 
                                   {sec.key === 'personal' && (
                                     <div className="mt-4 space-y-6 border-t border-gray-200 pt-4">
