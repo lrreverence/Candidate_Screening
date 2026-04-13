@@ -172,7 +172,10 @@ export async function loadAdminApplicationResumeBundle(supabase, applicationId) 
       .eq('applicant_id', aid)
       .order('level', { ascending: true })
       .order('sort_order', { ascending: true }),
-    supabase.from('applicant_licenses').select('category,date_issued,date_expiry,attachment').eq('applicant_id', aid),
+    supabase
+      .from('applicant_licenses')
+      .select('category,license_number,date_issued,date_expiry,attachment')
+      .eq('applicant_id', aid),
     supabase.from('applicant_trainings').select('training_attended,date').eq('applicant_id', aid),
     supabase.from('employment_records').select('category,position,agency,place,from_date,to_date').eq('applicant_id', aid),
     supabase

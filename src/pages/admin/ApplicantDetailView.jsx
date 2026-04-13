@@ -527,12 +527,15 @@ const ApplicantDetailView = () => {
           return (
             <ul className="space-y-2 text-xs">
               {rows.map((r, i) => (
-                <li key={i} className="rounded border border-[#232f48] p-2">
-                  <span className="font-medium text-white">{r.category || '—'}</span>
-                  <span className="text-[#92a4c9]">
-                    {' '}
-                    — issued {r.date_issued || '—'}, exp {r.date_expiry || '—'}
-                  </span>
+                <li key={i} className="space-y-1 rounded border border-[#232f48] p-3">
+                  <div className="font-medium text-white">{r.category || '—'}</div>
+                  <div>
+                    <span className="text-[#92a4c9]">License number</span>{' '}
+                    <span className="text-[#cbd5e1]">{String(r.license_number || '').trim() || '—'}</span>
+                  </div>
+                  <div className="text-[#92a4c9]">
+                    Issued {r.date_issued || '—'} · Exp {r.date_expiry || '—'}
+                  </div>
                 </li>
               ))}
             </ul>

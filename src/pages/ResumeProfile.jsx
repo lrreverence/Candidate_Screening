@@ -130,6 +130,7 @@ const LICENSE_TYPES = [
 ]
 
 const makeEmptyLicenseSlotRow = () => ({
+  license_number: '',
   date_issued: '',
   date_expiry: '',
   attachment: null, // { file_name, file_path, mime_type, file_size }
@@ -177,6 +178,7 @@ const normalizeLicensesMapFromInput = (licensesInput) => {
       const v = licensesInput[t.key]
       if (v && typeof v === 'object') {
         base[t.key] = {
+          license_number: v?.license_number || '',
           date_issued: v?.date_issued || '',
           date_expiry: v?.date_expiry || '',
           attachment: v?.attachment && typeof v.attachment === 'object' ? v.attachment : null,
@@ -191,12 +193,14 @@ const normalizeLicensesMapFromInput = (licensesInput) => {
   const scoreSlot = (row) =>
     (row?.attachment ? 4 : 0) +
     (String(row?.date_expiry || '').trim() ? 2 : 0) +
-    (String(row?.date_issued || '').trim() ? 1 : 0)
+    (String(row?.date_issued || '').trim() ? 1 : 0) +
+    (String(row?.license_number || '').trim() ? 0.5 : 0)
 
   for (const row of licensesInput) {
     const key = categoryStringToLicenseKey(row?.category)
     if (!key || !base[key]) continue
     const slot = {
+      license_number: row?.license_number || '',
       date_issued: row?.date_issued || '',
       date_expiry: row?.date_expiry || '',
       attachment: row?.attachment && typeof row.attachment === 'object' ? row.attachment : null,
@@ -618,7 +622,7 @@ const ResumeProfile = () => {
         const [{ data: licRows, error: licErr }, { data: trRows, error: trErr }] = await Promise.all([
           supabase
             .from('applicant_licenses')
-            .select('category,date_issued,date_expiry,attachment,created_at')
+            .select('category,license_number,date_issued,date_expiry,attachment,created_at')
             .eq('applicant_id', applicant.id)
             .order('created_at', { ascending: true }),
           supabase
@@ -637,6 +641,7 @@ const ResumeProfile = () => {
           const key = categoryStringToLicenseKey(r?.category)
           if (!key) continue
           const slot = {
+            license_number: r?.license_number || '',
             date_issued: r?.date_issued || '',
             date_expiry: r?.date_expiry || '',
             attachment: r?.attachment && typeof r.attachment === 'object' ? r.attachment : null,
@@ -644,7 +649,8 @@ const ResumeProfile = () => {
           const scoreSlot = (row) =>
             (row?.attachment ? 4 : 0) +
             (String(row?.date_expiry || '').trim() ? 2 : 0) +
-            (String(row?.date_issued || '').trim() ? 1 : 0)
+            (String(row?.date_issued || '').trim() ? 1 : 0) +
+            (String(row?.license_number || '').trim() ? 0.5 : 0)
           if (scoreSlot(slot) > scoreSlot(licMap[key])) licMap[key] = slot
         }
 
@@ -1033,10 +1039,11 @@ const ResumeProfile = () => {
       const licMap = normalizeLicensesMapFromInput(credentials.licenses)
       const licensesToSave = LICENSE_TYPES.map((t) => {
         const r = licMap[t.key] || makeEmptyLicenseSlotRow()
-        const hasAny = r?.date_issued || r?.date_expiry || r?.attachment
+        const hasAny = r?.license_number || r?.date_issued || r?.date_expiry || r?.attachment
         if (!hasAny) return null
         return {
           category: t.label,
+          license_number: String(r?.license_number || '').trim() || null,
           date_issued: r?.date_issued || null,
           date_expiry: r?.date_expiry || null,
           attachment: r?.attachment && typeof r.attachment === 'object' ? r.attachment : null,
@@ -1292,10 +1299,10 @@ const ResumeProfile = () => {
       const licMap = normalizeLicensesMapFromInput(credentials.licenses)
       return (
         <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#0f172a]">
-          <table className="min-w-[640px] w-full text-sm">
+          <table className="min-w-[800px] w-full text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-[#0b1220] border-b border-gray-200 dark:border-white/10">
-                {['Category', 'Date issued', 'Date expiry', 'Remaining days', 'Status', 'Attachment'].map((h) => (
+                {['Category', 'License number', 'Date issued', 'Date expiry', 'Remaining days', 'Status', 'Attachment'].map((h) => (
                   <th
                     key={h}
                     className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80"
@@ -1320,6 +1327,9 @@ const ResumeProfile = () => {
                 return (
                   <tr key={t.key}>
                     <td className="px-3 py-2 font-extrabold text-slate-900 dark:text-white whitespace-nowrap">{t.label}</td>
+                    <td className="px-3 py-2">
+                      <Ro>{row.license_number}</Ro>
+                    </td>
                     <td className="px-3 py-2">
                       <Ro>{formatDate(row.date_issued)}</Ro>
                     </td>
@@ -2099,14 +2109,14 @@ const ResumeProfile = () => {
                         ) : s.key === 'licenses' ? (
                           <div className="space-y-4">
                             <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#0f172a]">
-                              <table className="min-w-[980px] w-full text-sm">
+                              <table className="min-w-[1120px] w-full text-sm">
                                 <thead>
                                   <tr className="bg-gray-50 dark:bg-[#0b1220] border-b border-gray-200 dark:border-white/10">
-                                    {['Category', 'Date issued', 'Date expiry', 'Remaining days', 'Status', 'Upload', ''].map((h, idx) => (
+                                    {['Category', 'License number', 'Date issued', 'Date expiry', 'Remaining days', 'Status', 'Upload', ''].map((h, idx) => (
                                       <th
                                         key={h + idx}
                                         className={`px-3 py-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80 ${
-                                          idx === 6 ? 'text-right w-[140px]' : 'text-left'
+                                          idx === 7 ? 'text-right w-[140px]' : 'text-left'
                                         }`}
                                       >
                                         {h}
@@ -2134,6 +2144,15 @@ const ResumeProfile = () => {
                                       <tr key={t.key} className="align-top">
                                         <td className="px-3 py-3 font-extrabold text-slate-900 dark:text-white whitespace-nowrap">
                                           {t.label}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          <input
+                                            type="text"
+                                            value={row.license_number || ''}
+                                            onChange={(e) => setLicenseSlotField(t.key, 'license_number', e.target.value)}
+                                            placeholder="License no."
+                                            className="w-full min-w-[140px] max-w-[220px] rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-[#93c5fd]/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                          />
                                         </td>
                                         <td className="px-3 py-2">
                                           <input
