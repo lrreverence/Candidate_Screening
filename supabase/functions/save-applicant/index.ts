@@ -292,7 +292,7 @@ Deno.serve(async (req: Request) => {
             .from('applications')
             .update({
               current_step: 2,
-              status: 'Pending'
+              status: 'PENDING'
             })
             .eq('id', existingApp.id);
         } else {
@@ -302,7 +302,7 @@ Deno.serve(async (req: Request) => {
             .insert({
               job_id: actualJobId,
               applicant_id: applicantId,
-              status: 'Pending',
+              status: 'PENDING',
               current_step: 2
             });
         }
@@ -321,7 +321,7 @@ Deno.serve(async (req: Request) => {
             .from('applications')
             .update({
               current_step: 2,
-              status: 'Pending'
+              status: 'PENDING'
             })
             .eq('id', existingApp.id);
         } else {
@@ -330,7 +330,7 @@ Deno.serve(async (req: Request) => {
             .insert({
               job_id: null,
               applicant_id: applicantId,
-              status: 'Pending',
+              status: 'PENDING',
               current_step: 2
             });
         }

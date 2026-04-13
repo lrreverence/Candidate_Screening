@@ -1195,7 +1195,7 @@ const ResumeProfile = () => {
             .from('applications')
             .update({
               current_step: 5,
-              status: 'Pending',
+              status: 'PENDING',
               updated_at: new Date().toISOString(),
             })
             .eq('id', existingApp.id)
@@ -1204,7 +1204,7 @@ const ResumeProfile = () => {
           const { error: insErr } = await supabase.from('applications').insert({
             job_id: applyJobId,
             applicant_id: applicant.id,
-            status: 'Pending',
+            status: 'PENDING',
             current_step: 5,
           })
           if (insErr) throw insErr

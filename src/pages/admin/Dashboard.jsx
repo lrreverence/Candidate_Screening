@@ -3,13 +3,17 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import AdminNotificationBell from '../../components/admin/AdminNotificationBell'
 import AdminHelpButton from '../../components/admin/AdminHelpButton'
+import { normalizeApplicationStatus, applicationStatusBadge } from '../../lib/applicationStatus'
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
     totalApplicants: 0,
+    newApplicants: 0,
     pendingReview: 0,
     totalForInterview: 0,
-    licenseExpiring: 0,
+    licenseValid: 0,
+    licenseSoonToExpire: 0,
+    licenseExpired: 0,
     activeJobs: 0,
     totalApplications: 0
   })
@@ -38,13 +42,24 @@ const Dashboard = () => {
 
       if (appStatusError) throw appStatusError
 
-      const newApplicants = appStatuses?.filter(app => (app.status || '').toLowerCase() === 'new').length || 0
-      const pendingReview = appStatuses?.filter(app => ['Pending', 'pending', 'submitted'].includes(app?.status)).length || 0
-      const totalForInterview = appStatuses?.filter(app => (app.status || '').toLowerCase() === 'interview').length || 0
+      const newApplicants =
+        appStatuses?.filter((app) => normalizeApplicationStatus(app?.status) === 'NEW').length || 0
+      const pendingReview =
+        appStatuses?.filter((app) => normalizeApplicationStatus(app?.status) === 'PENDING').length || 0
+      const totalForInterview =
+        appStatuses?.filter((app) => normalizeApplicationStatus(app?.status) === 'INTERVIEW').length || 0
 
-      const licenseExpiring = applicants?.filter(app =>
-        app.license_status === 'expired' || app.license_status === 'expiring'
-      ).length || 0
+      const normLicense = (s) => (s || '').toLowerCase().trim()
+      let licenseValid = 0
+      let licenseSoonToExpire = 0
+      let licenseExpired = 0
+      for (const app of applicants || []) {
+        const ls = normLicense(app.license_status)
+        if (ls === 'valid') licenseValid += 1
+        else if (ls === 'expired') licenseExpired += 1
+        else if (ls === 'expiring' || ls === 'soon' || ls === 'soon_to_expire' || ls === 'soon to expire')
+          licenseSoonToExpire += 1
+      }
 
       // Fetch active jobs count (all jobs are considered active since there's no status column)
       const { count: activeJobs, error: jobsError } = await supabase
@@ -84,7 +99,9 @@ const Dashboard = () => {
         newApplicants,
         pendingReview,
         totalForInterview,
-        licenseExpiring,
+        licenseValid,
+        licenseSoonToExpire,
+        licenseExpired,
         activeJobs: activeJobs || 0,
         totalApplications: totalApplications || 0
       })
@@ -97,16 +114,7 @@ const Dashboard = () => {
   }
 
   const getStatusBadge = (status) => {
-    const key = status?.toLowerCase() === 'hired' ? 'interview' : status?.toLowerCase()
-    const statusMap = {
-      'new': { bg: 'bg-blue-50', text: 'text-blue-700', label: 'New' },
-      'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
-      'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
-      'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
-      'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' }
-    }
-
-    const config = statusMap[key] || statusMap['pending']
+    const config = applicationStatusBadge(status)
     return (
       <span className={`inline-flex items-center rounded-md ${config.bg} px-2.5 py-1 text-xs font-semibold ${config.text}`}>
         {config.label}
@@ -202,23 +210,6 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {stats.licenseExpiring > 0 && (
-                <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">License Expiring</p>
-                      <p className="mt-2 text-3xl font-bold text-navy">{stats.licenseExpiring}</p>
-                    </div>
-                    <div className="rounded-md bg-red-50 p-3 text-red-600">
-                      <span className="material-symbols-outlined text-2xl">warning</span>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-center text-xs text-red-600">
-                    <span className="font-medium">Expiring within 30 days</span>
-                  </div>
-                </div>
-              )}
-
               <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="flex items-start justify-between">
                   <div>
@@ -252,6 +243,37 @@ const Dashboard = () => {
                 </div>
                 <div className="mt-4 flex items-center text-xs text-gray-500">
                   <span className="font-medium">All time applications</span>
+                </div>
+              </div>
+            </div>
+
+            {/* License status (valid / soon to expire / expired) */}
+            <div className="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-lg font-bold text-navy">License status</h3>
+                <Link
+                  to="/admin/applicants"
+                  className="text-sm text-primary hover:text-navy font-medium flex items-center gap-1 w-fit"
+                >
+                  View applicants
+                  <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                </Link>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-800">Valid</p>
+                  <p className="mt-2 text-3xl font-bold text-navy">{stats.licenseValid}</p>
+                  <p className="mt-1 text-xs text-blue-700/80">License in good standing</p>
+                </div>
+                <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">Soon to expire</p>
+                  <p className="mt-2 text-3xl font-bold text-navy">{stats.licenseSoonToExpire}</p>
+                  <p className="mt-1 text-xs text-amber-800/90">Expiring within policy window</p>
+                </div>
+                <div className="rounded-lg border border-red-100 bg-red-50/60 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-red-800">Expired</p>
+                  <p className="mt-2 text-3xl font-bold text-navy">{stats.licenseExpired}</p>
+                  <p className="mt-1 text-xs text-red-700/85">Past expiry date</p>
                 </div>
               </div>
             </div>

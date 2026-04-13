@@ -16,7 +16,7 @@ export default function JobRequirementMatchPill({ percent, compact = false, clas
 
   const tier = percent >= 75 ? 'high' : percent >= 50 ? 'mid' : 'low'
   const title =
-    'Estimated match between your uploaded documents and listed credentials vs. this job’s requirements. This is not a hiring guarantee or probability.'
+    'Estimated job match from your uploaded documents and listed credentials vs. this job’s scored criteria. This is not a hiring guarantee or probability.'
 
   return (
     <div
@@ -24,7 +24,7 @@ export default function JobRequirementMatchPill({ percent, compact = false, clas
       title={title}
     >
       <span className="material-symbols-outlined text-[15px] leading-none">bar_chart</span>
-      {!compact && <span className="leading-none">Profile match</span>}
+      {!compact && <span className="leading-none">Job match</span>}
       <span className="tabular-nums leading-none">{percent}%</span>
     </div>
   )

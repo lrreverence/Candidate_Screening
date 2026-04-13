@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { statusFilterValues } from '../lib/applicationStatus'
 
 const AdminNotificationContext = createContext(null)
 
@@ -12,7 +13,7 @@ export function AdminNotificationProvider({ children }) {
       const { count, error } = await supabase
         .from('applications')
         .select('*', { count: 'exact', head: true })
-        .in('status', ['NEW', 'new'])
+        .in('status', statusFilterValues('NEW'))
 
       if (error) throw error
       setNewApplicationsCount(count ?? 0)

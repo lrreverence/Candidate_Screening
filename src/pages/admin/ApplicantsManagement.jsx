@@ -3,6 +3,30 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import AdminNotificationBell from '../../components/admin/AdminNotificationBell'
 import AdminHelpButton from '../../components/admin/AdminHelpButton'
+import JobMatchBreakdownModal from '../../components/admin/JobMatchBreakdownModal'
+import { computeRequirementMatchPercent, collectApplicantCredentialIds } from '../../lib/jobMatchScore'
+import {
+  applicationStatusBadge,
+  isApplicationStatusNew,
+  normalizeApplicationStatus,
+  statusFilterValues
+} from '../../lib/applicationStatus'
+
+/** 0–100 match of applicant credentials/documents to the job, or null when the job defines nothing to score. */
+function getApplicationJobMatchPercent(app) {
+  const applicant = app?.applicants
+  const jobData = app?.jobs
+  if (!applicant) return null
+  const allDocs = applicant?.documents || []
+  const documents = allDocs.filter(
+    (d) => d.application_id === app.id || d.application_id == null
+  )
+  const applicantLicenseIds = collectApplicantCredentialIds(
+    applicant?.licenses,
+    applicant?.applicant_licenses
+  )
+  return computeRequirementMatchPercent(jobData, { documents, applicantLicenseIds })
+}
 
 const ApplicantsManagement = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -11,11 +35,13 @@ const ApplicantsManagement = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState({
     applicationStatus: '',
+    matchFilter: '',
     appliedDateFrom: '',
     appliedDateTo: ''
   })
   const [sortBy, setSortBy] = useState('applied_date')
   const [sortDirection, setSortDirection] = useState('desc')
+  const [breakdownApplicationId, setBreakdownApplicationId] = useState(null)
 
   // Statistics
   const [stats, setStats] = useState({
@@ -32,11 +58,11 @@ const ApplicantsManagement = () => {
 
   // Allow deep-linking into a queue (e.g. from notifications)
   useEffect(() => {
-    const status = (searchParams.get('status') || '').trim()
-    if (!status) return
-    setFilters(prev => ({
+    const raw = (searchParams.get('status') || '').trim()
+    if (!raw) return
+    setFilters((prev) => ({
       ...prev,
-      applicationStatus: status
+      applicationStatus: normalizeApplicationStatus(raw)
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -55,12 +81,10 @@ const ApplicantsManagement = () => {
         .select('status')
       if (appsError) throw appsError
 
-      const newCount = applications?.filter(
-        app => (app?.status || '').toLowerCase() === 'new'
-      ).length || 0
-      const pending = applications?.filter(
-        app => ['Pending', 'pending', 'submitted'].includes(app?.status)
-      ).length || 0
+      const newCount =
+        applications?.filter((app) => normalizeApplicationStatus(app?.status) === 'NEW').length || 0
+      const pending =
+        applications?.filter((app) => normalizeApplicationStatus(app?.status) === 'PENDING').length || 0
 
       // Expiring licenses from applicants
       const { data: applicants, error: expError } = await supabase
@@ -110,16 +134,8 @@ const ApplicantsManagement = () => {
         `)
         .order('created_at', { ascending: false })
 
-      // Apply filters — DB may include legacy 'Hired'; admin UI does not expose it as a filter value
       if (filters.applicationStatus) {
-        if (filters.applicationStatus.toUpperCase() === 'NEW') {
-          query = query.in('status', ['NEW', 'new'])
-        } else if (filters.applicationStatus === 'Pending') {
-          query = query.in('status', ['Pending', 'pending', 'submitted'])
-        } else {
-          const s = filters.applicationStatus
-          query = query.in('status', [s, s.toLowerCase()])
-        }
+        query = query.in('status', statusFilterValues(filters.applicationStatus))
       }
 
       const { data, error } = await query
@@ -157,6 +173,26 @@ const ApplicantsManagement = () => {
         })
       }
 
+      if (filters.matchFilter) {
+        filtered = filtered.filter((app) => {
+          const p = getApplicationJobMatchPercent(app)
+          switch (filters.matchFilter) {
+            case 'no_requirements':
+              return p === null
+            case 'high':
+              return typeof p === 'number' && p >= 75
+            case 'medium':
+              return typeof p === 'number' && p >= 50 && p < 75
+            case 'low':
+              return typeof p === 'number' && p >= 1 && p < 50
+            case 'zero':
+              return p === 0
+            default:
+              return true
+          }
+        })
+      }
+
       setApplications(filtered)
     } catch (error) {
       console.error('Error fetching applications:', error)
@@ -173,6 +209,7 @@ const ApplicantsManagement = () => {
   const handleResetFilters = () => {
     setFilters({
       applicationStatus: '',
+      matchFilter: '',
       appliedDateFrom: '',
       appliedDateTo: ''
     })
@@ -181,12 +218,12 @@ const ApplicantsManagement = () => {
   }
 
   const handleMoveToPendingReview = async (app) => {
-    if (!confirm('Move this application from NEW to Pending Review?')) return
+    if (!confirm('Move this application from NEW to PENDING (under review)?')) return
     try {
       const { error } = await supabase
         .from('applications')
         .update({
-          status: 'submitted',
+          status: 'PENDING',
           updated_at: new Date().toISOString()
         })
         .eq('id', app.id)
@@ -205,7 +242,8 @@ const ApplicantsManagement = () => {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
     } else {
       setSortBy(column)
-      setSortDirection(column === 'applied_date' ? 'desc' : 'asc')
+      const defaultDesc = column === 'applied_date' || column === 'job_match'
+      setSortDirection(defaultDesc ? 'desc' : 'asc')
     }
   }
 
@@ -245,56 +283,6 @@ const ApplicantsManagement = () => {
     }
   }
 
-  // Compliance %: job required_documents + required_credentials vs applicant documents + licenses (must be above applicationsByJob useMemo)
-  const getCompliancePercentage = (app) => {
-    const applicant = app.applicants
-    const jobData = app.jobs
-    if (!applicant) return null
-    const allDocs = applicant?.documents || []
-    const documents = allDocs.filter(
-      (d) => d.application_id === app.id || d.application_id == null
-    )
-    const applicantLicenses = Array.isArray(applicant?.licenses) ? applicant.licenses : []
-    const requiredDocuments = Array.isArray(jobData?.required_documents) ? jobData.required_documents : []
-    const requiredCredentials = Array.isArray(jobData?.required_credentials) ? jobData.required_credentials : []
-
-    if (requiredDocuments.length === 0 && requiredCredentials.length === 0) return null
-
-    let documentScore = 0
-    let documentTotal = 0
-    let credentialScore = 0
-    let credentialTotal = 0
-
-    if (requiredDocuments.length > 0) {
-      requiredDocuments.forEach((reqDoc) => {
-        const percentage = parseFloat(reqDoc.percentage) || 0
-        documentTotal += percentage
-        if (documents.some((doc) => doc.file_type === reqDoc.document_type)) {
-          documentScore += percentage
-        }
-      })
-    }
-    if (requiredCredentials.length > 0) {
-      credentialTotal = requiredCredentials.length
-      credentialScore = requiredCredentials.filter((cred) => applicantLicenses.includes(cred)).length
-    }
-
-    let matchPercentage = 0
-    if (documentTotal > 0 && credentialTotal > 0) {
-      const documentMatch = (documentScore / documentTotal) * 100
-      const credentialMatch = (credentialScore / credentialTotal) * 100
-      const documentWeight = Math.min(documentTotal / 100, 1)
-      const credentialWeight = Math.max(0, 1 - documentWeight)
-      matchPercentage = documentMatch * documentWeight + credentialMatch * credentialWeight
-    } else if (documentTotal > 0) {
-      matchPercentage = (documentScore / documentTotal) * 100
-    } else if (credentialTotal > 0) {
-      matchPercentage = (credentialScore / credentialTotal) * 100
-    }
-
-    return Math.round(Math.min(100, Math.max(0, matchPercentage)))
-  }
-
   // Group by job first (stable job order), then sort only within each job
   const applicationsByJob = useMemo(() => {
     const sortCompare = (a, b) => {
@@ -304,9 +292,9 @@ const ApplicantsManagement = () => {
         const diff = sortDirection === 'asc' ? dateA - dateB : dateB - dateA
         return Number.isFinite(diff) ? diff : 0
       }
-      if (sortBy === 'requirements') {
-        const rawA = getCompliancePercentage(a)
-        const rawB = getCompliancePercentage(b)
+      if (sortBy === 'job_match') {
+        const rawA = getApplicationJobMatchPercent(a)
+        const rawB = getApplicationJobMatchPercent(b)
         const aVal = typeof rawA === 'number' && Number.isFinite(rawA) ? rawA : -1
         const bVal = typeof rawB === 'number' && Number.isFinite(rawB) ? rawB : -1
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal
@@ -330,16 +318,7 @@ const ApplicantsManagement = () => {
   }, [applications, sortBy, sortDirection])
 
   const getStatusBadge = (status) => {
-    const key = status?.toLowerCase() === 'hired' ? 'interview' : status?.toLowerCase()
-    const statusMap = {
-      'new': { bg: 'bg-blue-50', text: 'text-blue-700', label: 'New' },
-      'pending': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
-      'submitted': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
-      'interview': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Interview' },
-      'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' }
-    }
-
-    const config = statusMap[key] || statusMap['pending']
+    const config = applicationStatusBadge(status)
     return (
       <span className={`inline-flex items-center rounded-md ${config.bg} px-2.5 py-1 text-xs font-semibold ${config.text}`}>
         {config.label}
@@ -482,7 +461,7 @@ const ApplicantsManagement = () => {
         <div className="flex flex-col gap-6 rounded-lg border border-gray-200 bg-white shadow-sm">
           {/* Advanced Filter Toolbar */}
           <div className="flex flex-col gap-4 border-b border-gray-200 p-4 lg:p-6 lg:flex-row lg:items-end">
-            <div className="flex-1 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="flex-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Application Status</span>
                 <div className="relative">
@@ -492,10 +471,29 @@ const ApplicantsManagement = () => {
                     onChange={(e) => handleFilterChange('applicationStatus', e.target.value)}
                   >
                     <option value="">Any Status</option>
-                    <option value="NEW">New Applicants</option>
-                    <option value="Pending">Pending Review</option>
-                    <option value="Interview">Interview Scheduled</option>
-                    <option value="Rejected">Rejected</option>
+                    <option value="NEW">NEW</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="INTERVIEW">INTERVIEW</option>
+                    <option value="HIRED">HIRED</option>
+                    <option value="REJECTED">REJECTED</option>
+                  </select>
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
+                </div>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Job match %</span>
+                <div className="relative">
+                  <select
+                    className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                    value={filters.matchFilter}
+                    onChange={(e) => handleFilterChange('matchFilter', e.target.value)}
+                  >
+                    <option value="">Any match</option>
+                    <option value="high">75–100% (strong)</option>
+                    <option value="medium">50–74% (moderate)</option>
+                    <option value="low">1–49% (weak)</option>
+                    <option value="zero">0% (job match not met)</option>
+                    <option value="no_requirements">No job match to score (N/A)</option>
                   </select>
                   <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
                 </div>
@@ -578,15 +576,16 @@ const ApplicantsManagement = () => {
                               </button>
                             </th>
                             <th className="px-6 py-4 font-semibold tracking-wider">License Status</th>
-                            <th className="px-6 py-4 font-semibold tracking-wider">
+                            <th className="px-6 py-4 font-semibold tracking-wider min-w-[140px]">
                               <button
                                 type="button"
-                                onClick={() => handleSort('requirements')}
+                                onClick={() => handleSort('job_match')}
                                 className="flex items-center gap-1 cursor-pointer hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy/30 rounded"
+                                title="Sort by how well the applicant meets this job’s required documents and credentials"
                               >
-                                Requirements
+                                Job match
                                 <span className="material-symbols-outlined text-base">
-                                  {sortBy === 'requirements'
+                                  {sortBy === 'job_match'
                                     ? sortDirection === 'asc'
                                       ? 'arrow_drop_up'
                                       : 'arrow_drop_down'
@@ -601,8 +600,8 @@ const ApplicantsManagement = () => {
                         <tbody className="divide-y divide-gray-200 bg-white">
                           {jobApplications.map((app) => {
                             const applicant = app.applicants
-                            const compliance = getCompliancePercentage(app)
-                            const isNew = (app.status || '').toLowerCase() === 'new'
+                            const matchPct = getApplicationJobMatchPercent(app)
+                            const isNew = isApplicationStatusNew(app.status)
                             return (
                               <tr key={app.id} className="group hover:bg-blue-50/30 transition-colors">
                                 <td className="whitespace-nowrap px-6 py-4">
@@ -624,22 +623,59 @@ const ApplicantsManagement = () => {
                                 <td className="whitespace-nowrap px-6 py-4">
                                   {getLicenseStatusBadge(applicant?.license_status)}
                                 </td>
-                                <td className="whitespace-nowrap px-6 py-4">
-                                  {compliance != null ? (
-                                    <span
-                                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                        compliance >= 100
-                                          ? 'bg-green-100 text-green-800'
-                                          : compliance >= 50
-                                            ? 'bg-amber-100 text-amber-800'
-                                            : 'bg-red-100 text-red-800'
-                                      }`}
+                                <td className="px-6 py-4">
+                                  <div className="flex min-w-[120px] max-w-[200px] items-start gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      {matchPct != null ? (
+                                        <div className="flex flex-col gap-1.5">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <span
+                                              className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold tabular-nums ${
+                                                matchPct >= 100
+                                                  ? 'bg-green-100 text-green-800'
+                                                  : matchPct >= 50
+                                                    ? 'bg-amber-100 text-amber-800'
+                                                    : 'bg-red-100 text-red-800'
+                                              }`}
+                                            >
+                                              {matchPct}%
+                                            </span>
+                                            <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                                              vs job
+                                            </span>
+                                          </div>
+                                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                                            <div
+                                              className={`h-full rounded-full transition-[width] ${
+                                                matchPct >= 100
+                                                  ? 'bg-green-600'
+                                                  : matchPct >= 50
+                                                    ? 'bg-amber-500'
+                                                    : 'bg-red-500'
+                                              }`}
+                                              style={{ width: `${Math.min(100, matchPct)}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <span
+                                          className="text-xs text-gray-400"
+                                          title="This job has no required documents or credentials to score"
+                                        >
+                                          N/A
+                                        </span>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setBreakdownApplicationId(app.id)}
+                                      className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-navy"
+                                      title="View job match breakdown"
+                                      aria-label="View job match breakdown"
                                     >
-                                      {compliance}%
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-400 text-xs">—</span>
-                                  )}
+                                      <span className="material-symbols-outlined text-[22px]">visibility</span>
+                                    </button>
+                                  </div>
                                 </td>
                                 <td className="whitespace-nowrap px-6 py-4">
                                   {getStatusBadge(app.status)}
@@ -661,7 +697,7 @@ const ApplicantsManagement = () => {
                                       className="rounded p-1.5 text-gray-500 hover:bg-white hover:text-navy hover:shadow-sm transition-all"
                                       title="View Profile"
                                     >
-                                      <span className="material-symbols-outlined text-[20px]">visibility</span>
+                                      <span className="material-symbols-outlined text-[20px]">person</span>
                                     </Link>
                                     <button
                                       type="button"
@@ -686,6 +722,11 @@ const ApplicantsManagement = () => {
           )}
         </div>
       </div>
+      <JobMatchBreakdownModal
+        open={Boolean(breakdownApplicationId)}
+        applicationId={breakdownApplicationId}
+        onClose={() => setBreakdownApplicationId(null)}
+      />
     </main>
   )
 }

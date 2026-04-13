@@ -297,7 +297,7 @@ const ApplicationForm = () => {
             religion: formData.religion || null,
             languages_spoken: formData.languages_spoken || [],
             user_id: user.id,
-            status: 'Pending'
+            status: 'PENDING'
           }
 
           let newApplicant = null
@@ -348,7 +348,7 @@ const ApplicationForm = () => {
             .from('applications')
             .update({
               current_step: 1,
-              status: 'Pending'
+              status: 'PENDING'
             })
             .eq('id', existingApp.id)
         } else {
@@ -358,7 +358,7 @@ const ApplicationForm = () => {
             .insert({
               job_id: jobId,
               applicant_id: applicantId,
-              status: 'Pending',
+              status: 'PENDING',
               current_step: 1
             })
         }

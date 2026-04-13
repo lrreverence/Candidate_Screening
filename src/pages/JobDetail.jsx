@@ -8,18 +8,19 @@ import { supabase } from '../lib/supabase'
 import { useApplicantJobMatchInputs } from '../hooks/useApplicantJobMatchInputs'
 import { computeRequirementMatchPercent } from '../lib/jobMatchScore'
 import JobRequirementMatchPill from '../components/JobRequirementMatchPill'
+import { normalizeApplicationStatus } from '../lib/applicationStatus'
 
 const APPLICATION_STATUS_LABELS = {
-  pending: { label: 'Pending Review', icon: 'schedule', className: 'text-yellow-500' },
-  submitted: { label: 'Submitted', icon: 'check_circle', className: 'text-primary' },
-  interview: { label: 'Accepted – Next step: Interview', icon: 'event_available', className: 'text-green-500' },
-  hired: { label: 'Accepted – Hired', icon: 'verified_user', className: 'text-green-500' },
-  rejected: { label: 'Not selected', icon: 'cancel', className: 'text-red-400' }
+  NEW: { label: 'NEW — Awaiting review', icon: 'fiber_new', className: 'text-blue-400' },
+  PENDING: { label: 'PENDING — Under review', icon: 'schedule', className: 'text-yellow-500' },
+  INTERVIEW: { label: 'INTERVIEW — Next step', icon: 'event_available', className: 'text-amber-400' },
+  HIRED: { label: 'HIRED', icon: 'verified_user', className: 'text-emerald-400' },
+  REJECTED: { label: 'REJECTED', icon: 'cancel', className: 'text-red-400' }
 }
 
 function ApplicationStatusLabel({ status }) {
-  const key = (status || 'pending').toLowerCase()
-  const config = APPLICATION_STATUS_LABELS[key] || APPLICATION_STATUS_LABELS.pending
+  const key = normalizeApplicationStatus(status)
+  const config = APPLICATION_STATUS_LABELS[key] || APPLICATION_STATUS_LABELS.PENDING
   return (
     <p className={`text-sm font-medium ${config.className} flex items-center gap-2`}>
       <span className="material-symbols-outlined text-[18px]">{config.icon}</span>
@@ -325,7 +326,7 @@ const JobDetail = () => {
                 <h3 className="text-xl font-bold text-white mb-4">Job Details</h3>
                 {requirementMatchPercent !== null && (
                   <div className="mb-5 pb-5 border-b border-secondary/40">
-                    <p className="text-xs text-text-muted mb-2 uppercase tracking-wide">Your profile vs. requirements</p>
+                    <p className="text-xs text-text-muted mb-2 uppercase tracking-wide">Your profile vs. job match</p>
                     <JobRequirementMatchPill percent={requirementMatchPercent} />
                     <p className="text-xs text-text-muted mt-2 leading-relaxed">
                       Based on required documents and credentials configured for this role. This is not a hiring probability or guarantee.
@@ -370,7 +371,8 @@ const JobDetail = () => {
                         Application status
                       </div>
                       <ApplicationStatusLabel status={applicationStatus.status} />
-                      {applicationStatus.status?.toLowerCase() === 'rejected' && applicationStatus.rejection_reason && (
+                      {normalizeApplicationStatus(applicationStatus.status) === 'REJECTED' &&
+                        applicationStatus.rejection_reason && (
                         <p className="mt-3 text-sm text-text-muted border-t border-secondary/30 pt-3">
                           {applicationStatus.rejection_reason}
                         </p>

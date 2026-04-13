@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import {
+  applicationStatusBadgeDark,
+  isApplicationStatusPendingLike,
+  normalizeApplicationStatus
+} from '../../lib/applicationStatus'
+import { loadAdminApplicationResumeBundle } from '../../lib/adminApplicationResumeBundle'
 
 const ApplicantDetailView = () => {
   const { id } = useParams()
-  const navigate = useNavigate()
   const [application, setApplication] = useState(null)
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('profile')
   const [activeFile, setActiveFile] = useState('resume')
   const [zoom, setZoom] = useState(100)
   const [copied, setCopied] = useState(false)
   const [fileUrl, setFileUrl] = useState(null)
+  const [resumeBundle, setResumeBundle] = useState(null)
+  const [resumeBundleLoading, setResumeBundleLoading] = useState(false)
+  const [expandedAccordion, setExpandedAccordion] = useState(null)
+  const [idPhotoUrl, setIdPhotoUrl] = useState(null)
 
   useEffect(() => {
     fetchApplication()
@@ -75,7 +83,15 @@ const ApplicantDetailView = () => {
             location,
             salary,
             required_credentials,
-            required_documents
+            required_documents,
+            category_percentages,
+            age_scoring,
+            gender_scoring,
+            height_scoring,
+            weight_scoring,
+            employment_experience_scoring,
+            training_count_scoring,
+            others_scoring
           )
         `)
         .eq('id', id)
@@ -137,6 +153,42 @@ const ApplicantDetailView = () => {
     }
   }
 
+  const loadResumeBundle = async () => {
+    if (!id) return
+    setResumeBundleLoading(true)
+    try {
+      const data = await loadAdminApplicationResumeBundle(supabase, id)
+      setResumeBundle(data)
+    } catch (e) {
+      console.error('[ApplicantDetailView] resume bundle', e)
+      setResumeBundle(null)
+    } finally {
+      setResumeBundleLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!loading && application?.id) {
+      loadResumeBundle()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, application?.id, id])
+
+  useEffect(() => {
+    const docs = application?.applicants?.documents || []
+    const idDoc = docs.find((d) => d.file_type === 'IDPhoto' || d.file_type === '2x2_ID_PICTURE')
+    if (!idDoc?.file_path) {
+      setIdPhotoUrl(null)
+      return
+    }
+    const bucket = idDoc.file_type === '2x2_ID_PICTURE' ? 'id-pictures' : 'resumes'
+    supabase.storage
+      .from(bucket)
+      .createSignedUrl(idDoc.file_path, 3600)
+      .then(({ data }) => setIdPhotoUrl(data?.signedUrl || null))
+      .catch(() => setIdPhotoUrl(null))
+  }, [application?.applicants?.documents])
+
   const handleCopy = async (text) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -154,14 +206,15 @@ const ApplicantDetailView = () => {
       const { error } = await supabase
         .from('applications')
         .update({
-          status: 'interview',
+          status: 'INTERVIEW',
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
 
       if (error) throw error
-      alert('Applicant approved for interview!')
-      navigate('/admin/applicants')
+      await fetchApplication()
+      await loadResumeBundle()
+      alert('Status updated to INTERVIEW.')
     } catch (error) {
       console.error('Error approving applicant:', error)
       alert('Failed to approve applicant. Please try again.')
@@ -181,27 +234,44 @@ const ApplicantDetailView = () => {
       const { error } = await supabase
         .from('applications')
         .update({
-          status: 'rejected',
+          status: 'REJECTED',
           rejection_reason: reason,
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
 
       if (error) throw error
-      alert('Applicant rejected.')
-      navigate('/admin/applicants')
+      await fetchApplication()
+      await loadResumeBundle()
+      alert('Status updated to REJECTED.')
     } catch (error) {
       console.error('Error rejecting applicant:', error)
       alert('Failed to reject applicant. Please try again.')
     }
   }
 
-  const handleFlag = async () => {
+  const handleMarkHired = async () => {
+    const cur = normalizeApplicationStatus(application?.status)
+    if (cur === 'HIRED') return
+    if (cur !== 'INTERVIEW') {
+      if (!confirm('Mark as HIRED without an INTERVIEW status first?')) return
+    } else if (!confirm('Mark this applicant as HIRED?')) return
     try {
-      // You could add a flagged field to the database
-      alert('Application flagged for review')
+      const { error } = await supabase
+        .from('applications')
+        .update({
+          status: 'HIRED',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+
+      if (error) throw error
+      await fetchApplication()
+      await loadResumeBundle()
+      alert('Status updated to HIRED.')
     } catch (error) {
-      console.error('Error flagging application:', error)
+      console.error('Error marking hired:', error)
+      alert('Failed to update status. Please try again.')
     }
   }
 
@@ -216,19 +286,12 @@ const ApplicantDetailView = () => {
   }
 
   const getStatusBadge = (status) => {
-    const key = status?.toLowerCase() === 'hired' ? 'interview' : status?.toLowerCase()
-    const statusMap = {
-      'new': { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', label: 'New' },
-      'pending': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Pending Review' },
-      'submitted': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Pending Review' },
-      'interview': { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20', label: 'Interview' },
-      'rejected': { bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20', label: 'Rejected' }
-    }
-
-    const config = statusMap[key] || statusMap['pending']
+    const config = applicationStatusBadgeDark(status)
     return (
-      <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide ${config.bg} ${config.text} ${config.border} border`}>
-        {status === 'pending' || status === 'submitted' ? (
+      <span
+        className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide ${config.bg} ${config.text} ${config.border} border`}
+      >
+        {isApplicationStatusPendingLike(status) ? (
           <>
             <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-2 animate-pulse"></span>
             {config.label}
@@ -312,6 +375,171 @@ const ApplicantDetailView = () => {
 
   const availableLicenses = Array.isArray(applicant?.licenses) ? applicant.licenses : []
 
+  const formatLongDate = (ds) => {
+    if (!ds) return 'N/A'
+    const d = new Date(ds)
+    return Number.isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  }
+
+  const jobMatchScore =
+    resumeBundle?.breakdown?.total != null && Number.isFinite(resumeBundle.breakdown.total)
+      ? Math.round(resumeBundle.breakdown.total * 100) / 100
+      : getMatchPercentage()
+
+  const st = normalizeApplicationStatus(application?.status)
+  const rejectedFooterDisabled = st === 'REJECTED'
+  const interviewFooterDisabled = st === 'INTERVIEW' || st === 'HIRED'
+  const hiredFooterDisabled = st === 'HIRED'
+
+  const renderAccordionBody = (categoryKey) => {
+    const edu = resumeBundle?.educationByLevel || {}
+    const levelMeta = [
+      { key: 'elementary', label: 'Elementary' },
+      { key: 'high_school', label: 'High School' },
+      { key: 'vocational', label: 'Vocational' },
+      { key: 'college', label: 'College' }
+    ]
+
+    switch (categoryKey) {
+      case 'personal':
+        return (
+          <div className="space-y-3">
+            <p>
+              <span className="text-[#92a4c9]">Email</span> {applicant?.email || '—'}
+            </p>
+            <p>
+              <span className="text-[#92a4c9]">Phone</span> {applicant?.phone || '—'}
+            </p>
+            <p>
+              <span className="text-[#92a4c9]">Address</span>{' '}
+              {[applicant?.street_address, applicant?.barangay, applicant?.city, applicant?.province].filter(Boolean).join(', ') || '—'}
+            </p>
+            {applicant?.date_of_birth && (
+              <p>
+                <span className="text-[#92a4c9]">Date of birth</span> {formatLongDate(applicant.date_of_birth)}
+              </p>
+            )}
+            {applicant?.gender && (
+              <p>
+                <span className="text-[#92a4c9]">Gender</span> {applicant.gender}
+              </p>
+            )}
+            {(applicant?.height_cm || applicant?.weight_kg) && (
+              <p>
+                <span className="text-[#92a4c9]">Height / weight</span> {applicant?.height_cm || '—'} cm /{' '}
+                {applicant?.weight_kg || '—'} kg
+              </p>
+            )}
+          </div>
+        )
+      case 'education':
+        return (
+          <div className="space-y-3">
+            {levelMeta.map(({ key, label }) => {
+              const rows = edu[key] || []
+              const filled = rows.filter(
+                (r) =>
+                  String(r?.school || '').trim() ||
+                  String(r?.course || '').trim() ||
+                  String(r?.year_graduated || '').trim()
+              )
+              return (
+                <div key={key}>
+                  <p className="text-xs font-bold uppercase text-[#92a4c9]">{label}</p>
+                  {filled.length === 0 ? (
+                    <p className="text-xs text-[#64748b]">No entries</p>
+                  ) : (
+                    <ul className="mt-1 list-inside list-disc text-xs">
+                      {filled.map((r, i) => (
+                        <li key={i}>
+                          {[r.school, r.course, r.year_graduated].filter(Boolean).join(' · ') || '—'}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )
+      case 'employment':
+        return (
+          <div className="space-y-2 text-xs">
+            {(resumeBundle?.employmentRecords || []).length === 0 ? (
+              <p className="text-[#64748b]">No employment records</p>
+            ) : (
+              <ul className="space-y-2">
+                {resumeBundle.employmentRecords.map((r, idx) => (
+                  <li key={`${r.category}-${r.position}-${r.from_date}-${idx}`} className="rounded border border-[#232f48] p-2">
+                    <span className="text-[#92a4c9]">{r.category}</span> — {r.position || '—'} @ {r.agency || '—'} (
+                    {r.from_date || '?'} → {r.to_date || 'present'})
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      case 'licenses': {
+        const rows = resumeBundle?.licenseRows || []
+        if (rows.length) {
+          return (
+            <ul className="space-y-2 text-xs">
+              {rows.map((r, i) => (
+                <li key={i} className="rounded border border-[#232f48] p-2">
+                  <span className="font-medium text-white">{r.category || '—'}</span>
+                  <span className="text-[#92a4c9]">
+                    {' '}
+                    — issued {r.date_issued || '—'}, exp {r.date_expiry || '—'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+        if (availableLicenses.length) {
+          return <p>{availableLicenses.join(', ')}</p>
+        }
+        return <p className="text-[#64748b]">No licenses on file.</p>
+      }
+      case 'training':
+        return (
+          <ul className="list-inside list-disc text-xs">
+            {(resumeBundle?.trainingsList || []).length === 0 ? (
+              <li className="list-none text-[#64748b]">No trainings</li>
+            ) : (
+              resumeBundle.trainingsList.map((t, i) => (
+                <li key={i}>
+                  {t.training_attended || '—'} — {t.date || '—'}
+                </li>
+              ))
+            )}
+          </ul>
+        )
+      case 'clearances':
+        return (
+          <ul className="space-y-1 text-xs">
+            {(resumeBundle?.clearancesList || []).length === 0 ? (
+              <li className="text-[#64748b]">No clearance rows</li>
+            ) : (
+              resumeBundle.clearancesList.map((c, i) => (
+                <li key={i}>
+                  {c.clearance_type}: issued {c.date_issued || '—'}, exp {c.date_expiry || '—'}
+                </li>
+              ))
+            )}
+          </ul>
+        )
+      case 'others':
+        return (
+          <pre className="max-h-48 overflow-auto rounded bg-[#0d121c] p-2 text-[11px] text-[#cbd5e1]">
+            {JSON.stringify(resumeBundle?.othersRow || {}, null, 2)}
+          </pre>
+        )
+      default:
+        return <p className="text-xs text-[#64748b]">No details</p>
+    }
+  }
+
   return (
     <div className="relative flex h-screen w-full flex-col overflow-hidden bg-[#111722]">
       {/* Header */}
@@ -353,460 +581,223 @@ const ApplicantDetailView = () => {
         </div>
       </header>
 
-      {/* Main Content (Split View) */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* LEFT PANEL: Applicant Profile & Data */}
-        <aside className="w-full lg:w-[420px] xl:w-[480px] flex flex-col border-r border-[#232f48] bg-[#111722] overflow-y-auto shrink-0 relative custom-scrollbar">
-          {/* Breadcrumbs */}
-          <div className="px-6 pt-5 pb-2">
-            <div className="flex flex-wrap gap-2 items-center text-xs uppercase tracking-wider font-bold">
-              <Link to="/admin/applicants" className="text-[#92a4c9] hover:text-primary transition-colors">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <div className="mx-auto max-w-5xl px-4 py-6 lg:px-8">
+            <div className="mb-6 flex flex-wrap gap-2 text-xs font-bold uppercase tracking-wider text-[#92a4c9]">
+              <Link to="/admin/applicants" className="hover:text-primary">
                 Dashboard
               </Link>
               <span className="text-[#324467]">/</span>
-              <Link to="/admin/applicants" className="text-[#92a4c9] hover:text-primary transition-colors">
+              <Link to="/admin/applicants" className="hover:text-primary">
                 Candidates
               </Link>
               <span className="text-[#324467]">/</span>
-              <span className="text-white">Detail View</span>
+              <span className="text-white">Application</span>
             </div>
-          </div>
 
-          {/* Profile Header Card */}
-          <div className="p-6 pb-2">
-            <div className="flex flex-col gap-4">
-              <div className="flex gap-5 items-start">
-                <div className="relative shrink-0">
-                  <div className="bg-center bg-no-repeat bg-cover rounded-xl h-28 w-28 border-2 border-[#324467] shadow-lg bg-gray-700 flex items-center justify-center text-white text-3xl font-bold">
-                    {getInitials(applicant?.first_name, applicant?.last_name)}
-                  </div>
-                  <div className="absolute -bottom-2 -right-2 bg-[#111722] p-1 rounded-full">
-                    <div className="bg-blue-500 rounded-full h-4 w-4 border-2 border-[#111722]" title="Online"></div>
-                  </div>
+            {/* Overview: photo, identity, job match, remarks */}
+            <div className="mb-8 grid gap-6 rounded-xl border border-[#232f48] bg-[#161e2c] p-6 lg:grid-cols-[140px_1fr_260px]">
+              <div className="flex justify-center lg:justify-start">
+                <div className="h-32 w-32 shrink-0 overflow-hidden rounded-lg border-2 border-[#324467] bg-[#232f48]">
+                  {idPhotoUrl ? (
+                    <img src={idPhotoUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-white">
+                      {getInitials(applicant?.first_name, applicant?.last_name)}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col flex-1 min-w-0">
-                  <div className="flex justify-between items-start">
-                    <h1 className="text-white text-3xl font-bold leading-tight tracking-tight truncate">
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h1 className="text-2xl font-bold leading-tight text-white lg:text-3xl">
                       {[applicant?.first_name, applicant?.middle_name, applicant?.last_name].filter(Boolean).join(' ')}
                       {applicant?.name_extension ? ` ${applicant.name_extension}` : ''}
                     </h1>
-                    <span className="text-[#92a4c9] text-xs font-mono bg-[#1a2332] px-2 py-1 rounded border border-[#232f48]">
-                      ID: {applicant?.reference_code || `#${application?.id}`}
+                    <p className="mt-1 text-sm text-[#92a4c9]">
+                      {[applicant?.city, applicant?.province].filter(Boolean).join(', ') || '—'}
+                    </p>
+                    <p className="mt-1 text-sm text-white">
+                      <span className="text-[#92a4c9]">Phone</span> {applicant?.phone || '—'}
+                    </p>
+                    <p className="mt-1 font-mono text-xs text-[#92a4c9]">
+                      ID: {applicant?.reference_code || application?.id}
+                    </p>
+                    <p className="mt-2 text-sm text-[#92a4c9]">{job?.title || 'General application'}</p>
+                  </div>
+                  <div className="shrink-0">{getStatusBadge(application?.status)}</div>
+                </div>
+                <div className="mt-4 max-w-md">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wide text-[#92a4c9]">Job match</span>
+                    <span className="text-sm font-bold tabular-nums text-emerald-400">
+                      {resumeBundleLoading ? '…' : `${jobMatchScore} match`}
                     </span>
                   </div>
-                  <p className="text-[#92a4c9] text-base font-medium mt-1">
-                    {job?.title || 'General Application'}
-                  </p>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {getStatusBadge(application?.status)}
-                    <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide bg-primary/10 text-primary border border-primary/20">
-                      {getMatchPercentage()}% Match
-                    </span>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-[#232f48]">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all"
+                      style={{ width: `${Math.min(100, Number(jobMatchScore) || 0)}%` }}
+                    />
                   </div>
                 </div>
               </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">Remarks</p>
+                <div className="rounded-lg border border-orange-800/40 bg-orange-950/30 p-3">
+                  <p className="text-[10px] font-bold uppercase text-orange-200">Rejected / date</p>
+                  <p className="mt-1 text-sm text-white">{st === 'REJECTED' ? formatLongDate(application?.updated_at) : 'N/A'}</p>
+                </div>
+                <div className="rounded-lg border border-blue-800/40 bg-blue-950/30 p-3">
+                  <p className="text-[10px] font-bold uppercase text-blue-200">Date interviewed</p>
+                  <p className="mt-1 text-sm text-white">
+                    {st === 'INTERVIEW' ? formatLongDate(application?.updated_at) : st === 'HIRED' ? '—' : 'N/A'}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/30 p-3">
+                  <p className="text-[10px] font-bold uppercase text-emerald-200">Date hired</p>
+                  <p className="mt-1 text-sm text-white">{st === 'HIRED' ? formatLongDate(application?.updated_at) : 'N/A'}</p>
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Tabs Navigation */}
-          <div className="px-6 mt-4 border-b border-[#232f48] sticky top-0 bg-[#111722]/95 backdrop-blur z-10">
-            <div className="flex gap-8">
-              <button
-                onClick={() => setActiveTab('profile')}
-                className={`flex items-center gap-2 border-b-[3px] pb-3 pt-2 transition-all ${
-                  activeTab === 'profile'
-                    ? 'border-primary text-white'
-                    : 'border-transparent text-[#92a4c9] hover:text-white'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[20px]">person</span>
-                <span className="text-sm font-bold tracking-wide">PROFILE</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`flex items-center gap-2 border-b-[3px] pb-3 pt-2 transition-all ${
-                  activeTab === 'history'
-                    ? 'border-primary text-white'
-                    : 'border-transparent text-[#92a4c9] hover:text-white'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[20px]">history</span>
-                <span className="text-sm font-bold tracking-wide">HISTORY</span>
-              </button>
+            {/* Resume accordions */}
+            <div className="mb-8 space-y-2">
+              <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-[#92a4c9]">Resume / profile</h2>
+              {(resumeBundle?.breakdown?.rows || []).map((row) => (
+                <div key={row.categoryKey} className="overflow-hidden rounded-lg border border-[#232f48] bg-[#1a2332]">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedAccordion((prev) => (prev === row.categoryKey ? null : row.categoryKey))}
+                    className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-[#232f48]/60"
+                  >
+                    <span className="font-semibold text-white">{row.label}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold tabular-nums text-[#92a4c9]">Score {row.weightedPoints}</span>
+                      <span className="material-symbols-outlined text-primary">
+                        {expandedAccordion === row.categoryKey ? 'expand_less' : 'expand_more'}
+                      </span>
+                    </div>
+                  </button>
+                  {expandedAccordion === row.categoryKey && (
+                    <div className="border-t border-[#232f48] bg-[#111722] px-4 py-4 text-sm text-[#cbd5e1]">
+                      {renderAccordionBody(row.categoryKey)}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {!resumeBundle?.breakdown?.rows?.length && !resumeBundleLoading && (
+                <p className="text-sm text-[#92a4c9]">No scoring breakdown available.</p>
+              )}
             </div>
-          </div>
 
-          {/* Tab Content */}
-          {activeTab === 'profile' && (
-            <div className="p-6 flex flex-col gap-8 pb-32">
-              {/* Contact Section */}
-              <section>
-                <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <span className="w-1 h-3 bg-primary rounded-full"></span> Contact Details
-                </h3>
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="bg-[#161e2c] p-4 rounded-lg border border-[#232f48] flex items-center gap-4 group hover:border-primary/40 transition-colors cursor-default">
-                    <div className="bg-[#232f48] p-2 rounded-md text-[#92a4c9] group-hover:text-white group-hover:bg-primary transition-colors">
-                      <span className="material-symbols-outlined text-[20px]">mail</span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Email Address</p>
-                      <p className="text-white text-sm font-medium">{applicant?.email || 'N/A'}</p>
-                    </div>
-                    {applicant?.email && (
-                      <button
-                        onClick={() => handleCopy(applicant.email)}
-                        className="text-[#92a4c9] hover:text-white"
-                        title="Copy email"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">content_copy</span>
-                      </button>
+            {/* Documents */}
+            <div className="rounded-xl border border-[#232f48] bg-[#0d121c] overflow-hidden">
+              <div className="border-b border-[#232f48] bg-[#111722] px-4 py-3">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-[#92a4c9]">Documents</h2>
+              </div>
+              <div className="flex flex-col lg:flex-row lg:min-h-[480px]">
+                <div className="border-b border-[#232f48] lg:w-72 lg:border-b-0 lg:border-r lg:border-[#232f48]">
+                  <div className="flex gap-2 overflow-x-auto p-3 lg:flex-col lg:overflow-x-visible">
+                    {files.length === 0 ? (
+                      <p className="p-2 text-xs text-[#92a4c9]">No files</p>
+                    ) : (
+                      files.map((file) => (
+                        <button
+                          key={file.id}
+                          type="button"
+                          onClick={() => setActiveFile(file.id)}
+                          className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-medium lg:w-full ${
+                            activeFile === file.id
+                              ? 'bg-primary/15 text-white ring-1 ring-primary/40'
+                              : 'text-[#92a4c9] hover:bg-[#232f48]'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">
+                            {file.type === 'pdf' ? 'picture_as_pdf' : 'image'}
+                          </span>
+                          <span className="truncate">{file.name || file.id}</span>
+                        </button>
+                      ))
                     )}
                   </div>
-                  <div className="bg-[#161e2c] p-4 rounded-lg border border-[#232f48] flex items-center gap-4 group hover:border-primary/40 transition-colors cursor-default">
-                    <div className="bg-[#232f48] p-2 rounded-md text-[#92a4c9] group-hover:text-white group-hover:bg-primary transition-colors">
-                      <span className="material-symbols-outlined text-[20px]">call</span>
-                    </div>
-                    <div>
-                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Phone Number</p>
-                      <p className="text-white text-sm font-medium">{applicant?.phone || 'N/A'}</p>
-                    </div>
-                  </div>
-                  <div className="bg-[#161e2c] p-4 rounded-lg border border-[#232f48] flex items-center gap-4 group hover:border-primary/40 transition-colors cursor-default">
-                    <div className="bg-[#232f48] p-2 rounded-md text-[#92a4c9] group-hover:text-white group-hover:bg-primary transition-colors">
-                      <span className="material-symbols-outlined text-[20px]">location_on</span>
-                    </div>
-                    <div>
-                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Residence</p>
-                      <p className="text-white text-sm font-medium">
-                        {applicant?.street_address && (
-                          <>
-                            {applicant.street_address}
-                            {applicant.barangay && `, ${applicant.barangay}`}
-                            {applicant.city && `, ${applicant.city}`}
-                            {applicant.province && `, ${applicant.province}`}
-                            {applicant.zip_code && ` ${applicant.zip_code}`}
-                          </>
-                        ) || 'N/A'}
-                      </p>
-                    </div>
+                  <div className="hidden items-center justify-center gap-2 border-t border-[#232f48] p-2 lg:flex">
+                    <button
+                      type="button"
+                      onClick={() => setZoom((z) => Math.max(50, z - 10))}
+                      className="rounded p-1 text-[#92a4c9] hover:bg-[#232f48]"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">remove</span>
+                    </button>
+                    <span className="font-mono text-xs text-white">{zoom}%</span>
+                    <button
+                      type="button"
+                      onClick={() => setZoom((z) => Math.min(200, z + 10))}
+                      className="rounded p-1 text-[#92a4c9] hover:bg-[#232f48]"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">add</span>
+                    </button>
                   </div>
                 </div>
-              </section>
-
-              {/* Personal Information Section */}
-              <section>
-                <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <span className="w-1 h-3 bg-primary rounded-full"></span> Personal Information
-                </h3>
-                <div className="bg-[#161e2c] rounded-lg border border-[#232f48] divide-y divide-[#232f48]">
-                  {applicant?.date_of_birth && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Date of Birth</p>
-                        <p className="text-white font-medium text-sm mt-1">{formatDate(applicant.date_of_birth)}</p>
-                      </div>
+                <div className="min-h-[360px] flex-1 overflow-auto bg-[#0d121c] p-4">
+                  {fileUrl ? (
+                    <div className="mx-auto bg-white shadow-lg" style={{ maxWidth: `${Math.min(900, 850 * (zoom / 100))}px` }}>
+                      {files.find((f) => f.id === activeFile)?.type === 'pdf' ? (
+                        <iframe src={fileUrl} className="h-[70vh] w-full min-h-[400px]" title="Document" />
+                      ) : (
+                        <img src={fileUrl} alt="" className="h-auto w-full" />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex h-64 items-center justify-center text-[#92a4c9]">
+                      <span className="material-symbols-outlined mr-2">description</span>
+                      No preview
                     </div>
                   )}
-                  {applicant?.date_of_birth && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Age</p>
-                        <p className="text-white font-medium text-sm mt-1">
-                          {(() => {
-                            const dob = new Date(applicant.date_of_birth)
-                            const today = new Date()
-                            let age = today.getFullYear() - dob.getFullYear()
-                            if (today.getMonth() < dob.getMonth() || (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())) age -= 1
-                            return `${age} years old`
-                          })()}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {applicant?.gender && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Gender</p>
-                        <p className="text-white font-medium text-sm mt-1">{applicant.gender}</p>
-                      </div>
-                    </div>
-                  )}
-                  {applicant?.height_cm && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Height</p>
-                        <p className="text-white font-medium text-sm mt-1">{applicant.height_cm} cm</p>
-                      </div>
-                    </div>
-                  )}
-                  {applicant?.weight_kg && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Weight</p>
-                        <p className="text-white font-medium text-sm mt-1">{applicant.weight_kg} kg</p>
-                      </div>
-                    </div>
-                  )}
-                  {applicant?.civil_status && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Civil Status</p>
-                        <p className="text-white font-medium text-sm mt-1">{applicant.civil_status}</p>
-                      </div>
-                    </div>
-                  )}
-                  {applicant?.religion && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Religion</p>
-                        <p className="text-white font-medium text-sm mt-1">{applicant.religion}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              {/* Credentials Section */}
-              <section>
-                <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <span className="w-1 h-3 bg-yellow-500 rounded-full"></span> Security Credentials
-                </h3>
-                <div className="bg-[#161e2c] rounded-lg border border-[#232f48] divide-y divide-[#232f48]">
-                  {availableLicenses.length > 0 && (
-                    <div className="p-4 flex justify-between items-center">
-                      <div>
-                        <p className="text-[#92a4c9] text-xs uppercase">Licenses</p>
-                        <p className="text-white font-medium text-sm mt-1">
-                          {availableLicenses.join(', ')}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/20">
-                          Active
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              {/* Attributes Section */}
-              {availableLicenses.length > 0 && (
-                <section>
-                  <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                    <span className="w-1 h-3 bg-primary rounded-full"></span> Attributes
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {availableLicenses.map((license, index) => (
-                      <span
-                        key={index}
-                        className="px-3 py-1.5 rounded-md bg-[#232f48] text-[#92a4c9] text-xs font-bold border border-[#324467]"
-                      >
-                        {license}
-                      </span>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* 201 File Data Section */}
-              {applicant?.file_201_data && typeof applicant.file_201_data === 'object' && (
-                <section>
-                  <h3 className="text-[#92a4c9] text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                    <span className="w-1 h-3 bg-green-500 rounded-full"></span> 201 File
-                  </h3>
-                  <div className="bg-[#161e2c] rounded-lg border border-[#232f48] divide-y divide-[#232f48]">
-                    <div className="p-4">
-                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Security License</p>
-                      <p className="text-white text-sm mt-1">
-                        {applicant.file_201_data.hasSecurityLicense === 'Yes'
-                          ? `Yes — ${applicant.file_201_data.securityLicenseCategory || ''} ${applicant.file_201_data.securityLicenseNumber || ''} (Exp: ${applicant.file_201_data.securityLicenseExpiration || '—'})`
-                          : applicant.file_201_data.hasSecurityLicense === 'No' ? 'No' : '—'}
-                      </p>
-                    </div>
-                    <div className="p-4">
-                      <p className="text-[#92a4c9] text-xs uppercase font-bold">NBI Clearance</p>
-                      <p className="text-white text-sm mt-1">
-                        {applicant.file_201_data.hasNBIClearance === 'Yes' ? `Yes — Exp: ${applicant.file_201_data.nbiClearanceExpiration || '—'}` : applicant.file_201_data.hasNBIClearance === 'No' ? 'No' : '—'}
-                      </p>
-                    </div>
-                    <div className="p-4">
-                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Police Clearance</p>
-                      <p className="text-white text-sm mt-1">
-                        {applicant.file_201_data.hasPoliceClearance === 'Yes' ? `Yes — Exp: ${applicant.file_201_data.policeClearanceExpiration || '—'}` : applicant.file_201_data.hasPoliceClearance === 'No' ? 'No' : '—'}
-                      </p>
-                    </div>
-                    <div className="p-4">
-                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Drug Test & Neuro Test</p>
-                      <p className="text-white text-sm mt-1">Drug Test: {applicant.file_201_data.drugTestDate || '—'} | Neuro Test: {applicant.file_201_data.neuroTestDate || '—'}</p>
-                    </div>
-                    <div className="p-4">
-                      <p className="text-[#92a4c9] text-xs uppercase font-bold">COVID-19 Vaccination</p>
-                      <p className="text-white text-sm mt-1">
-                        {applicant.file_201_data.isVaccinatedCovid === 'Yes' ? 'Yes' : applicant.file_201_data.isVaccinatedCovid === 'No' ? `No — ${applicant.file_201_data.covidNotVaccinatedReason || '—'}` : '—'}
-                      </p>
-                    </div>
-                    <div className="p-4">
-                      <p className="text-[#92a4c9] text-xs uppercase font-bold">Driver&apos;s License</p>
-                      <p className="text-white text-sm mt-1">
-                        {applicant.file_201_data.hasDriversLicense === 'Yes' ? `Yes — ${applicant.file_201_data.driversLicenseNumber || ''} (Exp: ${applicant.file_201_data.driversLicenseExpiration || '—'})` : applicant.file_201_data.hasDriversLicense === 'No' ? 'No' : '—'}
-                      </p>
-                    </div>
-                  </div>
-                </section>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'history' && (
-            <div className="p-6 pb-32">
-              <p className="text-[#92a4c9] text-sm">Application history will be displayed here.</p>
-            </div>
-          )}
-
-        </aside>
-
-        {/* RIGHT PANEL: Document Viewer */}
-        <main className="flex-1 bg-[#0d121c] flex flex-col h-full relative overflow-hidden">
-          {/* Viewer Toolbar */}
-          <div className="h-16 border-b border-[#232f48] bg-[#111722] flex items-center justify-between px-6 shrink-0 shadow-md z-10">
-            <div className="flex items-center gap-3 overflow-x-auto no-scrollbar mask-gradient pr-4">
-              <p className="text-[#92a4c9] text-xs font-bold uppercase mr-2 tracking-wide">Files:</p>
-              {files.map((file) => (
-                <button
-                  key={file.id}
-                  onClick={() => setActiveFile(file.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${
-                    activeFile === file.id
-                      ? 'bg-[#135bec]/10 text-white border-[#135bec]/50 shadow-[0_0_10px_rgba(19,91,236,0.2)]'
-                      : 'text-[#92a4c9] hover:text-white border-transparent hover:bg-[#232f48]'
-                  }`}
-                >
-                  <span className={`material-symbols-outlined text-[18px] ${
-                    file.type === 'pdf' ? 'text-red-400' : 'text-blue-400'
-                  }`}>
-                    {file.type === 'pdf' ? 'picture_as_pdf' : 'image'}
-                  </span>
-                  {file.name}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-1 border-l border-[#232f48] pl-4 ml-2 shrink-0">
-              <button
-                onClick={() => setZoom(prev => Math.max(50, prev - 10))}
-                className="p-2 text-[#92a4c9] hover:text-white rounded-md hover:bg-[#232f48] transition-colors"
-                title="Zoom Out"
-              >
-                <span className="material-symbols-outlined text-[20px]">remove_circle_outline</span>
-              </button>
-              <span className="text-white font-mono text-sm w-12 text-center select-none">{zoom}%</span>
-              <button
-                onClick={() => setZoom(prev => Math.min(200, prev + 10))}
-                className="p-2 text-[#92a4c9] hover:text-white rounded-md hover:bg-[#232f48] transition-colors"
-                title="Zoom In"
-              >
-                <span className="material-symbols-outlined text-[20px]">add_circle_outline</span>
-              </button>
-              <div className="w-px h-6 bg-[#232f48] mx-2"></div>
-              {files.find(f => f.id === activeFile)?.path && (
-                <button
-                  onClick={async () => {
-                    const file = files.find(f => f.id === activeFile)
-                    if (file?.path) {
-                      // Use id-pictures bucket for 2x2 ID pictures, resumes bucket for others
-                      const bucket = file.file_type === '2x2_ID_PICTURE' ? 'id-pictures' : 'resumes'
-                      const { data } = await supabase.storage
-                        .from(bucket)
-                        .createSignedUrl(file.path, 3600)
-                      if (data?.signedUrl) {
-                        window.open(data.signedUrl, '_blank')
-                      }
-                    }
-                  }}
-                  className="p-2 text-primary hover:text-white rounded-md hover:bg-primary transition-colors"
-                  title="Download"
-                >
-                  <span className="material-symbols-outlined text-[20px]">download</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Document Canvas Area */}
-          <div className="flex-1 overflow-auto bg-[#0d121c] flex justify-center p-8 relative scroll-smooth custom-scrollbar-dark">
-            {fileUrl ? (
-              <div
-                className="bg-white min-h-[1100px] shadow-2xl relative transform origin-top transition-transform duration-200"
-                style={{ width: `${850 * (zoom / 100)}px`, transform: `scale(${zoom / 100})` }}
-              >
-                {files.find(f => f.id === activeFile)?.type === 'pdf' ? (
-                  <iframe
-                    src={fileUrl}
-                    className="w-full h-full min-h-[1100px]"
-                    title="Document Viewer"
-                  />
-                ) : (
-                  <img
-                    src={fileUrl}
-                    alt={files.find(f => f.id === activeFile)?.name}
-                    className="w-full h-auto"
-                  />
-                )}
-                {/* Watermark */}
-                <div className="absolute top-10 right-10 border-4 border-red-500/20 text-red-500/20 font-black text-6xl uppercase transform -rotate-12 p-4 pointer-events-none select-none">
-                  Confidential
                 </div>
               </div>
-            ) : (
-              <div className="w-[850px] bg-white min-h-[1100px] shadow-2xl relative text-[#111418] p-12 flex flex-col gap-8">
-                <div className="text-center text-gray-500 py-20">
-                  <span className="material-symbols-outlined text-6xl mb-4 block">description</span>
-                  <p className="text-lg">No document available</p>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
-        </main>
+        </div>
       </div>
 
-      {/* Sticky Footer Actions */}
-      <footer className="h-20 bg-[#111722] border-t border-[#232f48] shrink-0 flex items-center justify-between px-8 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.4)]">
-        <div className="flex items-center gap-6">
-          <button
-            onClick={handleFlag}
-            className="flex items-center gap-2 text-[#92a4c9] hover:text-white px-4 py-2.5 rounded-lg text-sm font-bold border border-[#324467] hover:bg-[#232f48] transition-all"
-          >
-            <span className="material-symbols-outlined text-[20px]">flag</span>
-            Flag for Review
-          </button>
-          <div className="h-8 w-px bg-[#232f48]"></div>
+      {/* Sticky footer: application date + status actions (wireframe) */}
+      <footer className="shrink-0 border-t border-[#232f48] bg-[#111722] px-4 py-4 shadow-[0_-4px_20px_rgba(0,0,0,0.4)] z-30 sm:px-8">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[#92a4c9] text-xs font-bold uppercase tracking-wide">Application Date</p>
-            <p className="text-white text-sm font-mono">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#92a4c9]">Application date</p>
+            <p className="mt-1 font-mono text-sm text-white">
               {formatDate(application?.submitted_at || application?.created_at)}
             </p>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          {!['interview', 'rejected', 'hired'].includes(application?.status?.toLowerCase()) && (
-            <>
-              <button
-                onClick={handleReject}
-                className="px-6 py-3 rounded-lg text-red-400 font-bold text-sm border border-red-500/30 hover:bg-red-500/10 hover:border-red-500 transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(239,68,68,0.1)]"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-                Reject Applicant
-              </button>
-              <button
-                onClick={handleApprove}
-                className="px-8 py-3 rounded-lg text-white bg-primary hover:bg-[#1151d3] font-bold text-sm shadow-[0_0_20px_rgba(19,91,236,0.3)] hover:shadow-[0_0_25px_rgba(19,91,236,0.5)] transition-all flex items-center gap-2 transform active:scale-[0.98]"
-              >
-                <span className="material-symbols-outlined text-[20px]">check_circle</span>
-                Approve for Interview
-              </button>
-            </>
-          )}
+          <div className="flex flex-1 flex-wrap items-stretch justify-end gap-3">
+            <button
+              type="button"
+              onClick={handleReject}
+              disabled={rejectedFooterDisabled}
+              className="min-h-[48px] min-w-[140px] flex-1 rounded-lg bg-orange-600 px-4 py-3 text-center text-sm font-bold uppercase tracking-wide text-white shadow-sm transition hover:bg-orange-500 disabled:pointer-events-none disabled:opacity-40 sm:flex-none sm:px-8"
+            >
+              Rejected
+            </button>
+            <button
+              type="button"
+              onClick={handleApprove}
+              disabled={interviewFooterDisabled}
+              className="min-h-[48px] min-w-[160px] flex-1 rounded-lg bg-primary px-4 py-3 text-center text-sm font-bold uppercase tracking-wide text-white shadow-sm transition hover:bg-[#1151d3] disabled:pointer-events-none disabled:opacity-40 sm:flex-none sm:px-8"
+            >
+              For interview
+            </button>
+            <button
+              type="button"
+              onClick={handleMarkHired}
+              disabled={hiredFooterDisabled}
+              className="min-h-[48px] min-w-[140px] flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-center text-sm font-bold uppercase tracking-wide text-white shadow-sm transition hover:bg-emerald-500 disabled:pointer-events-none disabled:opacity-40 sm:flex-none sm:px-8"
+            >
+              Hired
+            </button>
+          </div>
         </div>
       </footer>
     </div>

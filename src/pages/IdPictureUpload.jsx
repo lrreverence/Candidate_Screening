@@ -336,7 +336,7 @@ const IdPictureUpload = () => {
               .insert({
                 applicant_id: applicantId,
                 job_id: jobId,
-                status: 'Pending',
+                status: 'PENDING',
                 current_step: 2
               })
               .select('id')
