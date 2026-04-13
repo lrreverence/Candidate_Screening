@@ -1,6 +1,17 @@
 import { computeResumeJobMatchBreakdown } from './resumeJobMatchBreakdown'
 import { computeRequirementMatchPercent, collectApplicantCredentialIds } from './jobMatchScore'
 
+/** Languages may live on `applicants.languages_spoken` or only on `public.users.languages_spoken`. */
+export function mergeApplicantLanguagesFromUser(applicantRow, userRow) {
+  const norm = (v) => {
+    if (!Array.isArray(v)) return []
+    return [...new Set(v.map((x) => String(x || '').trim()).filter(Boolean))]
+  }
+  const fromApplicant = norm(applicantRow?.languages_spoken)
+  if (fromApplicant.length) return fromApplicant
+  return norm(userRow?.languages_spoken)
+}
+
 export function mapApplicantOthersRow(row) {
   if (!row || typeof row !== 'object') return {}
   return {
@@ -15,13 +26,37 @@ export function mapApplicantOthersRow(row) {
   }
 }
 
+/** Maps DB / legacy `level` values to bucket keys used by scoring and admin UI. */
+export function normalizeEducationLevelKey(raw) {
+  let lv = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+  const aliases = {
+    elementary_school: 'elementary',
+    primary: 'elementary',
+    grade_school: 'elementary',
+    highschool: 'high_school',
+    senior_high: 'high_school',
+    senior_high_school: 'high_school',
+    shs: 'high_school',
+    vocational_school: 'vocational',
+    tech_vocational: 'vocational',
+    technical_vocational: 'vocational',
+    university: 'college',
+    tertiary: 'college',
+    undergrad: 'college'
+  }
+  if (aliases[lv]) return aliases[lv]
+  return lv
+}
+
 export function groupEducation(rows) {
   const base = { elementary: [], high_school: [], vocational: [], college: [] }
   for (const r of rows || []) {
-    const lv = String(r?.level || '')
-      .trim()
-      .toLowerCase()
-      .replace(/-/g, '_')
+    const lv = normalizeEducationLevelKey(r?.level)
     if (!base[lv]) continue
     base[lv].push({
       school: r.school,
@@ -44,6 +79,9 @@ const APPLICATION_SELECT = `
   updated_at,
   created_at,
   submitted_at,
+  interviewed_at,
+  hired_at,
+  rejected_at,
   rejection_reason,
   applicants:applicant_id (
     id,
@@ -64,7 +102,6 @@ const APPLICATION_SELECT = `
     religion,
     height_cm,
     weight_kg,
-    languages_spoken,
     licenses,
     reference_code,
     file_201_data
@@ -100,7 +137,23 @@ export async function loadAdminApplicationResumeBundle(supabase, applicationId) 
   if (appErr) throw appErr
   if (!app?.applicants?.id) throw new Error('Applicant not found')
 
-  const applicant = app.applicants
+  let applicant = app.applicants
+  if (applicant.user_id) {
+    const { data: langUser, error: langErr } = await supabase
+      .from('users')
+      .select('languages_spoken')
+      .eq('id', applicant.user_id)
+      .maybeSingle()
+    if (langErr) console.warn('[adminApplicationResumeBundle] users.languages_spoken', langErr)
+    const langs = mergeApplicantLanguagesFromUser(applicant, langUser)
+    applicant = { ...applicant, languages_spoken: langs }
+  } else {
+    applicant = {
+      ...applicant,
+      languages_spoken: mergeApplicantLanguagesFromUser(applicant, null)
+    }
+  }
+
   const job = app.jobs
   const aid = applicant.id
 
@@ -113,7 +166,12 @@ export async function loadAdminApplicationResumeBundle(supabase, applicationId) 
     { data: others, error: othErr },
     { data: docs, error: docErr }
   ] = await Promise.all([
-    supabase.from('educational_attainments').select('*').eq('applicant_id', aid),
+    supabase
+      .from('educational_attainments')
+      .select('*')
+      .eq('applicant_id', aid)
+      .order('level', { ascending: true })
+      .order('sort_order', { ascending: true }),
     supabase.from('applicant_licenses').select('category,date_issued,date_expiry,attachment').eq('applicant_id', aid),
     supabase.from('applicant_trainings').select('training_attended,date').eq('applicant_id', aid),
     supabase.from('employment_records').select('category,position,agency,place,from_date,to_date').eq('applicant_id', aid),
@@ -165,7 +223,7 @@ export async function loadAdminApplicationResumeBundle(supabase, applicationId) 
       : null
 
   return {
-    application: app,
+    application: { ...app, applicants: applicant },
     applicant,
     job,
     breakdown,

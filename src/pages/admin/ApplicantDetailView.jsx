@@ -6,7 +6,11 @@ import {
   isApplicationStatusPendingLike,
   normalizeApplicationStatus
 } from '../../lib/applicationStatus'
-import { loadAdminApplicationResumeBundle } from '../../lib/adminApplicationResumeBundle'
+import {
+  loadAdminApplicationResumeBundle,
+  mergeApplicantLanguagesFromUser
+} from '../../lib/adminApplicationResumeBundle'
+import { OTHERS_EMPLOYMENT_TYPE_OPTIONS } from '../../lib/othersScoring'
 
 const ApplicantDetailView = () => {
   const { id } = useParams()
@@ -98,6 +102,24 @@ const ApplicantDetailView = () => {
         .single()
 
       if (appError) throw appError
+
+      if (appData.applicants) {
+        if (appData.applicants.user_id) {
+          const { data: langUser, error: langErr } = await supabase
+            .from('users')
+            .select('languages_spoken')
+            .eq('id', appData.applicants.user_id)
+            .maybeSingle()
+          if (langErr) console.warn('[ApplicantDetailView] users.languages_spoken', langErr)
+          const langs = mergeApplicantLanguagesFromUser(appData.applicants, langUser)
+          appData.applicants = { ...appData.applicants, languages_spoken: langs }
+        } else {
+          appData.applicants = {
+            ...appData.applicants,
+            languages_spoken: mergeApplicantLanguagesFromUser(appData.applicants, null)
+          }
+        }
+      }
 
       // Fetch documents for this specific application
       // Include documents with application_id matching this application
@@ -207,6 +229,7 @@ const ApplicantDetailView = () => {
         .from('applications')
         .update({
           status: 'INTERVIEW',
+          interviewed_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
@@ -236,6 +259,7 @@ const ApplicantDetailView = () => {
         .update({
           status: 'REJECTED',
           rejection_reason: reason,
+          rejected_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
@@ -261,6 +285,7 @@ const ApplicantDetailView = () => {
         .from('applications')
         .update({
           status: 'HIRED',
+          hired_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
@@ -430,6 +455,12 @@ const ApplicantDetailView = () => {
                 {applicant?.weight_kg || '—'} kg
               </p>
             )}
+            <p>
+              <span className="text-[#92a4c9]">Languages spoken</span>{' '}
+              {Array.isArray(applicant?.languages_spoken) && applicant.languages_spoken.length > 0
+                ? applicant.languages_spoken.join(', ')
+                : '—'}
+            </p>
           </div>
         )
       case 'education':
@@ -441,7 +472,9 @@ const ApplicantDetailView = () => {
                 (r) =>
                   String(r?.school || '').trim() ||
                   String(r?.course || '').trim() ||
-                  String(r?.year_graduated || '').trim()
+                  String(r?.year_graduated || '').trim() ||
+                  String(r?.attachment_path || '').trim() ||
+                  String(r?.attachment?.file_path || '').trim()
               )
               return (
                 <div key={key}>
@@ -449,12 +482,21 @@ const ApplicantDetailView = () => {
                   {filled.length === 0 ? (
                     <p className="text-xs text-[#64748b]">No entries</p>
                   ) : (
-                    <ul className="mt-1 list-inside list-disc text-xs">
-                      {filled.map((r, i) => (
-                        <li key={i}>
-                          {[r.school, r.course, r.year_graduated].filter(Boolean).join(' · ') || '—'}
-                        </li>
-                      ))}
+                    <ul className="mt-1 space-y-2 text-xs">
+                      {filled.map((r, i) => {
+                        const parts = [r.school, r.course, r.year_graduated].filter((x) => String(x || '').trim())
+                        const docName = r.attachment?.file_name || (r.attachment_path ? 'Attachment' : '')
+                        return (
+                          <li key={i} className="rounded border border-[#232f48] bg-[#0d121c] px-3 py-2">
+                            <div className="text-[#cbd5e1]">{parts.length ? parts.join(' · ') : '—'}</div>
+                            {docName ? (
+                              <div className="mt-1 text-[#92a4c9]">
+                                <span className="font-semibold text-[#64748b]">Attachment:</span> {docName}
+                              </div>
+                            ) : null}
+                          </li>
+                        )
+                      })}
                     </ul>
                   )}
                 </div>
@@ -529,12 +571,102 @@ const ApplicantDetailView = () => {
             )}
           </ul>
         )
-      case 'others':
+      case 'others': {
+        const o = resumeBundle?.othersRow || {}
+        const skills = Array.isArray(o.skills) ? o.skills.filter((x) => String(x || '').trim()) : []
+        const places = Array.isArray(o.preferred_places) ? o.preferred_places.filter((x) => String(x || '').trim()) : []
+        const salaries = Array.isArray(o.preferred_monthly_salary)
+          ? o.preferred_monthly_salary.filter((x) => String(x || '').trim())
+          : []
+        const empTypes = Array.isArray(o.employment_types) ? o.employment_types.filter((x) => String(x || '').trim()) : []
+        const can = o.can_start && typeof o.can_start === 'object' ? o.can_start : {}
+        const asap = Boolean(can.asap)
+        const startDate = String(can.date || '').trim()
+        const startDateLabel = startDate ? formatLongDate(startDate) : ''
+        const employmentLabel = (id) => OTHERS_EMPLOYMENT_TYPE_OPTIONS.find((x) => x.id === id)?.label || id
+
+        const tagUlClass = 'mt-2 flex flex-wrap gap-2'
+        const tagLiClass =
+          'rounded-md border border-[#324467] bg-[#161e2c] px-2.5 py-1 text-xs text-[#cbd5e1]'
+
+        const hasAny =
+          skills.length > 0 ||
+          places.length > 0 ||
+          salaries.length > 0 ||
+          empTypes.length > 0 ||
+          asap ||
+          Boolean(startDate)
+
+        if (!hasAny) {
+          return <p className="text-xs text-[#64748b]">No &quot;Others&quot; profile data on file.</p>
+        }
+
         return (
-          <pre className="max-h-48 overflow-auto rounded bg-[#0d121c] p-2 text-[11px] text-[#cbd5e1]">
-            {JSON.stringify(resumeBundle?.othersRow || {}, null, 2)}
-          </pre>
+          <div className="space-y-5 text-sm text-[#cbd5e1]">
+            {skills.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">Skills</p>
+                <ul className={tagUlClass}>
+                  {skills.map((t, i) => (
+                    <li key={`${t}-${i}`} className={tagLiClass}>
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {places.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">Preferred places</p>
+                <ul className={tagUlClass}>
+                  {places.map((t, i) => (
+                    <li key={`${t}-${i}`} className={tagLiClass}>
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {salaries.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">
+                  Preferred monthly salary
+                </p>
+                <ul className={tagUlClass}>
+                  {salaries.map((t, i) => (
+                    <li key={`${t}-${i}`} className={tagLiClass}>
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {(asap || startDate) && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">Available to start</p>
+                <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-white">
+                  {asap ? <li>Can start ASAP</li> : null}
+                  {startDate && startDateLabel !== 'N/A' ? (
+                    <li>{asap ? `No earlier than: ${startDateLabel}` : `Preferred start: ${startDateLabel}`}</li>
+                  ) : null}
+                </ul>
+              </div>
+            )}
+            {empTypes.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">Employment types</p>
+                <ul className={tagUlClass}>
+                  {empTypes.map((id, i) => (
+                    <li key={`${id}-${i}`} className={tagLiClass}>
+                      {employmentLabel(id)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         )
+      }
       default:
         return <p className="text-xs text-[#64748b]">No details</p>
     }
@@ -648,17 +780,31 @@ const ApplicantDetailView = () => {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">Remarks</p>
                 <div className="rounded-lg border border-orange-800/40 bg-orange-950/30 p-3">
                   <p className="text-[10px] font-bold uppercase text-orange-200">Rejected / date</p>
-                  <p className="mt-1 text-sm text-white">{st === 'REJECTED' ? formatLongDate(application?.updated_at) : 'N/A'}</p>
+                  <p className="mt-1 text-sm text-white">
+                    {st === 'REJECTED'
+                      ? formatLongDate(application?.rejected_at || application?.updated_at)
+                      : 'N/A'}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-blue-800/40 bg-blue-950/30 p-3">
                   <p className="text-[10px] font-bold uppercase text-blue-200">Date interviewed</p>
                   <p className="mt-1 text-sm text-white">
-                    {st === 'INTERVIEW' ? formatLongDate(application?.updated_at) : st === 'HIRED' ? '—' : 'N/A'}
+                    {application?.interviewed_at
+                      ? formatLongDate(application.interviewed_at)
+                      : st === 'INTERVIEW'
+                        ? formatLongDate(application?.updated_at)
+                        : st === 'HIRED'
+                          ? 'N/A'
+                          : 'N/A'}
                   </p>
                 </div>
                 <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/30 p-3">
                   <p className="text-[10px] font-bold uppercase text-emerald-200">Date hired</p>
-                  <p className="mt-1 text-sm text-white">{st === 'HIRED' ? formatLongDate(application?.updated_at) : 'N/A'}</p>
+                  <p className="mt-1 text-sm text-white">
+                    {st === 'HIRED'
+                      ? formatLongDate(application?.hired_at || application?.updated_at)
+                      : 'N/A'}
+                  </p>
                 </div>
               </div>
             </div>
