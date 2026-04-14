@@ -2070,8 +2070,8 @@ const JobsManagement = () => {
                                               Conditional scoring
                                             </p>
                                             <p className="mt-1 text-[11px] text-gray-500">
-                                              Same options as the applicant resume. Selected tags are what you want for
-                                              this job; scoring uses overlap with the applicant&apos;s selections.
+                                              These show on the applicant job page and are also used for conditional
+                                              matching under the Others scoring section.
                                             </p>
                                           </div>
 
@@ -2085,8 +2085,29 @@ const JobsManagement = () => {
                                                   Points scale with how many of your picks match the applicant.
                                                 </p>
                                               </div>
-                                              {weightBadge('skills', 'Skills')}
+                                              <div className="flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-gray-400" aria-hidden="true">
+                                                  tune
+                                                </span>
+                                                {weightBadge('skills', 'Skills')}
+                                              </div>
                                             </div>
+                                            {osc.skills.length > 0 && (
+                                              <div className="flex flex-wrap gap-2">
+                                                {osc.skills.map((v) => (
+                                                  <button
+                                                    key={v}
+                                                    type="button"
+                                                    onClick={() => toggleOthersScoringListValue('skills', v)}
+                                                    className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-900"
+                                                    title="Remove"
+                                                  >
+                                                    <span className="material-symbols-outlined text-[16px]">close</span>
+                                                    {v}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
                                             <div className="flex flex-wrap gap-2">
                                               {OTHERS_SKILL_OPTIONS.map((opt) => {
                                                 const on = osc.skills.includes(opt)
@@ -2122,7 +2143,7 @@ const JobsManagement = () => {
                                                 onClick={() => addOthersScoringCustomValue('skills', othersTagDraft.skills)}
                                                 className="rounded-md bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-900 hover:bg-sky-200"
                                               >
-                                                Add skill
+                                                Add
                                               </button>
                                             </div>
                                           </div>
@@ -2137,8 +2158,29 @@ const JobsManagement = () => {
                                                   City / area preferences you want weighted.
                                                 </p>
                                               </div>
-                                              {weightBadge('preferred_places', 'Places')}
+                                              <div className="flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-gray-400" aria-hidden="true">
+                                                  tune
+                                                </span>
+                                                {weightBadge('preferred_places', 'Places')}
+                                              </div>
                                             </div>
+                                            {osc.preferred_places.length > 0 && (
+                                              <div className="flex flex-wrap gap-2">
+                                                {osc.preferred_places.map((v) => (
+                                                  <button
+                                                    key={v}
+                                                    type="button"
+                                                    onClick={() => toggleOthersScoringListValue('preferred_places', v)}
+                                                    className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-900"
+                                                    title="Remove"
+                                                  >
+                                                    <span className="material-symbols-outlined text-[16px]">close</span>
+                                                    {v}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
                                             <div className="flex flex-wrap gap-2">
                                               {OTHERS_PLACE_OPTIONS.map((opt) => {
                                                 const on = osc.preferred_places.includes(opt)
@@ -2182,7 +2224,7 @@ const JobsManagement = () => {
                                                 }
                                                 className="rounded-md bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-900 hover:bg-sky-200"
                                               >
-                                                Add place
+                                                Add
                                               </button>
                                             </div>
                                           </div>
@@ -2197,8 +2239,29 @@ const JobsManagement = () => {
                                                   Salary bands you prefer (same labels as the resume).
                                                 </p>
                                               </div>
-                                              {weightBadge('preferred_monthly_salary', 'Salary')}
+                                              <div className="flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-gray-400" aria-hidden="true">
+                                                  tune
+                                                </span>
+                                                {weightBadge('preferred_monthly_salary', 'Salary')}
+                                              </div>
                                             </div>
+                                            {osc.preferred_monthly_salary.length > 0 && (
+                                              <div className="flex flex-wrap gap-2">
+                                                {osc.preferred_monthly_salary.map((v) => (
+                                                  <button
+                                                    key={v}
+                                                    type="button"
+                                                    onClick={() => toggleOthersScoringListValue('preferred_monthly_salary', v)}
+                                                    className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-900"
+                                                    title="Remove"
+                                                  >
+                                                    <span className="material-symbols-outlined text-[16px]">close</span>
+                                                    {v}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
                                             <div className="flex flex-wrap gap-2">
                                               {OTHERS_SALARY_OPTIONS.map((opt) => {
                                                 const on = osc.preferred_monthly_salary.includes(opt)
@@ -2244,7 +2307,7 @@ const JobsManagement = () => {
                                                 }
                                                 className="rounded-md bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-900 hover:bg-sky-200"
                                               >
-                                                Add range
+                                                Add
                                               </button>
                                             </div>
                                           </div>
