@@ -18,13 +18,18 @@ import {
 } from '../../lib/applicationStatus'
 
 /**
- * 0–100 match: required documents/credentials when the job defines them; otherwise the same resume-weighted
- * total as the applicant detail page (category scoring). Null only when there is no job row to score against.
+ * Primary match % shown in the list: same headline as the breakdown modal / applicant detail — resume-weighted
+ * `breakdown.total` when loaded via `enrichApplicationsWithResumeMatch` (`_resumeMatchTotal`). Falls back to
+ * requirement-only or a shallow resume estimate only if bundle load failed.
  */
 function getApplicationJobMatchPercent(app) {
   const applicant = app?.applicants
   const jobData = app?.jobs
   if (!applicant) return null
+  if (!jobData) return null
+  if (typeof app._resumeMatchTotal === 'number' && Number.isFinite(app._resumeMatchTotal)) {
+    return Math.round(app._resumeMatchTotal * 100) / 100
+  }
   const allDocs = applicant?.documents || []
   const appIdStr = app?.id != null ? String(app.id) : ''
   const documents = allDocs.filter(
@@ -36,17 +41,13 @@ function getApplicationJobMatchPercent(app) {
   )
   const requirementPct = computeRequirementMatchPercent(jobData, { documents, applicantLicenseIds })
   if (requirementPct !== null) return requirementPct
-  if (!jobData) return null
-  if (typeof app._resumeMatchTotal === 'number' && Number.isFinite(app._resumeMatchTotal)) {
-    return Math.round(app._resumeMatchTotal * 100) / 100
-  }
   const ctx = buildResumeBreakdownContextFromApplicantEmbed(applicant)
   const { total } = computeResumeJobMatchBreakdown(jobData, ctx)
   if (!Number.isFinite(total)) return null
   return Math.round(total * 100) / 100
 }
 
-/** Same resume total as JobMatchBreakdownModal / applicant detail (full profile slices). */
+/** Load full resume bundle per row so list `Job match` equals modal headline (for all applications with a job). */
 async function enrichApplicationsWithResumeMatch(supabase, apps, concurrency = 6) {
   const rows = apps || []
   const toLoad = []
@@ -55,12 +56,7 @@ async function enrichApplicationsWithResumeMatch(supabase, apps, concurrency = 6
     const applicant = app?.applicants
     const jobData = app?.jobs
     if (!applicant || !jobData) continue
-    const allDocs = applicant?.documents || []
-    const appIdStr = app?.id != null ? String(app.id) : ''
-    const documents = allDocs.filter((d) => d.application_id == null || String(d.application_id) === appIdStr)
-    const applicantLicenseIds = collectApplicantCredentialIds(applicant?.licenses, applicant?.applicant_licenses)
-    const requirementPct = computeRequirementMatchPercent(jobData, { documents, applicantLicenseIds })
-    if (requirementPct === null) toLoad.push({ index: i, id: app.id })
+    toLoad.push({ index: i, id: app.id })
   }
   if (toLoad.length === 0) return rows.map((a) => ({ ...a }))
   const next = rows.map((a) => ({ ...a }))

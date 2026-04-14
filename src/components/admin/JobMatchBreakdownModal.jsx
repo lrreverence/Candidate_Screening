@@ -75,9 +75,9 @@ export default function JobMatchBreakdownModal({ open, applicationId, onClose })
               <span>{jobTitle}</span>
             </p>
             <p className="mt-1 text-[11px] text-gray-500">
-              Resume score uses admin category weights. The applicants list &quot;Job match&quot; column uses required
-              document &amp; credential fit when the job defines those; otherwise it uses this resume total (same as the
-              profile header when requirements are empty).
+              Resume score uses admin category weights. The applicants list &quot;Job match&quot; column uses this same
+              headline total. When the job sets required documents or credentials, the blue line above shows that fit
+              separately.
             </p>
           </div>
           <button
