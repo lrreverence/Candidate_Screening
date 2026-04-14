@@ -308,7 +308,7 @@ const normalizeEmploymentState = (value) => {
   return base
 }
 
-const SKILL_OPTIONS = [
+const DEFAULT_SKILL_OPTIONS = [
   'Basic Life Support (BLS)',
   'CCTV Operation',
   'Radio Operation',
@@ -316,7 +316,7 @@ const SKILL_OPTIONS = [
   'Drive',
 ]
 
-const PLACE_OPTIONS = [
+const DEFAULT_PLACE_OPTIONS = [
   'Quezon City',
   'Makati',
   'Mandaluyong',
@@ -328,7 +328,14 @@ const PLACE_OPTIONS = [
   'Pasig City',
 ]
 
-const SALARY_OPTIONS = ['10,000-15,000', '15,000-20,000', '20,000-25,000', '25,000-30,000', '30,000-35,000', '35,000-40,000']
+const DEFAULT_SALARY_OPTIONS = [
+  '10,000-15,000',
+  '15,000-20,000',
+  '20,000-25,000',
+  '25,000-30,000',
+  '30,000-35,000',
+  '35,000-40,000',
+]
 
 const EMPLOYMENT_TYPE_OPTIONS = [
   { id: 'full_time', label: 'Full time' },
@@ -465,6 +472,9 @@ const ResumeProfile = () => {
     preferred_places: '',
     preferred_monthly_salary: '',
   })
+  const [skillOptions, setSkillOptions] = useState(() => [...DEFAULT_SKILL_OPTIONS])
+  const [placeOptions, setPlaceOptions] = useState(() => [...DEFAULT_PLACE_OPTIONS])
+  const [salaryOptions, setSalaryOptions] = useState(() => [...DEFAULT_SALARY_OPTIONS])
 
   const isApplyReviewRoute = routerLocation.pathname.startsWith('/profile/apply')
   const applyJobId = isApplyReviewRoute ? (routeParams.jobId ?? null) : null
@@ -494,6 +504,44 @@ const ResumeProfile = () => {
       cancelled = true
     }
   }, [applyJobId])
+
+  // Pull admin-defined preferences (skills/places/salary) from ALL jobs so custom tags
+  // added in the admin dashboard become selectable on /profile/resume as well.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.from('jobs').select('others_scoring')
+        if (cancelled) return
+        if (error) throw error
+
+        const skills = new Set(DEFAULT_SKILL_OPTIONS)
+        const places = new Set(DEFAULT_PLACE_OPTIONS)
+        const salaries = new Set(DEFAULT_SALARY_OPTIONS)
+
+        for (const row of data || []) {
+          const osc = normalizeOthersScoringFromJob(row?.others_scoring ?? null)
+          for (const v of osc.skills) skills.add(v)
+          for (const v of osc.preferred_places) places.add(v)
+          for (const v of osc.preferred_monthly_salary) salaries.add(v)
+        }
+
+        setSkillOptions([...skills].sort((a, b) => a.localeCompare(b)))
+        setPlaceOptions([...places].sort((a, b) => a.localeCompare(b)))
+        setSalaryOptions([...salaries])
+      } catch (err) {
+        // If jobs aren't publicly readable due to RLS, fall back to defaults.
+        if (!cancelled) {
+          setSkillOptions([...DEFAULT_SKILL_OPTIONS])
+          setPlaceOptions([...DEFAULT_PLACE_OPTIONS])
+          setSalaryOptions([...DEFAULT_SALARY_OPTIONS])
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -2778,7 +2826,7 @@ const ResumeProfile = () => {
                                   </div>
                                 )}
                                 <div className="flex flex-wrap gap-2">
-                                  {SKILL_OPTIONS.map((opt) => {
+                                  {skillOptions.map((opt) => {
                                     const active = (others?.skills || []).includes(opt)
                                     return (
                                       <button
@@ -2846,7 +2894,7 @@ const ResumeProfile = () => {
                                   </div>
                                 )}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                  {PLACE_OPTIONS.map((opt) => {
+                                  {placeOptions.map((opt) => {
                                     const active = (others?.preferred_places || []).includes(opt)
                                     return (
                                       <button
@@ -2925,7 +2973,7 @@ const ResumeProfile = () => {
                                   </div>
                                 )}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                  {SALARY_OPTIONS.map((opt) => {
+                                  {salaryOptions.map((opt) => {
                                     const active = (others?.preferred_monthly_salary || []).includes(opt)
                                     return (
                                       <button
