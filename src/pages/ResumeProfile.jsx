@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import ApplicationHeader from '../components/application/ApplicationHeader'
 import ApplicationFooter from '../components/application/ApplicationFooter'
+import { normalizeOthersScoringFromJob } from '../lib/othersScoring'
 
 const SECTION_DEFS = [
   { key: 'personal', label: 'Personal Information', icon: 'person', cta: { label: 'Edit', to: '/profile/personalinformation' } },
@@ -468,23 +469,26 @@ const ResumeProfile = () => {
   const isApplyReviewRoute = routerLocation.pathname.startsWith('/profile/apply')
   const applyJobId = isApplyReviewRoute ? (routeParams.jobId ?? null) : null
   const [applyJobTitle, setApplyJobTitle] = useState('')
+  const [applyJobOthersScoring, setApplyJobOthersScoring] = useState(null)
   const [continueBusy, setContinueBusy] = useState(false)
 
   useEffect(() => {
     if (!applyJobId) {
       setApplyJobTitle('')
+      setApplyJobOthersScoring(null)
       return
     }
     let cancelled = false
     supabase
       .from('jobs')
-      .select('title')
+      .select('title, others_scoring')
       .eq('id', applyJobId)
       .maybeSingle()
       .then(({ data, error }) => {
         if (cancelled) return
         if (!error && data?.title) setApplyJobTitle(data.title)
         else setApplyJobTitle('')
+        setApplyJobOthersScoring(normalizeOthersScoringFromJob(data?.others_scoring ?? null))
       })
     return () => {
       cancelled = true
@@ -2668,6 +2672,84 @@ const ResumeProfile = () => {
                           </div>
                         ) : s.key === 'others' ? (
                           <div className="space-y-5">
+                            {isApplyReviewRoute &&
+                              applyJobId &&
+                              applyJobOthersScoring &&
+                              (applyJobOthersScoring.skills.length > 0 ||
+                                applyJobOthersScoring.preferred_places.length > 0 ||
+                                applyJobOthersScoring.preferred_monthly_salary.length > 0) && (
+                              <div className="rounded-2xl border border-[#1e40af]/40 bg-[#0f172a] overflow-hidden">
+                                <div className="px-4 sm:px-5 py-3 border-b border-[#1e40af]/40 bg-[#0b1220] flex items-start justify-between gap-4">
+                                  <div>
+                                    <p className="text-xs font-black uppercase tracking-wide text-white">
+                                      Job preferences (reference)
+                                    </p>
+                                    <p className="mt-1 text-[12px] text-[#93c5fd]/80">
+                                      Set by admin for this job. Use this as a guide while filling out your profile.
+                                    </p>
+                                  </div>
+                                  <span className="material-symbols-outlined text-[#93c5fd]/70" aria-hidden="true">
+                                    tune
+                                  </span>
+                                </div>
+                                <div className="p-4 sm:p-5 space-y-4">
+                                  {applyJobOthersScoring.skills.length > 0 && (
+                                    <div>
+                                      <p className="text-[11px] font-black uppercase tracking-wide text-[#93c5fd]/90 mb-2">
+                                        Skills needed
+                                      </p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {applyJobOthersScoring.skills.map((v) => (
+                                          <span
+                                            key={v}
+                                            className="inline-flex items-center rounded-full border border-[#1e40af]/50 bg-white/5 px-3 py-1.5 text-xs font-extrabold text-white"
+                                          >
+                                            {v}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {applyJobOthersScoring.preferred_places.length > 0 && (
+                                    <div>
+                                      <p className="text-[11px] font-black uppercase tracking-wide text-[#93c5fd]/90 mb-2">
+                                        Preferred places
+                                      </p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {applyJobOthersScoring.preferred_places.map((v) => (
+                                          <span
+                                            key={v}
+                                            className="inline-flex items-center rounded-full border border-[#1e40af]/50 bg-white/5 px-3 py-1.5 text-xs font-extrabold text-white"
+                                          >
+                                            {v}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {applyJobOthersScoring.preferred_monthly_salary.length > 0 && (
+                                    <div>
+                                      <p className="text-[11px] font-black uppercase tracking-wide text-[#93c5fd]/90 mb-2">
+                                        Preferred monthly salary
+                                      </p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {applyJobOthersScoring.preferred_monthly_salary.map((v) => (
+                                          <span
+                                            key={v}
+                                            className="inline-flex items-center rounded-full border border-[#1e40af]/50 bg-white/5 px-3 py-1.5 text-xs font-extrabold text-white"
+                                          >
+                                            {v}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
                             <div className="rounded-xl bg-white/70 dark:bg-[#0f172a] border border-gray-200 dark:border-white/10 overflow-hidden">
                               <div className="px-4 sm:px-5 py-3 border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0b1220]">
                                 <p className="text-xs font-black uppercase tracking-wide text-slate-900 dark:text-white">Skills</p>
