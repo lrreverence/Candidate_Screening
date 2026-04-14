@@ -71,6 +71,43 @@ export function groupEducation(rows) {
   return base
 }
 
+/**
+ * Build context for `computeResumeJobMatchBreakdown` from an `applicants` row loaded with nested
+ * resume slices (Supabase embed). Matches the slices used by `loadAdminApplicationResumeBundle`.
+ *
+ * @param {object|null|undefined} applicant
+ * @returns {object} ctx for `computeResumeJobMatchBreakdown`
+ */
+export function buildResumeBreakdownContextFromApplicantEmbed(applicant) {
+  if (!applicant || typeof applicant !== 'object') {
+    return {
+      applicant: {},
+      educationByLevel: groupEducation([]),
+      licenseRows: [],
+      trainingsList: [],
+      employmentRecords: [],
+      clearancesList: [],
+      othersRow: null
+    }
+  }
+
+  const othersRaw = applicant.applicant_others
+  const othersSingle = Array.isArray(othersRaw) ? othersRaw[0] : othersRaw
+
+  return {
+    applicant,
+    educationByLevel: groupEducation(applicant.educational_attainments),
+    licenseRows: applicant.applicant_licenses || [],
+    trainingsList: (applicant.applicant_trainings || []).map((r) => ({
+      training_attended: r.training_attended,
+      date: r.date
+    })),
+    employmentRecords: applicant.employment_records || [],
+    clearancesList: applicant.applicant_clearances || [],
+    othersRow: mapApplicantOthersRow(othersSingle)
+  }
+}
+
 const APPLICATION_SELECT = `
   id,
   applicant_id,

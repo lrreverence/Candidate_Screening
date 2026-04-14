@@ -1,3 +1,20 @@
+/** Coerce JSON/array columns that may arrive as stringified JSON from some clients or legacy rows. */
+function normalizeJsonArray(val) {
+  if (Array.isArray(val)) return val
+  if (val == null) return []
+  if (typeof val === 'string') {
+    const s = val.trim()
+    if (!s) return []
+    try {
+      const parsed = JSON.parse(s)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
 /**
  * Requirement match score (0–100) from job required_documents / required_credentials
  * vs applicant documents and license IDs. Mirrors admin ApplicantsManagement / ApplicantDetailView.
@@ -5,8 +22,8 @@
  * @returns {number|null} null when the job has no scored requirements
  */
 export function computeRequirementMatchPercent(job, { documents = [], applicantLicenseIds = [] } = {}) {
-  const requiredDocuments = Array.isArray(job?.required_documents) ? job.required_documents : []
-  const requiredCredentials = Array.isArray(job?.required_credentials) ? job.required_credentials : []
+  const requiredDocuments = normalizeJsonArray(job?.required_documents)
+  const requiredCredentials = normalizeJsonArray(job?.required_credentials)
 
   if (requiredDocuments.length === 0 && requiredCredentials.length === 0) {
     return null

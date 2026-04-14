@@ -4,6 +4,11 @@ import { supabase } from '../../lib/supabase'
 import AdminNotificationBell from '../../components/admin/AdminNotificationBell'
 import AdminHelpButton from '../../components/admin/AdminHelpButton'
 import JobMatchBreakdownModal from '../../components/admin/JobMatchBreakdownModal'
+import {
+  buildResumeBreakdownContextFromApplicantEmbed,
+  loadAdminApplicationResumeBundle
+} from '../../lib/adminApplicationResumeBundle'
+import { computeResumeJobMatchBreakdown } from '../../lib/resumeJobMatchBreakdown'
 import { computeRequirementMatchPercent, collectApplicantCredentialIds } from '../../lib/jobMatchScore'
 import {
   applicationStatusBadge,
@@ -12,26 +17,171 @@ import {
   statusFilterValues
 } from '../../lib/applicationStatus'
 
-/** 0–100 match of applicant credentials/documents to the job, or null when the job defines nothing to score. */
+/**
+ * 0–100 match: required documents/credentials when the job defines them; otherwise the same resume-weighted
+ * total as the applicant detail page (category scoring). Null only when there is no job row to score against.
+ */
 function getApplicationJobMatchPercent(app) {
   const applicant = app?.applicants
   const jobData = app?.jobs
   if (!applicant) return null
   const allDocs = applicant?.documents || []
+  const appIdStr = app?.id != null ? String(app.id) : ''
   const documents = allDocs.filter(
-    (d) => d.application_id === app.id || d.application_id == null
+    (d) => d.application_id == null || String(d.application_id) === appIdStr
   )
   const applicantLicenseIds = collectApplicantCredentialIds(
     applicant?.licenses,
     applicant?.applicant_licenses
   )
-  return computeRequirementMatchPercent(jobData, { documents, applicantLicenseIds })
+  const requirementPct = computeRequirementMatchPercent(jobData, { documents, applicantLicenseIds })
+  if (requirementPct !== null) return requirementPct
+  if (!jobData) return null
+  if (typeof app._resumeMatchTotal === 'number' && Number.isFinite(app._resumeMatchTotal)) {
+    return Math.round(app._resumeMatchTotal * 100) / 100
+  }
+  const ctx = buildResumeBreakdownContextFromApplicantEmbed(applicant)
+  const { total } = computeResumeJobMatchBreakdown(jobData, ctx)
+  if (!Number.isFinite(total)) return null
+  return Math.round(total * 100) / 100
 }
+
+/** Same resume total as JobMatchBreakdownModal / applicant detail (full profile slices). */
+async function enrichApplicationsWithResumeMatch(supabase, apps, concurrency = 6) {
+  const rows = apps || []
+  const toLoad = []
+  for (let i = 0; i < rows.length; i++) {
+    const app = rows[i]
+    const applicant = app?.applicants
+    const jobData = app?.jobs
+    if (!applicant || !jobData) continue
+    const allDocs = applicant?.documents || []
+    const appIdStr = app?.id != null ? String(app.id) : ''
+    const documents = allDocs.filter((d) => d.application_id == null || String(d.application_id) === appIdStr)
+    const applicantLicenseIds = collectApplicantCredentialIds(applicant?.licenses, applicant?.applicant_licenses)
+    const requirementPct = computeRequirementMatchPercent(jobData, { documents, applicantLicenseIds })
+    if (requirementPct === null) toLoad.push({ index: i, id: app.id })
+  }
+  if (toLoad.length === 0) return rows.map((a) => ({ ...a }))
+  const next = rows.map((a) => ({ ...a }))
+  for (let c = 0; c < toLoad.length; c += concurrency) {
+    const chunk = toLoad.slice(c, c + concurrency)
+    await Promise.all(
+      chunk.map(async ({ index, id }) => {
+        try {
+          const bundle = await loadAdminApplicationResumeBundle(supabase, id)
+          const t = bundle?.breakdown?.total
+          next[index]._resumeMatchTotal = typeof t === 'number' && Number.isFinite(t) ? t : null
+        } catch (e) {
+          console.warn('[ApplicantsManagement] resume match bundle for list row', id, e)
+          next[index]._resumeMatchTotal = null
+        }
+      })
+    )
+  }
+  return next
+}
+
+/** PostgREST select for applications list — keep shallow to avoid embed/RLS/schema mismatches across environments. */
+const APPLICATIONS_LIST_SELECT_FULL = `
+  *,
+  applicants:applicant_id (
+    id,
+    first_name,
+    last_name,
+    email,
+    phone,
+    reference_code,
+    status,
+    license_status,
+    licenses,
+    user_id,
+    date_of_birth,
+    gender,
+    street_address,
+    barangay,
+    city,
+    province,
+    civil_status,
+    religion,
+    height_cm,
+    weight_kg,
+    documents (file_type, application_id)
+  ),
+  jobs:job_id (
+    title,
+    required_documents,
+    required_credentials,
+    category_percentages,
+    age_scoring,
+    gender_scoring,
+    height_scoring,
+    weight_scoring,
+    employment_experience_scoring,
+    training_count_scoring,
+    others_scoring
+  )
+`
+
+const APPLICATIONS_LIST_SELECT_JOBS_MINIMAL = `
+  *,
+  applicants:applicant_id (
+    id,
+    first_name,
+    last_name,
+    email,
+    phone,
+    reference_code,
+    status,
+    license_status,
+    licenses,
+    user_id,
+    date_of_birth,
+    gender,
+    street_address,
+    barangay,
+    city,
+    province,
+    civil_status,
+    religion,
+    height_cm,
+    weight_kg,
+    documents (file_type, application_id)
+  ),
+  jobs:job_id (
+    title,
+    required_documents,
+    required_credentials
+  )
+`
+
+/** Last resort: matches the list query shape before profile/job-scoring fields were added. */
+const APPLICATIONS_LIST_SELECT_LEGACY = `
+  *,
+  applicants:applicant_id (
+    id,
+    first_name,
+    last_name,
+    email,
+    phone,
+    reference_code,
+    status,
+    license_status,
+    licenses,
+    documents (file_type, application_id)
+  ),
+  jobs:job_id (
+    title,
+    required_documents,
+    required_credentials
+  )
+`
 
 const ApplicantsManagement = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
+  const [listFetchError, setListFetchError] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState({
     applicationStatus: '',
@@ -108,38 +258,29 @@ const ApplicantsManagement = () => {
 
   const fetchApplications = async () => {
     setLoading(true)
+    setListFetchError(null)
     try {
-      // Join applicants with applications and jobs
-      let query = supabase
-        .from('applications')
-        .select(`
-          *,
-          applicants:applicant_id (
-            id,
-            first_name,
-            last_name,
-            email,
-            phone,
-            reference_code,
-            status,
-            license_status,
-            licenses,
-            documents (file_type, application_id)
-          ),
-          jobs:job_id (
-            title,
-            required_documents,
-            required_credentials
-          )
-        `)
-        .order('created_at', { ascending: false })
-
-      if (filters.applicationStatus) {
-        query = query.in('status', statusFilterValues(filters.applicationStatus))
+      const runListQuery = async (selectStr) => {
+        let q = supabase.from('applications').select(selectStr).order('created_at', { ascending: false })
+        if (filters.applicationStatus) {
+          q = q.in('status', statusFilterValues(filters.applicationStatus))
+        }
+        return q
       }
 
-      const { data, error } = await query
-
+      let { data, error } = await runListQuery(APPLICATIONS_LIST_SELECT_FULL)
+      if (error) {
+        console.warn('[ApplicantsManagement] full list select failed, retrying minimal jobs embed', error)
+        const second = await runListQuery(APPLICATIONS_LIST_SELECT_JOBS_MINIMAL)
+        data = second.data
+        error = second.error
+      }
+      if (error) {
+        console.warn('[ApplicantsManagement] retry failed, using legacy applicant/job select', error)
+        const third = await runListQuery(APPLICATIONS_LIST_SELECT_LEGACY)
+        data = third.data
+        error = third.error
+      }
       if (error) throw error
 
       // Filter by search query and additional filters
@@ -173,6 +314,8 @@ const ApplicantsManagement = () => {
         })
       }
 
+      filtered = await enrichApplicationsWithResumeMatch(supabase, filtered)
+
       if (filters.matchFilter) {
         filtered = filtered.filter((app) => {
           const p = getApplicationJobMatchPercent(app)
@@ -196,6 +339,7 @@ const ApplicantsManagement = () => {
       setApplications(filtered)
     } catch (error) {
       console.error('Error fetching applications:', error)
+      setListFetchError(error?.message || 'Failed to load applications')
       setApplications([])
     } finally {
       setLoading(false)
@@ -493,7 +637,7 @@ const ApplicantsManagement = () => {
                     <option value="medium">50–74% (moderate)</option>
                     <option value="low">1–49% (weak)</option>
                     <option value="zero">0% (job match not met)</option>
-                    <option value="no_requirements">No job match to score (N/A)</option>
+                    <option value="no_requirements">No job linked (N/A)</option>
                   </select>
                   <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
                 </div>
@@ -540,6 +684,15 @@ const ApplicantsManagement = () => {
             <div className="flex items-center justify-center py-12">
               <p className="text-gray-500">Loading applications...</p>
             </div>
+          ) : listFetchError ? (
+            <div className="mx-4 my-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 lg:mx-6">
+              <p className="font-semibold">Could not load applications</p>
+              <p className="mt-1 text-red-800/90">{listFetchError}</p>
+              <p className="mt-2 text-xs text-red-800/80">
+                Check the browser console for details. If you recently changed the database, ensure migrations for job
+                scoring columns are applied.
+              </p>
+            </div>
           ) : applicationsByJob.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <p className="text-gray-500">No applications found</p>
@@ -581,7 +734,7 @@ const ApplicantsManagement = () => {
                                 type="button"
                                 onClick={() => handleSort('job_match')}
                                 className="flex items-center gap-1 cursor-pointer hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy/30 rounded"
-                                title="Sort by how well the applicant meets this job’s required documents and credentials"
+                                title="Sort by job match: required documents/credentials when set; otherwise the same resume-weighted score as the breakdown view"
                               >
                                 Job match
                                 <span className="material-symbols-outlined text-base">
@@ -660,7 +813,7 @@ const ApplicantsManagement = () => {
                                       ) : (
                                         <span
                                           className="text-xs text-gray-400"
-                                          title="This job has no required documents or credentials to score"
+                                          title="No job is linked to this application, so there is nothing to compare"
                                         >
                                           N/A
                                         </span>
