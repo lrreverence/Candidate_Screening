@@ -98,7 +98,8 @@ const ApplicationForm = () => {
 
         const startTime = Date.now()
 
-        // For persistence: profile/resume reads from applicants; start there.
+        // Personal Information is persisted on `users` by the save-applicant Edge Function.
+        // `applicants` exists for application tracking/documents linkage and may not contain these fields.
         const [{ data: applicantRow, error: applicantErr }, { data: profileRow, error: profileErr }] = await Promise.all([
           supabase
             .from('applicants')
@@ -127,30 +128,41 @@ const ApplicationForm = () => {
           console.error('[APPLICATION] Error loading user profile:', profileErr)
         }
 
-        const source = applicantRow || profileRow
-        if (source) {
-          console.log('[APPLICATION] Hydrating form from:', applicantRow ? 'applicants' : 'users')
+        const pick = (key, fallback = '') => {
+          const fromUsers = profileRow && Object.prototype.hasOwnProperty.call(profileRow, key) ? profileRow[key] : undefined
+          if (fromUsers !== undefined && fromUsers !== null && fromUsers !== '') return fromUsers
+          const fromApplicants =
+            applicantRow && Object.prototype.hasOwnProperty.call(applicantRow, key) ? applicantRow[key] : undefined
+          if (fromApplicants !== undefined && fromApplicants !== null && fromApplicants !== '') return fromApplicants
+          return fallback
+        }
+
+        if (applicantRow || profileRow) {
+          console.log('[APPLICATION] Hydrating form from users+applicants', {
+            hasApplicant: !!applicantRow,
+            hasProfile: !!profileRow,
+          })
           setFormData({
-            first_name: source.first_name || '',
-            middle_name: source.middle_name || '',
-            last_name: source.last_name || '',
-            name_extension: source.name_extension || '',
-            date_of_birth: source.date_of_birth || '',
-            gender: source.gender || '',
-            email: source.email || user.email || '',
-            phone_number: source.phone || source.phone_number || '',
+            first_name: pick('first_name', ''),
+            middle_name: pick('middle_name', ''),
+            last_name: pick('last_name', ''),
+            name_extension: pick('name_extension', ''),
+            date_of_birth: pick('date_of_birth', ''),
+            gender: pick('gender', ''),
+            email: pick('email', user.email || ''),
+            phone_number: pick('phone', pick('phone_number', '')),
             phone_number_alt: '',
-            street_address: source.street_address || '',
-            barangay: source.barangay || '',
-            city: source.city || '',
-            province: source.province || '',
-            zip_code: source.zip_code || '',
-            licenses: source.licenses || [],
-            height_cm: source.height_cm || '',
-            weight_kg: source.weight_kg || '',
-            civil_status: source.civil_status || '',
-            religion: source.religion || '',
-            languages_spoken: source.languages_spoken || [],
+            street_address: pick('street_address', ''),
+            barangay: pick('barangay', ''),
+            city: pick('city', ''),
+            province: pick('province', ''),
+            zip_code: pick('zip_code', ''),
+            licenses: pick('licenses', []),
+            height_cm: pick('height_cm', ''),
+            weight_kg: pick('weight_kg', ''),
+            civil_status: pick('civil_status', ''),
+            religion: pick('religion', ''),
+            languages_spoken: pick('languages_spoken', []),
           })
         } else {
           console.log('[APPLICATION] No existing rows found, using defaults')
@@ -219,6 +231,51 @@ const ApplicationForm = () => {
         return
       }
 
+      if (!user?.id) {
+        alert('Please log in to continue.')
+        return
+      }
+
+      // Persist Personal Information on `users` (source of truth; matches save-applicant Edge Function).
+      // Keep `applicants` for application tracking and linkage.
+      const userUpdatePayload = {
+        first_name: formData.first_name || null,
+        middle_name: formData.middle_name || null,
+        last_name: formData.last_name || null,
+        name_extension: formData.name_extension || null,
+        phone: formData.phone_number || null,
+        date_of_birth: formData.date_of_birth || null,
+        gender: formData.gender || null,
+        street_address: formData.street_address || null,
+        barangay: formData.barangay || null,
+        city: formData.city || null,
+        province: formData.province || null,
+        zip_code: formData.zip_code || null,
+        licenses: formData.licenses || [],
+        height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
+        weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
+        civil_status: formData.civil_status || null,
+        religion: formData.religion || null,
+        languages_spoken: formData.languages_spoken || [],
+        updated_at: new Date().toISOString(),
+      }
+
+      let { error: userUpdateError } = await supabase
+        .from('users')
+        .update(userUpdatePayload)
+        .eq('id', user.id)
+
+      if (userUpdateError && shouldRetryWithoutLanguagesSpoken(userUpdateError)) {
+        const { languages_spoken, ...fallbackPayload } = userUpdatePayload
+        const retry = await supabase
+          .from('users')
+          .update(fallbackPayload)
+          .eq('id', user.id)
+        userUpdateError = retry.error
+      }
+
+      if (userUpdateError) throw userUpdateError
+
       // Check if applicant exists
       let applicantId = null
       if (user?.id) {
@@ -236,25 +293,8 @@ const ApplicationForm = () => {
           applicantId = existingApplicant.id
           // Update applicant
           const updatePayload = {
-            first_name: formData.first_name,
-            middle_name: formData.middle_name || null,
-            last_name: formData.last_name,
-            name_extension: formData.name_extension || null,
             email: formData.email,
             phone: formData.phone_number,
-            date_of_birth: formData.date_of_birth || null,
-            gender: formData.gender || null,
-            street_address: formData.street_address || null,
-            barangay: formData.barangay || null,
-            city: formData.city || null,
-            province: formData.province || null,
-            zip_code: formData.zip_code || null,
-            licenses: formData.licenses || [],
-            height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-            weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-            civil_status: formData.civil_status || null,
-            religion: formData.religion || null,
-            languages_spoken: formData.languages_spoken || [],
           }
 
           const { error: updateError } = await supabase
@@ -262,14 +302,7 @@ const ApplicationForm = () => {
             .update(updatePayload)
             .eq('id', applicantId)
 
-          if (updateError && shouldRetryWithoutLanguagesSpoken(updateError)) {
-            const { languages_spoken, ...fallbackPayload } = updatePayload
-            const { error: fallbackError } = await supabase
-              .from('applicants')
-              .update(fallbackPayload)
-              .eq('id', applicantId)
-            if (fallbackError) throw fallbackError
-          } else if (updateError) {
+          if (updateError) {
             throw updateError
           }
         } else {
@@ -277,25 +310,8 @@ const ApplicationForm = () => {
           const tempRef = `TEMP-${Date.now()}`
           const insertPayload = {
             reference_code: tempRef,
-            first_name: formData.first_name,
-            middle_name: formData.middle_name || null,
-            last_name: formData.last_name,
-            name_extension: formData.name_extension || null,
             email: formData.email,
             phone: formData.phone_number || null,
-            date_of_birth: formData.date_of_birth || null,
-            gender: formData.gender || null,
-            street_address: formData.street_address || null,
-            barangay: formData.barangay || null,
-            city: formData.city || null,
-            province: formData.province || null,
-            zip_code: formData.zip_code || null,
-            licenses: formData.licenses || [],
-            height_cm: formData.height_cm ? parseInt(formData.height_cm) : null,
-            weight_kg: formData.weight_kg ? parseInt(formData.weight_kg) : null,
-            civil_status: formData.civil_status || null,
-            religion: formData.religion || null,
-            languages_spoken: formData.languages_spoken || [],
             user_id: user.id,
             status: 'PENDING'
           }
@@ -307,17 +323,6 @@ const ApplicationForm = () => {
             const { data, error } = await supabase
               .from('applicants')
               .insert(insertPayload)
-              .select()
-              .single()
-            newApplicant = data
-            applicantError = error
-          }
-
-          if (applicantError && shouldRetryWithoutLanguagesSpoken(applicantError)) {
-            const { languages_spoken, ...fallbackPayload } = insertPayload
-            const { data, error } = await supabase
-              .from('applicants')
-              .insert(fallbackPayload)
               .select()
               .single()
             newApplicant = data

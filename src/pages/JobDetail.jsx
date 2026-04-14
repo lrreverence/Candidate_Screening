@@ -9,6 +9,7 @@ import { useApplicantJobMatchInputs } from '../hooks/useApplicantJobMatchInputs'
 import { computeRequirementMatchPercent } from '../lib/jobMatchScore'
 import JobRequirementMatchPill from '../components/JobRequirementMatchPill'
 import { normalizeApplicationStatus } from '../lib/applicationStatus'
+import { normalizeOthersScoringFromJob } from '../lib/othersScoring'
 
 const APPLICATION_STATUS_LABELS = {
   NEW: { label: 'NEW — Awaiting review', icon: 'fiber_new', className: 'text-blue-400' },
@@ -43,6 +44,7 @@ function normalizeJobRow(foundJob, imageUrl) {
     }
     return []
   }
+  const othersScoring = normalizeOthersScoringFromJob(foundJob?.others_scoring ?? foundJob?.othersScoring)
   return {
     id: foundJob.id,
     title: foundJob.title,
@@ -62,7 +64,8 @@ function normalizeJobRow(foundJob, imageUrl) {
     responsibilities: toArray(foundJob.responsibilities),
     benefits: toArray(foundJob.benefits),
     required_documents: foundJob.required_documents,
-    required_credentials: foundJob.required_credentials
+    required_credentials: foundJob.required_credentials,
+    others_scoring: othersScoring,
   }
 }
 
@@ -315,6 +318,64 @@ const JobDetail = () => {
                       </li>
                     ))}
                   </ul>
+                </section>
+              )}
+
+              {/* Preferred (Others scoring) */}
+              {job.others_scoring &&
+                (job.others_scoring.skills?.length > 0 ||
+                  job.others_scoring.preferred_places?.length > 0 ||
+                  job.others_scoring.preferred_monthly_salary?.length > 0) && (
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4">Preferences</h2>
+
+                  {job.others_scoring.skills?.length > 0 && (
+                    <div className="mb-5">
+                      <h3 className="text-base font-semibold text-white mb-2">Skills needed</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {job.others_scoring.skills.map((s) => (
+                          <span
+                            key={s}
+                            className="inline-flex items-center rounded-full border border-secondary/60 bg-secondary/10 px-3 py-1 text-sm text-white"
+                          >
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {job.others_scoring.preferred_places?.length > 0 && (
+                    <div className="mb-5">
+                      <h3 className="text-base font-semibold text-white mb-2">Preferred places</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {job.others_scoring.preferred_places.map((p) => (
+                          <span
+                            key={p}
+                            className="inline-flex items-center rounded-full border border-secondary/60 bg-secondary/10 px-3 py-1 text-sm text-white"
+                          >
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {job.others_scoring.preferred_monthly_salary?.length > 0 && (
+                    <div>
+                      <h3 className="text-base font-semibold text-white mb-2">Preferred monthly salary</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {job.others_scoring.preferred_monthly_salary.map((r) => (
+                          <span
+                            key={r}
+                            className="inline-flex items-center rounded-full border border-secondary/60 bg-secondary/10 px-3 py-1 text-sm text-white"
+                          >
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </section>
               )}
             </div>

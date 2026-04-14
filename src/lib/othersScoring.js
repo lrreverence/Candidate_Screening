@@ -67,8 +67,21 @@ export function normalizeOthersScoringFromJob(raw) {
     can_start: { want_asap: false, want_date: '' },
     employment_types: [],
   }
-  if (!raw || typeof raw !== 'object') return base
-  const o = raw.others_scoring ?? raw
+  if (!raw) return base
+
+  // Some environments / older schemas may return json/jsonb columns as strings.
+  // Accept both object and JSON-string shapes.
+  let parsed = raw
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed)
+    } catch {
+      return base
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') return base
+
+  const o = parsed.others_scoring ?? parsed
   return {
     skills: uniqStrings(Array.isArray(o.skills) ? o.skills : []),
     preferred_places: uniqStrings(Array.isArray(o.preferred_places) ? o.preferred_places : []),

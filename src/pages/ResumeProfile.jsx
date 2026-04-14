@@ -58,6 +58,13 @@ const formatList = (value) => {
   return value.map((v) => String(v)).filter(Boolean).join(', ') || '—'
 }
 
+const pickPersonalValue = (applicant, profile, key) => {
+  const a = applicant && typeof applicant === 'object' ? applicant[key] : undefined
+  if (a !== undefined && a !== null && a !== '') return a
+  const p = profile && typeof profile === 'object' ? profile[key] : undefined
+  return p
+}
+
 /** PostgREST / Postgres when table missing or not in schema cache yet */
 const isSupabaseMissingTableError = (err) => {
   const code = String(err?.code || '')
@@ -452,6 +459,11 @@ const ResumeProfile = () => {
   const [others, setOthers] = useState(() => normalizeOthersState(null))
   const [othersBusy, setOthersBusy] = useState(false)
   const othersStorageKey = useMemo(() => (user?.id ? `resume_others_${user.id}` : 'resume_others'), [user?.id])
+  const [othersCustomDraft, setOthersCustomDraft] = useState({
+    skills: '',
+    preferred_places: '',
+    preferred_monthly_salary: '',
+  })
 
   const isApplyReviewRoute = routerLocation.pathname.startsWith('/profile/apply')
   const applyJobId = isApplyReviewRoute ? (routeParams.jobId ?? null) : null
@@ -911,6 +923,16 @@ const ResumeProfile = () => {
     }))
   }
 
+  const clearLicenseSlot = (key) => {
+    setCredentials((prev) => ({
+      ...prev,
+      licenses: {
+        ...normalizeLicensesMapFromInput(prev.licenses),
+        [key]: makeEmptyLicenseSlotRow(),
+      },
+    }))
+  }
+
   const addCredentialRow = (groupKey) => {
     if (groupKey !== 'trainings') return
     setCredentials((prev) => {
@@ -1024,10 +1046,23 @@ const ResumeProfile = () => {
       if (existing?.doc_id) {
         await supabase.from('documents').delete().eq('id', existing.doc_id)
       }
+
+      // Also remove persisted license row (otherwise application review may still read old expiry dates)
+      if (applicant?.id) {
+        const label = LICENSE_TYPES.find((t) => t.key === key)?.label || null
+        if (label) {
+          await supabase
+            .from('applicant_licenses')
+            .delete()
+            .eq('applicant_id', applicant.id)
+            .eq('category', label)
+        }
+      }
     } catch (err) {
       console.error('[RESUME_PROFILE] license remove error:', err)
     } finally {
-      setLicenseSlotField(key, 'attachment', null)
+      // "Remove" should clear the whole slot (dates + validity) not just the file
+      clearLicenseSlot(key)
       setLicenseUploadingKey(null)
     }
   }
@@ -1321,9 +1356,7 @@ const ResumeProfile = () => {
                     ? remaining >= 0
                       ? 'Valid'
                       : 'Expired'
-                    : row?.attachment
-                      ? 'Valid'
-                      : '—'
+                    : '—'
                 return (
                   <tr key={t.key}>
                     <td className="px-3 py-2 font-extrabold text-slate-900 dark:text-white whitespace-nowrap">{t.label}</td>
@@ -1493,9 +1526,7 @@ const ResumeProfile = () => {
                     ? remaining >= 0
                       ? 'Valid'
                       : 'Expired'
-                    : row?.attachment
-                      ? 'Valid'
-                      : '—'
+                    : '—'
                 return (
                   <tr key={t.key}>
                     <td className="px-3 py-2 font-extrabold text-slate-900 dark:text-white whitespace-nowrap">{t.label}</td>
@@ -1572,6 +1603,13 @@ const ResumeProfile = () => {
     setClearances((prev) => ({
       ...prev,
       [key]: { ...(prev?.[key] || makeEmptyClearanceRow()), [field]: value },
+    }))
+  }
+
+  const clearClearanceRow = (key) => {
+    setClearances((prev) => ({
+      ...prev,
+      [key]: makeEmptyClearanceRow(),
     }))
   }
 
@@ -1666,10 +1704,20 @@ const ResumeProfile = () => {
       if (existing?.doc_id) {
         await supabase.from('documents').delete().eq('id', existing.doc_id)
       }
+
+      // Also remove persisted clearance row (otherwise application review may still read old expiry dates)
+      if (applicant?.id) {
+        await supabase
+          .from('applicant_clearances')
+          .delete()
+          .eq('applicant_id', applicant.id)
+          .eq('clearance_type', key)
+      }
     } catch (err) {
       console.error('[RESUME_PROFILE] clearance remove error:', err)
     } finally {
-      setClearanceField(key, 'attachment', null)
+      // "Remove" should clear the whole row (dates + validity) not just the file
+      clearClearanceRow(key)
       setClearanceUploadingKey(null)
     }
   }
@@ -1727,6 +1775,17 @@ const ResumeProfile = () => {
       const nextArr = current.includes(v) ? current.filter((x) => x !== v) : [...current, v]
       return { ...prev, [key]: nextArr }
     })
+  }
+
+  const addCustomOthersItem = (key, raw) => {
+    const v = String(raw || '').trim()
+    if (!v) return
+    setOthers((prev) => {
+      const current = Array.isArray(prev?.[key]) ? prev[key] : []
+      if (current.includes(v)) return prev
+      return { ...prev, [key]: [...current, v] }
+    })
+    setOthersCustomDraft((d) => ({ ...d, [key]: '' }))
   }
 
   const toggleEmploymentType = (id) => {
@@ -1962,13 +2021,21 @@ const ResumeProfile = () => {
                             <div>
                               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Address</p>
                               <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                                {profile?.street_address ? (
+                                {pickPersonalValue(applicant, profile, 'street_address') ? (
                                   <>
-                                    {profile.street_address}
-                                    {profile.barangay ? `, ${profile.barangay}` : ''}
-                                    {profile.city ? `, ${profile.city}` : ''}
-                                    {profile.province ? `, ${profile.province}` : ''}
-                                    {profile.zip_code ? ` ${profile.zip_code}` : ''}
+                                    {pickPersonalValue(applicant, profile, 'street_address')}
+                                    {pickPersonalValue(applicant, profile, 'barangay')
+                                      ? `, ${pickPersonalValue(applicant, profile, 'barangay')}`
+                                      : ''}
+                                    {pickPersonalValue(applicant, profile, 'city')
+                                      ? `, ${pickPersonalValue(applicant, profile, 'city')}`
+                                      : ''}
+                                    {pickPersonalValue(applicant, profile, 'province')
+                                      ? `, ${pickPersonalValue(applicant, profile, 'province')}`
+                                      : ''}
+                                    {pickPersonalValue(applicant, profile, 'zip_code')
+                                      ? ` ${pickPersonalValue(applicant, profile, 'zip_code')}`
+                                      : ''}
                                   </>
                                 ) : (
                                   '—'
@@ -1983,31 +2050,45 @@ const ResumeProfile = () => {
                             </div>
                             <div>
                               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Date of birth</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{formatDate(profile?.date_of_birth)}</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                                {formatDate(pickPersonalValue(applicant, profile, 'date_of_birth'))}
+                              </p>
                             </div>
                             <div>
                               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Gender</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{profile?.gender || '—'}</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                                {pickPersonalValue(applicant, profile, 'gender') || '—'}
+                              </p>
                             </div>
                             <div>
                               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Civil status</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{profile?.civil_status || '—'}</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                                {pickPersonalValue(applicant, profile, 'civil_status') || '—'}
+                              </p>
                             </div>
                             <div>
                               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Religion</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{profile?.religion || '—'}</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                                {pickPersonalValue(applicant, profile, 'religion') || '—'}
+                              </p>
                             </div>
                             <div>
                               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Height</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{formatHeight(profile?.height_cm)}</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                                {formatHeight(pickPersonalValue(applicant, profile, 'height_cm'))}
+                              </p>
                             </div>
                             <div>
                               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Weight</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{formatWeight(profile?.weight_kg)}</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                                {formatWeight(pickPersonalValue(applicant, profile, 'weight_kg'))}
+                              </p>
                             </div>
                             <div className="sm:col-span-2">
                               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#93c5fd]/80">Languages spoken</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{formatList(profile?.languages_spoken)}</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                                {formatList(pickPersonalValue(applicant, profile, 'languages_spoken'))}
+                              </p>
                             </div>
                           </div>
                         ) : isApplyReviewRoute ? (
@@ -2135,9 +2216,7 @@ const ResumeProfile = () => {
                                         ? remaining >= 0
                                           ? 'VALID'
                                           : 'EXPIRED'
-                                        : row?.attachment
-                                          ? 'VALID'
-                                          : 'N/A'
+                                        : 'N/A'
                                     const inputId = `license-upload-${t.key}`
                                     const busy = licenseUploadingKey === t.key
                                     return (
@@ -2480,9 +2559,7 @@ const ResumeProfile = () => {
                                         ? remaining >= 0
                                           ? 'VALID'
                                           : 'EXPIRED'
-                                        : row?.attachment
-                                          ? 'VALID'
-                                          : 'N/A'
+                                        : 'N/A'
                                     const inputId = `clearance-upload-${t.key}`
                                     const busy = clearanceUploadingKey === t.key
                                     return (
@@ -2597,6 +2674,27 @@ const ResumeProfile = () => {
                                 <p className="mt-1 text-[12px] text-slate-600 dark:text-[#93c5fd]/80">You can select multiple skills.</p>
                               </div>
                               <div className="p-4 sm:p-5">
+                                {(others?.skills || []).length > 0 && (
+                                  <div className="mb-4">
+                                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80">
+                                      Selected
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {(others?.skills || []).map((v) => (
+                                        <button
+                                          key={v}
+                                          type="button"
+                                          onClick={() => toggleOthersArrayItem('skills', v)}
+                                          className="inline-flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-3 py-1.5 text-xs font-extrabold text-primary"
+                                          title="Remove"
+                                        >
+                                          <span className="material-symbols-outlined text-[16px]">close</span>
+                                          {v}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 <div className="flex flex-wrap gap-2">
                                   {SKILL_OPTIONS.map((opt) => {
                                     const active = (others?.skills || []).includes(opt)
@@ -2618,6 +2716,23 @@ const ResumeProfile = () => {
                                     )
                                   })}
                                 </div>
+
+                                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                                  <input
+                                    value={othersCustomDraft.skills}
+                                    onChange={(e) => setOthersCustomDraft((d) => ({ ...d, skills: e.target.value }))}
+                                    placeholder="Add your own skill"
+                                    className="flex-1 rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => addCustomOthersItem('skills', othersCustomDraft.skills)}
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-black text-[#0f172a] hover:bg-[#60a5fa] transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">add</span>
+                                    Add
+                                  </button>
+                                </div>
                               </div>
                             </div>
 
@@ -2627,6 +2742,27 @@ const ResumeProfile = () => {
                                 <p className="mt-1 text-[12px] text-slate-600 dark:text-[#93c5fd]/80">You can select multiple places.</p>
                               </div>
                               <div className="p-4 sm:p-5">
+                                {(others?.preferred_places || []).length > 0 && (
+                                  <div className="mb-4">
+                                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80">
+                                      Selected
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {(others?.preferred_places || []).map((v) => (
+                                        <button
+                                          key={v}
+                                          type="button"
+                                          onClick={() => toggleOthersArrayItem('preferred_places', v)}
+                                          className="inline-flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-3 py-1.5 text-xs font-extrabold text-primary"
+                                          title="Remove"
+                                        >
+                                          <span className="material-symbols-outlined text-[16px]">close</span>
+                                          {v}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                   {PLACE_OPTIONS.map((opt) => {
                                     const active = (others?.preferred_places || []).includes(opt)
@@ -2655,6 +2791,27 @@ const ResumeProfile = () => {
                                     )
                                   })}
                                 </div>
+
+                                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                                  <input
+                                    value={othersCustomDraft.preferred_places}
+                                    onChange={(e) =>
+                                      setOthersCustomDraft((d) => ({ ...d, preferred_places: e.target.value }))
+                                    }
+                                    placeholder="Add your own preferred place"
+                                    className="flex-1 rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      addCustomOthersItem('preferred_places', othersCustomDraft.preferred_places)
+                                    }
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-black text-[#0f172a] hover:bg-[#60a5fa] transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">add</span>
+                                    Add
+                                  </button>
+                                </div>
                               </div>
                             </div>
 
@@ -2664,6 +2821,27 @@ const ResumeProfile = () => {
                                 <p className="mt-1 text-[12px] text-slate-600 dark:text-[#93c5fd]/80">You can select multiple salary ranges.</p>
                               </div>
                               <div className="p-4 sm:p-5">
+                                {(others?.preferred_monthly_salary || []).length > 0 && (
+                                  <div className="mb-4">
+                                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-600 dark:text-[#93c5fd]/80">
+                                      Selected
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {(others?.preferred_monthly_salary || []).map((v) => (
+                                        <button
+                                          key={v}
+                                          type="button"
+                                          onClick={() => toggleOthersArrayItem('preferred_monthly_salary', v)}
+                                          className="inline-flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-3 py-1.5 text-xs font-extrabold text-primary"
+                                          title="Remove"
+                                        >
+                                          <span className="material-symbols-outlined text-[16px]">close</span>
+                                          {v}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                   {SALARY_OPTIONS.map((opt) => {
                                     const active = (others?.preferred_monthly_salary || []).includes(opt)
@@ -2689,6 +2867,33 @@ const ResumeProfile = () => {
                                       </button>
                                     )
                                   })}
+                                </div>
+
+                                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                                  <input
+                                    value={othersCustomDraft.preferred_monthly_salary}
+                                    onChange={(e) =>
+                                      setOthersCustomDraft((d) => ({
+                                        ...d,
+                                        preferred_monthly_salary: e.target.value,
+                                      }))
+                                    }
+                                    placeholder="Add your own salary range label"
+                                    className="flex-1 rounded-lg border border-gray-300 dark:border-[#1e40af]/60 bg-white dark:bg-[#111827] px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      addCustomOthersItem(
+                                        'preferred_monthly_salary',
+                                        othersCustomDraft.preferred_monthly_salary
+                                      )
+                                    }
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-black text-[#0f172a] hover:bg-[#60a5fa] transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">add</span>
+                                    Add
+                                  </button>
                                 </div>
                               </div>
                             </div>
