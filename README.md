@@ -121,7 +121,7 @@ The app will work with the default credentials if no `.env.local` file is presen
 
 ## Applicant status email notifications (Resend)
 
-When an admin marks an application as **INTERVIEW**, **HIRED**, or **REJECTED**, the app calls the **Vercel serverless route** `api/notify-application-status.js`, which sends email via Resend (no Supabase Edge Function).
+When an admin marks an application as **INTERVIEW**, **HIRED**, or **REJECTED**, the app calls the **Vercel Function** at `api/notify-application-status.js` (Web `fetch` handler), which sends email via Resend (no Supabase Edge Function).
 
 Set these in **Vercel → Project → Environment Variables** (server-side; do not prefix with `VITE_` except where noted):
 

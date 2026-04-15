@@ -15,7 +15,13 @@ import { OTHERS_EMPLOYMENT_TYPE_OPTIONS } from '../../lib/othersScoring'
 async function notifyApplicantByEmail({ applicationId, status }) {
   const base = String(import.meta.env.VITE_NOTIFY_API_BASE || '').replace(/\/$/, '')
   const path = '/api/notify-application-status'
-  const url = base ? `${base}${path}` : path
+  const url = base ? `${base}${path}` : `${typeof window !== 'undefined' ? window.location.origin : ''}${path}`
+
+  try {
+    await supabase.auth.refreshSession()
+  } catch (e) {
+    console.warn('[ApplicantDetailView] refreshSession before notify', e)
+  }
 
   const { data: sessionData } = await supabase.auth.getSession()
   const token = sessionData?.session?.access_token
@@ -34,7 +40,14 @@ async function notifyApplicantByEmail({ applicationId, status }) {
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    console.warn('[ApplicantDetailView] Email notify failed', res.status, text)
+    let detail = text
+    try {
+      const j = JSON.parse(text)
+      if (j?.error) detail = j.error
+    } catch {
+      /* keep raw */
+    }
+    console.warn('[ApplicantDetailView] Email notify failed', res.status, detail)
   }
 }
 

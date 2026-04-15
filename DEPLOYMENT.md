@@ -73,7 +73,7 @@ The following environment variables can be set in Vercel:
 
 ## Vercel serverless API (Resend email notifications)
 
-Applicant status emails (INTERVIEW / HIRED / REJECTED) are sent by **`api/notify-application-status.js`** on Vercel using Resend (not Supabase Edge Functions).
+Applicant status emails (INTERVIEW / HIRED / REJECTED) are sent by **`api/notify-application-status.js`** on Vercel using Resend. The handler must use Vercel’s **`export default { fetch(request) { … } }`** shape (not legacy `req, res`), or production will fall through to the SPA and the route will not run.
 
 Add these in **Vercel → Environment Variables**:
 
