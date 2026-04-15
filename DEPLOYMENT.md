@@ -71,6 +71,19 @@ The following environment variables can be set in Vercel:
 
 **Note:** In Vercel, environment variables starting with `VITE_` are automatically exposed to the client-side code.
 
+## Vercel serverless API (Resend email notifications)
+
+Applicant status emails (INTERVIEW / HIRED / REJECTED) are sent by **`api/notify-application-status.js`** on Vercel using Resend (not Supabase Edge Functions).
+
+Add these in **Vercel → Environment Variables**:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM` (example: `E Power Security <noreply@caesarisidrovaay.online>` — verify `caesarisidrovaay.online` in Resend and set the matching DNS records first)
+- `SUPABASE_SERVICE_ROLE_KEY` (server only)
+- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (same as the frontend), **or** `SUPABASE_URL` / `SUPABASE_ANON_KEY` with the same values
+
+The handler checks the caller’s Supabase JWT and requires `users.role === 'admin'` before sending.
+
 ## Build Configuration
 
 The project is configured with `vercel.json`:

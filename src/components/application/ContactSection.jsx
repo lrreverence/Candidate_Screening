@@ -20,14 +20,15 @@ const ContactSection = ({ formData, handleChange }) => {
             name="email"
             value={formData.email}
             onChange={handleChange}
-            placeholder="name@gmail.com or name@yahoo.com"
-            type="email"
-            pattern="^[^@\s]+@(?:gmail\.com|yahoo\.com)$"
-            title="Please use an email ending in @gmail.com or @yahoo.com"
+            placeholder="you@example.com"
+            type="text"
+            inputMode="email"
+            autoComplete="email"
+            title="Include an @ in your email (for example you@company.com)"
             required
           />
           <p className="text-xs ml-2 text-gray-500 dark:text-gray-400">
-            Required format: <span className="font-semibold">@gmail.com</span> or <span className="font-semibold">@yahoo.com</span>
+            Use any email you check regularly; it must include an <span className="font-semibold">@</span> and a domain.
           </p>
         </div>
         <div className="flex flex-col gap-2">

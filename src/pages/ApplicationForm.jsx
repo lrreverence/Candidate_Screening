@@ -12,7 +12,6 @@ import ApplicationHelp from '../components/application/ApplicationHelp'
 
 const ApplicationForm = () => {
   const MAX_AGE = 65
-  const ALLOWED_EMAIL_DOMAINS = ['gmail.com', 'yahoo.com']
 
   const navigate = useNavigate()
   const { jobId } = useParams()
@@ -214,20 +213,18 @@ const ApplicationForm = () => {
     return age >= 0 ? age : null
   }
 
-  const isAllowedEmail = (email) => {
+  const isValidEmailShape = (email) => {
     if (!email) return false
-    const normalized = String(email).trim().toLowerCase()
-    const atIndex = normalized.lastIndexOf('@')
-    if (atIndex <= 0) return false
-    const domain = normalized.slice(atIndex + 1)
-    return ALLOWED_EMAIL_DOMAINS.includes(domain)
+    const s = String(email).trim()
+    const at = s.indexOf('@')
+    return at > 0 && at < s.length - 1
   }
 
   const handleSaveDraft = async () => {
     setSaving(true)
     try {
-      if (!isAllowedEmail(formData.email)) {
-        alert(`Email must end with @gmail.com or @yahoo.com`)
+      if (!isValidEmailShape(formData.email)) {
+        alert('Please enter an email address that includes @ (for example you@company.com).')
         return
       }
 
@@ -393,8 +390,8 @@ const ApplicationForm = () => {
       alert('Please fill in all required fields (First Name, Last Name, Email)')
       return
     }
-    if (!isAllowedEmail(formData.email)) {
-      alert('Email must end with @gmail.com or @yahoo.com')
+    if (!isValidEmailShape(formData.email)) {
+      alert('Please enter an email address that includes @ (for example you@company.com).')
       return
     }
     if (!isValidPhilippineMobile(formData.phone_number)) {

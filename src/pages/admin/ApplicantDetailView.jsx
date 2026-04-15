@@ -12,6 +12,32 @@ import {
 } from '../../lib/adminApplicationResumeBundle'
 import { OTHERS_EMPLOYMENT_TYPE_OPTIONS } from '../../lib/othersScoring'
 
+async function notifyApplicantByEmail({ applicationId, status }) {
+  const base = String(import.meta.env.VITE_NOTIFY_API_BASE || '').replace(/\/$/, '')
+  const path = '/api/notify-application-status'
+  const url = base ? `${base}${path}` : path
+
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData?.session?.access_token
+  if (!token) {
+    console.warn('[ApplicantDetailView] Skipping email notify: no admin session token')
+    return
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ applicationId, status }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    console.warn('[ApplicantDetailView] Email notify failed', res.status, text)
+  }
+}
+
 const ApplicantDetailView = () => {
   const { id } = useParams()
   const [application, setApplication] = useState(null)
@@ -235,6 +261,12 @@ const ApplicantDetailView = () => {
         .eq('id', id)
 
       if (error) throw error
+
+      try {
+        await notifyApplicantByEmail({ applicationId: id, status: 'INTERVIEW' })
+      } catch (e) {
+        console.warn('[ApplicantDetailView] notify INTERVIEW failed', e)
+      }
       await fetchApplication()
       await loadResumeBundle()
       alert('Status updated to INTERVIEW.')
@@ -265,6 +297,12 @@ const ApplicantDetailView = () => {
         .eq('id', id)
 
       if (error) throw error
+
+      try {
+        await notifyApplicantByEmail({ applicationId: id, status: 'REJECTED' })
+      } catch (e) {
+        console.warn('[ApplicantDetailView] notify REJECTED failed', e)
+      }
       await fetchApplication()
       await loadResumeBundle()
       alert('Status updated to REJECTED.')
@@ -291,6 +329,12 @@ const ApplicantDetailView = () => {
         .eq('id', id)
 
       if (error) throw error
+
+      try {
+        await notifyApplicantByEmail({ applicationId: id, status: 'HIRED' })
+      } catch (e) {
+        console.warn('[ApplicantDetailView] notify HIRED failed', e)
+      }
       await fetchApplication()
       await loadResumeBundle()
       alert('Status updated to HIRED.')

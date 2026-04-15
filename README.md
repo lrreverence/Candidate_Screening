@@ -119,6 +119,19 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 The app will work with the default credentials if no `.env.local` file is present.
 
+## Applicant status email notifications (Resend)
+
+When an admin marks an application as **INTERVIEW**, **HIRED**, or **REJECTED**, the app calls the **Vercel serverless route** `api/notify-application-status.js`, which sends email via Resend (no Supabase Edge Function).
+
+Set these in **Vercel → Project → Environment Variables** (server-side; do not prefix with `VITE_` except where noted):
+
+- `RESEND_API_KEY`
+- `RESEND_FROM` (example: `E Power Security <noreply@caesarisidrovaay.online>` — add this domain in [Resend Domains](https://resend.com/domains) and complete DNS before sending)
+- `SUPABASE_SERVICE_ROLE_KEY` (server only; used to load applicant email after admin auth)
+- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (already used by the app; the API route reads the same names), **or** set `SUPABASE_URL` / `SUPABASE_ANON_KEY` to the same values if you prefer non-`VITE_` names on the server
+
+Optional for **local dev** (`npm run dev`): run `vercel dev` on port **3000** so `/api` is proxied from Vite, or set `VITE_NOTIFY_API_BASE` to your deployed site origin (for example `https://your-app.vercel.app`) while testing emails.
+
 ### Database Schema
 
 The `jobs` table includes:
