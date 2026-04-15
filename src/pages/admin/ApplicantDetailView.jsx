@@ -17,12 +17,6 @@ async function notifyApplicantByEmail({ applicationId, status }) {
   const path = '/api/notify-application-status'
   const url = base ? `${base}${path}` : `${typeof window !== 'undefined' ? window.location.origin : ''}${path}`
 
-  try {
-    await supabase.auth.refreshSession()
-  } catch (e) {
-    console.warn('[ApplicantDetailView] refreshSession before notify', e)
-  }
-
   const { data: sessionData } = await supabase.auth.getSession()
   const token = sessionData?.session?.access_token
   if (!token) {

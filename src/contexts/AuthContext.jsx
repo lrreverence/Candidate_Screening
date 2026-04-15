@@ -159,7 +159,9 @@ const AuthProvider = ({ children }) => {
       setUserProfile(profile)
     } catch (error) {
       console.error('[AUTH] Error fetching user profile:', error)
-      setUserProfile(null)
+      // Keep last known profile for this user instead of clearing — avoids losing
+      // `public.users.role` when a refetch fails (e.g. slow network after TOKEN_REFRESHED).
+      setUserProfile((prev) => (prev?.id === userId ? prev : null))
     }
   }
 
@@ -215,6 +217,14 @@ const AuthProvider = ({ children }) => {
       setSession(session)
       setUser(session?.user ?? null)
 
+      // Access token rotation does not change identity or DB role. Re-loading the profile
+      // here can race or time out; session JWT rarely includes `users.role`, so the fallback
+      // would wrongly mark admins as applicants and `/admin` redirects to `/`.
+      if (_event === 'TOKEN_REFRESHED') {
+        setLoading(false)
+        return
+      }
+
       try {
         if (session?.user) {
           // Add timeout to prevent hanging forever - pass session to avoid re-fetching
@@ -229,12 +239,15 @@ const AuthProvider = ({ children }) => {
         }
       } catch (error) {
         console.error('[AUTH] Error in auth state change profile fetch:', error)
-        // Set a minimal fallback profile to prevent blocking
+        // Prefer keeping the last loaded DB profile over JWT-only role (often missing for admins).
         if (session?.user) {
-          setUserProfile({
-            id: session.user.id,
-            email: session.user.email,
-            role: session.user.user_metadata?.role || 'applicant'
+          setUserProfile((prev) => {
+            if (prev?.id === session.user.id) return prev
+            return {
+              id: session.user.id,
+              email: session.user.email,
+              role: session.user.user_metadata?.role || 'applicant',
+            }
           })
         }
       } finally {
