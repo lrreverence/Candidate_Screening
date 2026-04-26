@@ -3,12 +3,14 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import AdminNotificationBell from '../../components/admin/AdminNotificationBell'
 import AdminHelpButton from '../../components/admin/AdminHelpButton'
+import { createAdminDataBackupZip } from '../../lib/adminDataBackup'
 
 const Settings = () => {
   const { user, userProfile, refreshUserProfile } = useAuth()
   const [activeTab, setActiveTab] = useState('profile')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
+  const [backupStatus, setBackupStatus] = useState({ running: false, error: '' })
 
   // Profile settings
   const [profileData, setProfileData] = useState({
@@ -96,6 +98,35 @@ const Settings = () => {
       setMessage({ type: 'error', text: 'Failed to update system settings. Please try again.' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDownloadBackup = async () => {
+    setBackupStatus({ running: true, error: '' })
+    setMessage({ type: '', text: '' })
+
+    try {
+      // Ensure we have an active session (and therefore authenticated RLS access)
+      const { data, error } = await supabase.auth.getSession()
+      if (error) throw error
+      if (!data?.session) {
+        setBackupStatus({ running: false, error: 'You must be signed in as an admin to download a backup.' })
+        return
+      }
+
+      const manifest = await createAdminDataBackupZip()
+      setMessage({
+        type: 'success',
+        text: `Backup downloaded successfully (${Object.keys(manifest.tables).length} tables).`
+      })
+    } catch (error) {
+      console.error('Backup failed:', error)
+      setBackupStatus({
+        running: false,
+        error: error?.message || 'Backup failed. Please try again.'
+      })
+    } finally {
+      setBackupStatus(prev => ({ ...prev, running: false }))
     }
   }
 
@@ -309,6 +340,33 @@ const Settings = () => {
                       >
                         {saving ? 'Saving...' : 'Save Changes'}
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Data Backup */}
+                  <div className="border-t border-gray-200 pt-6">
+                    <h4 className="text-base font-bold text-navy mb-2">Data Backup</h4>
+                    <p className="text-xs text-gray-600 mb-4">
+                      Download a ZIP backup of system data (tables exported as JSON). Keep this file secure.
+                    </p>
+
+                    {backupStatus.error && (
+                      <div className="mb-4 p-3 rounded-md bg-red-50 text-red-800 text-sm">
+                        {backupStatus.error}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                      <button
+                        onClick={handleDownloadBackup}
+                        disabled={backupStatus.running}
+                        className="w-full sm:w-auto px-5 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-2 disabled:opacity-50"
+                      >
+                        {backupStatus.running ? 'Preparing backup…' : 'Download Backup (ZIP)'}
+                      </button>
+                      <div className="text-xs text-gray-500">
+                        Includes: jobs, applicants, applications, documents, licenses, trainings, employment records, clearances, others, users.
+                      </div>
                     </div>
                   </div>
                 </div>

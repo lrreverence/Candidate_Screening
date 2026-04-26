@@ -299,7 +299,7 @@ const Reports = () => {
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-[#f3f4f6]">
       {/* Top Navigation Bar */}
-      <header className="hidden lg:flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-8 shadow-sm">
+      <header className="hidden lg:flex sticky top-0 z-30 min-h-16 items-center justify-between border-b border-gray-200 bg-white px-4 py-3 lg:px-8 shadow-sm">
         <div>
           <h2 className="text-lg lg:text-xl font-bold text-navy">Reports</h2>
           <p className="text-xs text-gray-500 hidden sm:block">Data analysis and charts for your hiring pipeline</p>

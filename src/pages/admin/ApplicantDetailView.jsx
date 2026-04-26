@@ -1006,7 +1006,6 @@ const ApplicantDetailView = () => {
                       {applicant?.name_extension ? ` ${applicant.name_extension}` : ''}
                     </h1>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">Tag</span>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"

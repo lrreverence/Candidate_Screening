@@ -735,7 +735,9 @@ const ApplicantsManagement = () => {
                         <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                           <tr className="border-b border-gray-200">
                             <th className="px-6 py-4 font-semibold tracking-wider">Applicant Name</th>
-                            <th className="px-6 py-4 font-semibold tracking-wider">Tag</th>
+                            <th className="px-6 py-4 font-semibold tracking-wider">
+                              <span className="sr-only">Tag</span>
+                            </th>
                             <th className="px-6 py-4 font-semibold tracking-wider">
                               <button
                                 type="button"
