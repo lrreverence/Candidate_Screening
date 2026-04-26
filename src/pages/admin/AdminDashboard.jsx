@@ -7,6 +7,7 @@ import ApplicantsManagement from './ApplicantsManagement'
 import ApplicantDetailView from './ApplicantDetailView'
 import JobsManagement from './JobsManagement'
 import Settings from './Settings'
+import Reports from './Reports'
 
 const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -45,6 +46,7 @@ const AdminDashboard = () => {
           <Route index element={<Dashboard />} />
           <Route path="applicants" element={<ApplicantsManagement />} />
           <Route path="jobs" element={<JobsManagement />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

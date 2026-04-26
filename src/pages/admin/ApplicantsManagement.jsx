@@ -89,6 +89,7 @@ const APPLICATIONS_LIST_SELECT_FULL = `
     phone,
     reference_code,
     status,
+    tag_mark,
     license_status,
     licenses,
     user_id,
@@ -129,6 +130,7 @@ const APPLICATIONS_LIST_SELECT_JOBS_MINIMAL = `
     phone,
     reference_code,
     status,
+    tag_mark,
     license_status,
     licenses,
     user_id,
@@ -162,6 +164,7 @@ const APPLICATIONS_LIST_SELECT_LEGACY = `
     phone,
     reference_code,
     status,
+    tag_mark,
     license_status,
     licenses,
     documents (file_type, application_id)
@@ -374,6 +377,30 @@ const ApplicantsManagement = () => {
     } catch (err) {
       console.error('Error updating application status:', err)
       alert(`Failed to update application: ${err?.message || 'Please try again.'}`)
+    }
+  }
+
+  const handleSetApplicantTagMark = async (app, nextTag) => {
+    const applicantId = app?.applicants?.id
+    if (!applicantId) return
+    try {
+      const current = app?.applicants?.tag_mark || null
+      const tagToSet = current === nextTag ? null : nextTag
+      const { error } = await supabase
+        .from('applicants')
+        .update({ tag_mark: tagToSet, updated_at: new Date().toISOString() })
+        .eq('id', applicantId)
+      if (error) throw error
+      setApplications((prev) =>
+        (prev || []).map((row) =>
+          row?.id === app?.id
+            ? { ...row, applicants: { ...row.applicants, tag_mark: tagToSet } }
+            : row
+        )
+      )
+    } catch (err) {
+      console.error('Error updating applicant tag:', err)
+      alert(`Failed to update tag: ${err?.message || 'Please try again.'}`)
     }
   }
 
@@ -708,6 +735,7 @@ const ApplicantsManagement = () => {
                         <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                           <tr className="border-b border-gray-200">
                             <th className="px-6 py-4 font-semibold tracking-wider">Applicant Name</th>
+                            <th className="px-6 py-4 font-semibold tracking-wider">Tag</th>
                             <th className="px-6 py-4 font-semibold tracking-wider">
                               <button
                                 type="button"
@@ -751,6 +779,7 @@ const ApplicantsManagement = () => {
                             const applicant = app.applicants
                             const matchPct = getApplicationJobMatchPercent(app)
                             const isNew = isApplicationStatusNew(app.status)
+                            const tag = applicant?.tag_mark || null
                             return (
                               <tr key={app.id} className="group hover:bg-blue-50/30 transition-colors">
                                 <td className="whitespace-nowrap px-6 py-4">
@@ -764,6 +793,49 @@ const ApplicantsManagement = () => {
                                       </div>
                                       <div className="text-xs text-gray-500">ID: {applicant?.reference_code || `APP-${app.id}`}</div>
                                     </div>
+                                  </div>
+                                </td>
+                                <td className="whitespace-nowrap px-6 py-4">
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetApplicantTagMark(app, 'heart')}
+                                      className={`rounded-md p-1.5 transition-colors ${
+                                        tag === 'heart'
+                                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                                          : 'text-gray-400 hover:bg-gray-50 hover:text-rose-600'
+                                      }`}
+                                      title={tag === 'heart' ? 'Clear heart tag' : 'Tag as heart'}
+                                      aria-label={tag === 'heart' ? 'Clear heart tag' : 'Tag as heart'}
+                                    >
+                                      <span className="material-symbols-outlined text-[20px]">favorite</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetApplicantTagMark(app, 'star')}
+                                      className={`rounded-md p-1.5 transition-colors ${
+                                        tag === 'star'
+                                          ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'
+                                          : 'text-gray-400 hover:bg-gray-50 hover:text-amber-600'
+                                      }`}
+                                      title={tag === 'star' ? 'Clear star tag' : 'Tag as star'}
+                                      aria-label={tag === 'star' ? 'Clear star tag' : 'Tag as star'}
+                                    >
+                                      <span className="material-symbols-outlined text-[20px]">star</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetApplicantTagMark(app, 'flag')}
+                                      className={`rounded-md p-1.5 transition-colors ${
+                                        tag === 'flag'
+                                          ? 'bg-sky-50 text-sky-800 ring-1 ring-sky-200'
+                                          : 'text-gray-400 hover:bg-gray-50 hover:text-sky-700'
+                                      }`}
+                                      title={tag === 'flag' ? 'Clear flag tag' : 'Tag as flag'}
+                                      aria-label={tag === 'flag' ? 'Clear flag tag' : 'Tag as flag'}
+                                    >
+                                      <span className="material-symbols-outlined text-[20px]">flag</span>
+                                    </button>
                                   </div>
                                 </td>
                                 <td className="whitespace-nowrap px-6 py-4 text-gray-700">

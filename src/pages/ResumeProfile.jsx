@@ -442,6 +442,10 @@ const ResumeProfile = () => {
   const [applicant, setApplicant] = useState(null)
   const [profile, setProfile] = useState(null)
   const [photoUrl, setPhotoUrl] = useState(null)
+  const [resumeDoc, setResumeDoc] = useState(null) // { id, file_path, file_name, created_at, signedUrl }
+  const [resumeTabOpen, setResumeTabOpen] = useState(false)
+  const [resumeSelectedFile, setResumeSelectedFile] = useState(null)
+  const [resumeBusy, setResumeBusy] = useState(false)
   const [expandedKey, setExpandedKey] = useState(null)
 
   const [education, setEducation] = useState(() => normalizeEducationState(null))
@@ -572,12 +576,13 @@ const ResumeProfile = () => {
 
         if (!a?.id) {
           setPhotoUrl(null)
+          setResumeDoc(null)
           return
         }
 
         const { data: docs, error: docError } = await supabase
           .from('documents')
-          .select('file_path,file_type,created_at')
+          .select('id,file_path,file_name,file_type,file_size,mime_type,created_at')
           .eq('applicant_id', a.id)
           .order('created_at', { ascending: false })
 
@@ -587,19 +592,34 @@ const ResumeProfile = () => {
         const photoDoc = (docs || []).find((d) => d.file_type === '2x2_ID_PICTURE' || d.file_type === 'IDPhoto')
         if (!photoDoc?.file_path) {
           setPhotoUrl(null)
-          return
+        } else {
+          const bucket = photoDoc.file_type === '2x2_ID_PICTURE' ? 'id-pictures' : 'resumes'
+          const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(photoDoc.file_path, 3600)
+          if (!cancelled) setPhotoUrl(signed?.signedUrl || null)
         }
 
-        const bucket = photoDoc.file_type === '2x2_ID_PICTURE' ? 'id-pictures' : 'resumes'
-        const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(photoDoc.file_path, 3600)
-        if (cancelled) return
-        setPhotoUrl(signed?.signedUrl || null)
+        const resume = (docs || []).find((d) => String(d?.file_type || '').toUpperCase() === 'RESUME')
+        if (!resume?.file_path) {
+          setResumeDoc(null)
+        } else {
+          const { data: signed } = await supabase.storage.from('resumes').createSignedUrl(resume.file_path, 3600)
+          if (!cancelled) {
+            setResumeDoc({
+              id: resume.id,
+              file_path: resume.file_path,
+              file_name: resume.file_name || 'Resume.pdf',
+              created_at: resume.created_at,
+              signedUrl: signed?.signedUrl || null,
+            })
+          }
+        }
       } catch (e) {
         if (!cancelled) {
           console.error('[RESUME_PROFILE] Load error:', e)
           setApplicant(null)
           setProfile(null)
           setPhotoUrl(null)
+          setResumeDoc(null)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -611,6 +631,110 @@ const ResumeProfile = () => {
       cancelled = true
     }
   }, [user?.id])
+
+  const validateResumeFile = (file) => {
+    if (!file) return 'Please select a PDF file.'
+    const maxSize = 10 * 1024 * 1024
+    if (file.size > maxSize) return 'File size exceeds 10MB. Please upload a smaller PDF.'
+    const isPdf = file.type === 'application/pdf' || String(file.name || '').toLowerCase().endsWith('.pdf')
+    if (!isPdf) return 'Only PDF resumes are allowed.'
+    return null
+  }
+
+  const uploadResume = async () => {
+    if (!user?.id || !applicant?.id) {
+      alert('You must be logged in to upload a resume.')
+      return
+    }
+
+    const errMsg = validateResumeFile(resumeSelectedFile)
+    if (errMsg) {
+      alert(errMsg)
+      return
+    }
+
+    setResumeBusy(true)
+    try {
+      // Single-slot: remove previous resume first
+      if (resumeDoc?.file_path) {
+        try {
+          await supabase.storage.from('resumes').remove([resumeDoc.file_path])
+        } catch {
+          // ignore
+        }
+        if (resumeDoc?.id) {
+          await supabase.from('documents').delete().eq('id', resumeDoc.id)
+        } else {
+          await supabase.from('documents').delete().eq('applicant_id', applicant.id).ilike('file_type', 'resume')
+        }
+      }
+
+      const safeName = String(resumeSelectedFile.name || 'resume.pdf').replace(/[^a-zA-Z0-9.-]/g, '_')
+      const filePath = `${user.id}/resume_${Date.now()}_${safeName}`
+      const { error: uploadErr } = await supabase.storage.from('resumes').upload(filePath, resumeSelectedFile, {
+        cacheControl: '3600',
+        upsert: false,
+      })
+      if (uploadErr) throw uploadErr
+
+      const { data: inserted, error: insErr } = await supabase
+        .from('documents')
+        .insert({
+          applicant_id: applicant.id,
+          file_path: filePath,
+          file_name: resumeSelectedFile.name,
+          file_type: 'RESUME',
+          file_size: resumeSelectedFile.size,
+          mime_type: resumeSelectedFile.type || 'application/pdf',
+        })
+        .select('id,file_path,file_name,created_at')
+        .single()
+      if (insErr) throw insErr
+
+      const { data: signed } = await supabase.storage.from('resumes').createSignedUrl(filePath, 3600)
+      setResumeDoc({
+        id: inserted?.id,
+        file_path: inserted?.file_path || filePath,
+        file_name: inserted?.file_name || resumeSelectedFile.name,
+        created_at: inserted?.created_at || new Date().toISOString(),
+        signedUrl: signed?.signedUrl || null,
+      })
+
+      setResumeSelectedFile(null)
+      alert('Resume uploaded.')
+    } catch (err) {
+      console.error('[RESUME_PROFILE] resume upload error:', err)
+      alert(`Upload failed: ${err?.message || 'Unknown error'}`)
+    } finally {
+      setResumeBusy(false)
+    }
+  }
+
+  const removeResume = async () => {
+    if (!applicant?.id) return
+    if (!resumeDoc?.file_path && !resumeDoc?.id) return
+    if (!confirm('Remove your uploaded resume?')) return
+
+    setResumeBusy(true)
+    try {
+      if (resumeDoc?.file_path) {
+        await supabase.storage.from('resumes').remove([resumeDoc.file_path])
+      }
+      if (resumeDoc?.id) {
+        await supabase.from('documents').delete().eq('id', resumeDoc.id)
+      } else {
+        await supabase.from('documents').delete().eq('applicant_id', applicant.id).ilike('file_type', 'resume')
+      }
+      setResumeDoc(null)
+      setResumeSelectedFile(null)
+      alert('Resume removed.')
+    } catch (err) {
+      console.error('[RESUME_PROFILE] resume remove error:', err)
+      alert(`Remove failed: ${err?.message || 'Unknown error'}`)
+    } finally {
+      setResumeBusy(false)
+    }
+  }
 
   useEffect(() => {
     const loadEducation = async () => {
@@ -3169,6 +3293,85 @@ const ResumeProfile = () => {
           </div>
         )}
       </main>
+
+      {/* Resume upload tab (bottom-left) */}
+      {!!user?.id && !loading && (
+        <div className="fixed bottom-4 left-4 z-50">
+          <div className="w-[280px] sm:w-[320px]">
+            <button
+              type="button"
+              onClick={() => setResumeTabOpen((v) => !v)}
+              className="w-full inline-flex items-center justify-between rounded-xl border border-gray-200 dark:border-white/15 bg-white/90 dark:bg-[#0b1220]/90 backdrop-blur px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.35)] hover:bg-white dark:hover:bg-white/10 transition-colors"
+            >
+              <span className="inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-900 dark:text-white">
+                <span className="material-symbols-outlined text-[18px] text-slate-600 dark:text-[#93c5fd]">upload_file</span>
+                Resume
+              </span>
+              <span className="material-symbols-outlined text-[20px] text-slate-600 dark:text-[#93c5fd]">
+                {resumeTabOpen ? 'expand_more' : 'chevron_right'}
+              </span>
+            </button>
+
+            {resumeTabOpen && (
+              <div className="mt-2 rounded-xl border border-gray-200 dark:border-white/15 bg-white dark:bg-[#0b1220] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-[#93c5fd]/80">Upload PDF only</p>
+
+                <div className="mt-3 space-y-3">
+                  {resumeDoc?.file_path ? (
+                    <div className="rounded-lg border border-gray-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{resumeDoc.file_name || 'Resume.pdf'}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-600 dark:text-[#93c5fd]/80">
+                        Uploaded: {resumeDoc.created_at ? formatDate(resumeDoc.created_at) : '—'}
+                      </p>
+                      {resumeDoc.signedUrl && (
+                        <a
+                          href={resumeDoc.signedUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">download</span>
+                          Download
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-gray-300 dark:border-white/15 bg-slate-50 dark:bg-white/5 px-3 py-3">
+                      <input
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        disabled={resumeBusy}
+                        onChange={(e) => setResumeSelectedFile(e.target.files?.[0] || null)}
+                        className="block w-full text-xs text-slate-700 dark:text-[#93c5fd] file:mr-3 file:rounded-full file:border-0 file:bg-primary file:px-4 file:py-1.5 file:text-xs file:font-extrabold file:text-[#0f172a] hover:file:bg-blue-400"
+                      />
+                      <p className="mt-2 text-[11px] text-slate-600 dark:text-[#93c5fd]/80">Max 10MB. PDF resume only.</p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={uploadResume}
+                      disabled={resumeBusy || !!resumeDoc?.file_path || !resumeSelectedFile}
+                      className="inline-flex h-9 flex-1 items-center justify-center rounded-full bg-primary px-4 text-xs font-extrabold text-[#0f172a] hover:bg-blue-400 disabled:opacity-50 disabled:hover:bg-primary transition-colors"
+                    >
+                      {resumeBusy ? 'Working…' : 'Upload'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={removeResume}
+                      disabled={resumeBusy || !resumeDoc?.file_path}
+                      className="inline-flex h-9 flex-1 items-center justify-center rounded-full border border-gray-200 dark:border-white/15 bg-white/80 dark:bg-white/5 px-4 text-xs font-extrabold text-slate-800 dark:text-white hover:bg-white dark:hover:bg-white/10 disabled:opacity-50 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {isApplyReviewRoute && (
         <div className="sticky bottom-0 z-40 border-t border-slate-200 dark:border-[#1e40af]/60 bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur-md">

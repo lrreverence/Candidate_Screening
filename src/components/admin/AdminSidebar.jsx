@@ -18,6 +18,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     { path: '/admin', icon: 'dashboard', label: 'Dashboard' },
     { path: '/admin/applicants', icon: 'group', label: 'Applicants' },
     { path: '/admin/jobs', icon: 'work', label: 'Job Postings' },
+    { path: '/admin/reports', icon: 'analytics', label: 'Reports' },
   ]
 
   const isActive = (path) => {

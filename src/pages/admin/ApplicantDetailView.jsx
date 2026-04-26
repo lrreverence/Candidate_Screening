@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import JSZip from 'jszip'
 import {
   applicationStatusBadgeDark,
   isApplicationStatusPendingLike,
@@ -58,6 +59,9 @@ const ApplicantDetailView = () => {
   const [resumeBundleLoading, setResumeBundleLoading] = useState(false)
   const [expandedAccordion, setExpandedAccordion] = useState(null)
   const [idPhotoUrl, setIdPhotoUrl] = useState(null)
+  const [interviewResultDraft, setInterviewResultDraft] = useState('')
+  const [savingInterviewResult, setSavingInterviewResult] = useState(false)
+  const [downloadingAllDocs, setDownloadingAllDocs] = useState(false)
 
   useEffect(() => {
     fetchApplication()
@@ -191,6 +195,7 @@ const ApplicantDetailView = () => {
 
       setApplication(appData)
       setJob(appData.jobs)
+      setInterviewResultDraft(String(appData?.interview_result || ''))
 
       // Set active file based on available documents
       const docList = documents || []
@@ -205,6 +210,50 @@ const ApplicantDetailView = () => {
       console.error('Error fetching application:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSetApplicantTagMark = async (nextTag) => {
+    const applicantId = application?.applicants?.id
+    if (!applicantId) return
+    try {
+      const current = application?.applicants?.tag_mark || null
+      const tagToSet = current === nextTag ? null : nextTag
+      const { error } = await supabase
+        .from('applicants')
+        .update({ tag_mark: tagToSet, updated_at: new Date().toISOString() })
+        .eq('id', applicantId)
+      if (error) throw error
+      setApplication((prev) => ({
+        ...prev,
+        applicants: { ...(prev?.applicants || {}), tag_mark: tagToSet }
+      }))
+    } catch (err) {
+      console.error('Error updating applicant tag:', err)
+      alert(`Failed to update tag: ${err?.message || 'Please try again.'}`)
+    }
+  }
+
+  const handleSaveInterviewResult = async () => {
+    if (!id) return
+    setSavingInterviewResult(true)
+    try {
+      const next = String(interviewResultDraft || '').trim() || null
+      const { error } = await supabase
+        .from('applications')
+        .update({
+          interview_result: next,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+      if (error) throw error
+      await fetchApplication()
+      alert('Interview result saved.')
+    } catch (e) {
+      console.error('Error saving interview result:', e)
+      alert(`Failed to save interview result: ${e?.message || 'Please try again.'}`)
+    } finally {
+      setSavingInterviewResult(false)
     }
   }
 
@@ -251,6 +300,159 @@ const ApplicantDetailView = () => {
       setTimeout(() => setCopied(false), 2000)
     } catch (error) {
       console.error('Failed to copy:', error)
+    }
+  }
+
+  const safeName = (name) =>
+    String(name || 'file')
+      .trim()
+      .replace(/[\/\\?%*:|"<>]/g, '_')
+      .replace(/\s+/g, ' ')
+
+  const ensureUniqueZipName = (usedNames, desired) => {
+    const base = safeName(desired)
+    if (!usedNames.has(base)) {
+      usedNames.add(base)
+      return base
+    }
+    const dot = base.lastIndexOf('.')
+    const stem = dot > 0 ? base.slice(0, dot) : base
+    const ext = dot > 0 ? base.slice(dot) : ''
+    for (let i = 2; i < 9999; i++) {
+      const cand = `${stem} (${i})${ext}`
+      if (!usedNames.has(cand)) {
+        usedNames.add(cand)
+        return cand
+      }
+    }
+    const fallback = `${stem} (${Date.now()})${ext}`
+    usedNames.add(fallback)
+    return fallback
+  }
+
+  const getFileExtFromMime = (mime) => {
+    const m = String(mime || '').toLowerCase()
+    if (m.includes('pdf')) return '.pdf'
+    if (m.includes('png')) return '.png'
+    if (m.includes('jpeg') || m.includes('jpg')) return '.jpg'
+    if (m.includes('webp')) return '.webp'
+    if (m.includes('gif')) return '.gif'
+    return ''
+  }
+
+  const triggerBrowserDownload = (blob, filename) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1500)
+  }
+
+  const handleDownloadAllDocuments = async () => {
+    if (!application?.id || !application?.applicants?.id) return
+    if (downloadingAllDocs) return
+
+    const applicantName = [applicant?.first_name, applicant?.last_name].filter(Boolean).join(' ') || 'Applicant'
+    const aid = application.applicants.id
+
+    const docs = application?.applicants?.documents || []
+    const licenseRows = resumeBundle?.licenseRows || []
+    const clearancesList = resumeBundle?.clearancesList || []
+
+    const items = []
+    const seen = new Set()
+
+    for (const d of docs) {
+      if (!d?.file_path) continue
+      const bucket = d.file_type === '2x2_ID_PICTURE' ? 'id-pictures' : 'resumes'
+      const key = `${bucket}:${d.file_path}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const name = d.file_name || `${d.file_type || 'Document'}`
+      items.push({
+        bucket,
+        path: d.file_path,
+        filename: `Uploaded/${name}`,
+        mime_type: d.mime_type || null,
+      })
+    }
+
+    for (const r of licenseRows) {
+      const att = r?.attachment && typeof r.attachment === 'object' ? r.attachment : null
+      const p = String(att?.file_path || '').trim()
+      if (!p) continue
+      const bucket = 'resumes'
+      const key = `${bucket}:${p}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const nm = String(att?.file_name || '').trim() || `${r?.category || 'License'}${getFileExtFromMime(att?.mime_type) || ''}`
+      items.push({
+        bucket,
+        path: p,
+        filename: `Licenses/${nm}`,
+        mime_type: att?.mime_type || null,
+      })
+    }
+
+    for (const c of clearancesList) {
+      const p = String(c?.attachment_path || '').trim()
+      if (!p) continue
+      const bucket = 'resumes'
+      const key = `${bucket}:${p}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const nm = String(c?.attachment_name || '').trim() || `${c?.clearance_type || 'Clearance'}${getFileExtFromMime(c?.attachment_mime) || ''}`
+      items.push({
+        bucket,
+        path: p,
+        filename: `Clearances/${nm}`,
+        mime_type: c?.attachment_mime || null,
+      })
+    }
+
+    if (items.length === 0) {
+      alert('No uploaded documents found for this applicant.')
+      return
+    }
+
+    setDownloadingAllDocs(true)
+    try {
+      const zip = new JSZip()
+      const usedNames = new Set()
+
+      for (const it of items) {
+        const { data, error } = await supabase.storage.from(it.bucket).createSignedUrl(it.path, 3600)
+        if (error || !data?.signedUrl) {
+          console.warn('[ApplicantDetailView] createSignedUrl failed', it.bucket, it.path, error)
+          continue
+        }
+
+        const res = await fetch(data.signedUrl)
+        if (!res.ok) {
+          console.warn('[ApplicantDetailView] download failed', it.bucket, it.path, res.status)
+          continue
+        }
+
+        const ab = await res.arrayBuffer()
+        const mime = res.headers.get('content-type') || it.mime_type || ''
+        const ext = getFileExtFromMime(mime)
+        const desiredName = it.filename.includes('.') ? it.filename : `${it.filename}${ext}`
+        const zipName = ensureUniqueZipName(usedNames, desiredName)
+        zip.file(zipName, ab)
+      }
+
+      const out = await zip.generateAsync({ type: 'blob' })
+      const reference = String(applicant?.reference_code || application?.id || aid || '').slice(0, 16)
+      const filename = `${safeName(applicantName)}_${safeName(reference || 'documents')}.zip`
+      triggerBrowserDownload(out, filename)
+    } catch (e) {
+      console.error('[ApplicantDetailView] download all documents failed', e)
+      alert(`Failed to download documents: ${e?.message || 'Please try again.'}`)
+    } finally {
+      setDownloadingAllDocs(false)
     }
   }
 
@@ -435,6 +637,7 @@ const ApplicantDetailView = () => {
 
   const applicant = application?.applicants
   const documents = applicant?.documents || []
+  const tag = applicant?.tag_mark || null
   
   const files = documents.map(doc => {
     let fileType = 'pdf'
@@ -802,6 +1005,50 @@ const ApplicantDetailView = () => {
                       {[applicant?.first_name, applicant?.middle_name, applicant?.last_name].filter(Boolean).join(' ')}
                       {applicant?.name_extension ? ` ${applicant.name_extension}` : ''}
                     </h1>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">Tag</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleSetApplicantTagMark('heart')}
+                          className={`rounded-md p-1.5 transition-colors ${
+                            tag === 'heart'
+                              ? 'bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30'
+                              : 'text-[#92a4c9] hover:bg-[#232f48] hover:text-rose-200'
+                          }`}
+                          title={tag === 'heart' ? 'Clear heart tag' : 'Tag as heart'}
+                          aria-label={tag === 'heart' ? 'Clear heart tag' : 'Tag as heart'}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">favorite</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetApplicantTagMark('star')}
+                          className={`rounded-md p-1.5 transition-colors ${
+                            tag === 'star'
+                              ? 'bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/30'
+                              : 'text-[#92a4c9] hover:bg-[#232f48] hover:text-amber-200'
+                          }`}
+                          title={tag === 'star' ? 'Clear star tag' : 'Tag as star'}
+                          aria-label={tag === 'star' ? 'Clear star tag' : 'Tag as star'}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">star</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetApplicantTagMark('flag')}
+                          className={`rounded-md p-1.5 transition-colors ${
+                            tag === 'flag'
+                              ? 'bg-sky-500/15 text-sky-200 ring-1 ring-sky-500/30'
+                              : 'text-[#92a4c9] hover:bg-[#232f48] hover:text-sky-200'
+                          }`}
+                          title={tag === 'flag' ? 'Clear flag tag' : 'Tag as flag'}
+                          aria-label={tag === 'flag' ? 'Clear flag tag' : 'Tag as flag'}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">flag</span>
+                        </button>
+                      </div>
+                    </div>
                     <p className="mt-1 text-sm text-[#92a4c9]">
                       {[applicant?.city, applicant?.province].filter(Boolean).join(', ') || '—'}
                     </p>
@@ -852,6 +1099,26 @@ const ApplicantDetailView = () => {
                           : 'N/A'}
                   </p>
                 </div>
+                <div className="rounded-lg border border-[#324467] bg-[#0d121c] p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#92a4c9]">Result of interview</p>
+                  <textarea
+                    className="mt-2 w-full resize-none rounded-md border border-[#232f48] bg-[#111722] px-3 py-2 text-sm text-white placeholder:text-[#64748b] focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    placeholder="Enter interview result..."
+                    rows={4}
+                    value={interviewResultDraft}
+                    onChange={(e) => setInterviewResultDraft(e.target.value)}
+                  />
+                  <div className="mt-2 flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSaveInterviewResult}
+                      disabled={savingInterviewResult}
+                      className="rounded-md bg-primary px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition hover:bg-[#1151d3] disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      {savingInterviewResult ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
                 <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/30 p-3">
                   <p className="text-[10px] font-bold uppercase text-emerald-200">Date hired</p>
                   <p className="mt-1 text-sm text-white">
@@ -896,7 +1163,19 @@ const ApplicantDetailView = () => {
             {/* Documents */}
             <div className="rounded-xl border border-[#232f48] bg-[#0d121c] overflow-hidden">
               <div className="border-b border-[#232f48] bg-[#111722] px-4 py-3">
-                <h2 className="text-xs font-bold uppercase tracking-widest text-[#92a4c9]">Documents</h2>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-xs font-bold uppercase tracking-widest text-[#92a4c9]">Documents</h2>
+                  <button
+                    type="button"
+                    onClick={handleDownloadAllDocuments}
+                    disabled={downloadingAllDocs || files.length === 0}
+                    className="inline-flex items-center gap-2 rounded-md border border-[#324467] bg-[#0d121c] px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition hover:bg-[#232f48] disabled:pointer-events-none disabled:opacity-50"
+                    title="Download all uploaded documents as a ZIP"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">download</span>
+                    {downloadingAllDocs ? 'Preparing…' : 'Download all'}
+                  </button>
+                </div>
               </div>
               <div className="flex flex-col lg:flex-row lg:min-h-[480px]">
                 <div className="border-b border-[#232f48] lg:w-72 lg:border-b-0 lg:border-r lg:border-[#232f48]">
