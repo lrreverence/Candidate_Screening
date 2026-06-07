@@ -22,6 +22,12 @@ import {
  * `breakdown.total` when loaded via `enrichApplicationsWithResumeMatch` (`_resumeMatchTotal`). Falls back to
  * requirement-only or a shallow resume estimate only if bundle load failed.
  */
+const TAG_MARK_SORT_RANK = { heart: 3, star: 2, flag: 1 }
+
+function getApplicantTagSortRank(tagMark) {
+  return TAG_MARK_SORT_RANK[tagMark] ?? 0
+}
+
 function getApplicationJobMatchPercent(app) {
   const applicant = app?.applicants
   const jobData = app?.jobs
@@ -185,6 +191,7 @@ const ApplicantsManagement = () => {
   const [filters, setFilters] = useState({
     applicationStatus: '',
     matchFilter: '',
+    tagFilter: '',
     appliedDateFrom: '',
     appliedDateTo: ''
   })
@@ -313,6 +320,14 @@ const ApplicantsManagement = () => {
         })
       }
 
+      if (filters.tagFilter) {
+        filtered = filtered.filter((app) => {
+          const tag = app?.applicants?.tag_mark || null
+          if (filters.tagFilter === 'tagged') return tag != null
+          return tag === filters.tagFilter
+        })
+      }
+
       filtered = await enrichApplicationsWithResumeMatch(supabase, filtered)
 
       if (filters.matchFilter) {
@@ -349,10 +364,18 @@ const ApplicantsManagement = () => {
     setFilters(prev => ({ ...prev, [filterName]: value }))
   }
 
+  const handleToggleTagFilter = (tag) => {
+    setFilters((prev) => ({
+      ...prev,
+      tagFilter: prev.tagFilter === tag ? '' : tag
+    }))
+  }
+
   const handleResetFilters = () => {
     setFilters({
       applicationStatus: '',
       matchFilter: '',
+      tagFilter: '',
       appliedDateFrom: '',
       appliedDateTo: ''
     })
@@ -409,7 +432,7 @@ const ApplicantsManagement = () => {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
     } else {
       setSortBy(column)
-      const defaultDesc = column === 'applied_date' || column === 'job_match'
+      const defaultDesc = column === 'applied_date' || column === 'job_match' || column === 'tag_mark'
       setSortDirection(defaultDesc ? 'desc' : 'asc')
     }
   }
@@ -466,14 +489,40 @@ const ApplicantsManagement = () => {
         const bVal = typeof rawB === 'number' && Number.isFinite(rawB) ? rawB : -1
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal
       }
+      if (sortBy === 'tag_mark') {
+        const aVal = getApplicantTagSortRank(a?.applicants?.tag_mark)
+        const bVal = getApplicantTagSortRank(b?.applicants?.tag_mark)
+        const diff = sortDirection === 'asc' ? aVal - bVal : bVal - aVal
+        if (diff !== 0) return diff
+        const dateA = new Date(a.submitted_at || a.created_at).getTime()
+        const dateB = new Date(b.submitted_at || b.created_at).getTime()
+        return dateB - dateA
+      }
       return 0
     }
+    const tagFilterLabels = {
+      heart: 'Heart tagged applicants',
+      star: 'Star tagged applicants',
+      flag: 'Flagged applicants',
+      tagged: 'Tagged applicants'
+    }
+
+    if (filters.tagFilter) {
+      const sorted = [...applications].sort(sortCompare)
+      return [{
+        jobId: `tag-${filters.tagFilter}`,
+        jobTitle: tagFilterLabels[filters.tagFilter] || 'Tagged applicants',
+        showJobColumn: true,
+        applications: sorted
+      }]
+    }
+
     const groups = new Map()
     for (const app of applications) {
       const jobId = app.job_id ?? 'general'
       const jobTitle = app.jobs?.title || 'General Application'
       if (!groups.has(jobId)) {
-        groups.set(jobId, { jobId, jobTitle, applications: [] })
+        groups.set(jobId, { jobId, jobTitle, showJobColumn: false, applications: [] })
       }
       groups.get(jobId).applications.push(app)
     }
@@ -482,7 +531,7 @@ const ApplicantsManagement = () => {
       group.applications.sort(sortCompare)
     })
     return result
-  }, [applications, sortBy, sortDirection])
+  }, [applications, sortBy, sortDirection, filters.tagFilter])
 
   const getStatusBadge = (status) => {
     const config = applicationStatusBadge(status)
@@ -627,8 +676,9 @@ const ApplicantsManagement = () => {
         {/* Main Section */}
         <div className="flex flex-col gap-6 rounded-lg border border-gray-200 bg-white shadow-sm">
           {/* Advanced Filter Toolbar */}
-          <div className="flex flex-col gap-4 border-b border-gray-200 p-4 lg:p-6 lg:flex-row lg:items-end">
-            <div className="flex-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-4 border-b border-gray-200 p-4 lg:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+            <div className="flex-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Application Status</span>
                 <div className="relative">
@@ -643,6 +693,23 @@ const ApplicantsManagement = () => {
                     <option value="INTERVIEW">INTERVIEW</option>
                     <option value="HIRED">HIRED</option>
                     <option value="REJECTED">REJECTED</option>
+                  </select>
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
+                </div>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Tag</span>
+                <div className="relative">
+                  <select
+                    className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-navy focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                    value={filters.tagFilter}
+                    onChange={(e) => handleFilterChange('tagFilter', e.target.value)}
+                  >
+                    <option value="">Any tag</option>
+                    <option value="heart">Heart</option>
+                    <option value="star">Star</option>
+                    <option value="flag">Flag</option>
+                    <option value="tagged">Any tagged</option>
                   </select>
                   <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
                 </div>
@@ -700,6 +767,42 @@ const ApplicantsManagement = () => {
                 Apply Filters
               </button>
             </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Show only</span>
+              {[
+                { value: 'heart', label: 'Heart', icon: 'favorite', active: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' },
+                { value: 'star', label: 'Star', icon: 'star', active: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200' },
+                { value: 'flag', label: 'Flag', icon: 'flag', active: 'bg-sky-50 text-sky-800 ring-1 ring-sky-200' }
+              ].map(({ value, label, icon, active }) => {
+                const isActive = filters.tagFilter === value
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => handleToggleTagFilter(value)}
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      isActive
+                        ? active
+                        : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                    aria-pressed={isActive}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">{icon}</span>
+                    {label}
+                  </button>
+                )
+              })}
+              {filters.tagFilter && (
+                <button
+                  type="button"
+                  onClick={() => handleFilterChange('tagFilter', '')}
+                  className="text-xs font-medium text-gray-500 hover:text-navy"
+                >
+                  Clear tag filter
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Data Grid / Table */}
@@ -716,13 +819,17 @@ const ApplicantsManagement = () => {
                 scoring columns are applied.
               </p>
             </div>
-          ) : applicationsByJob.length === 0 ? (
+          ) : applicationsByJob.length === 0 || applicationsByJob.every((g) => g.applications.length === 0) ? (
             <div className="flex items-center justify-center py-12">
-              <p className="text-gray-500">No applications found</p>
+              <p className="text-gray-500">
+                {filters.tagFilter
+                  ? `No ${filters.tagFilter === 'tagged' ? 'tagged' : filters.tagFilter + '-tagged'} applicants found`
+                  : 'No applications found'}
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-8">
-              {applicationsByJob.map(({ jobId, jobTitle, applications: jobApplications }) => (
+              {applicationsByJob.map(({ jobId, jobTitle, showJobColumn, applications: jobApplications }) => (
                 <div key={jobId} className="border-t border-gray-200 first:border-t-0 first:pt-0 pt-6 first:pt-0">
                   <h3 className="text-base font-semibold text-navy mb-4 px-4 lg:px-6 flex items-center gap-2">
                     <span className="material-symbols-outlined text-[22px] text-primary">work</span>
@@ -735,8 +842,25 @@ const ApplicantsManagement = () => {
                         <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                           <tr className="border-b border-gray-200">
                             <th className="px-6 py-4 font-semibold tracking-wider">Applicant Name</th>
+                            {showJobColumn && (
+                              <th className="px-6 py-4 font-semibold tracking-wider">Job</th>
+                            )}
                             <th className="px-6 py-4 font-semibold tracking-wider">
-                              <span className="sr-only">Tag</span>
+                              <button
+                                type="button"
+                                onClick={() => handleSort('tag_mark')}
+                                className="flex items-center gap-1 cursor-pointer hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy/30 rounded"
+                                title="Sort by tag: heart, then star, then flag; untagged last"
+                              >
+                                Tag
+                                <span className="material-symbols-outlined text-base">
+                                  {sortBy === 'tag_mark'
+                                    ? sortDirection === 'asc'
+                                      ? 'arrow_drop_up'
+                                      : 'arrow_drop_down'
+                                    : 'unfold_more'}
+                                </span>
+                              </button>
                             </th>
                             <th className="px-6 py-4 font-semibold tracking-wider">
                               <button
@@ -797,6 +921,11 @@ const ApplicantsManagement = () => {
                                     </div>
                                   </div>
                                 </td>
+                                {showJobColumn && (
+                                  <td className="whitespace-nowrap px-6 py-4 text-gray-700">
+                                    {app.jobs?.title || 'General Application'}
+                                  </td>
+                                )}
                                 <td className="whitespace-nowrap px-6 py-4">
                                   <div className="flex items-center gap-1.5">
                                     <button

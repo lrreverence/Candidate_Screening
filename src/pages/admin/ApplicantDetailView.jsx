@@ -12,8 +12,9 @@ import {
   mergeApplicantLanguagesFromUser
 } from '../../lib/adminApplicationResumeBundle'
 import { OTHERS_EMPLOYMENT_TYPE_OPTIONS } from '../../lib/othersScoring'
+import InterviewScheduleModal from '../../components/admin/InterviewScheduleModal'
 
-async function notifyApplicantByEmail({ applicationId, status }) {
+async function notifyApplicantByEmail({ applicationId, status, interviewScheduledAt }) {
   const base = String(import.meta.env.VITE_NOTIFY_API_BASE || '').replace(/\/$/, '')
   const path = '/api/notify-application-status'
   const url = base ? `${base}${path}` : `${typeof window !== 'undefined' ? window.location.origin : ''}${path}`
@@ -31,7 +32,11 @@ async function notifyApplicantByEmail({ applicationId, status }) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ applicationId, status }),
+    body: JSON.stringify({
+      applicationId,
+      status,
+      ...(interviewScheduledAt ? { interviewScheduledAt } : {}),
+    }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -62,6 +67,8 @@ const ApplicantDetailView = () => {
   const [interviewResultDraft, setInterviewResultDraft] = useState('')
   const [savingInterviewResult, setSavingInterviewResult] = useState(false)
   const [downloadingAllDocs, setDownloadingAllDocs] = useState(false)
+  const [showInterviewSchedule, setShowInterviewSchedule] = useState(false)
+  const [approvingInterview, setApprovingInterview] = useState(false)
 
   useEffect(() => {
     fetchApplication()
@@ -456,15 +463,16 @@ const ApplicantDetailView = () => {
     }
   }
 
-  const handleApprove = async () => {
-    if (!confirm('Approve this applicant for interview?')) return
+  const handleApprove = async (interviewScheduledAt) => {
+    if (!interviewScheduledAt) return
 
+    setApprovingInterview(true)
     try {
       const { error } = await supabase
         .from('applications')
         .update({
           status: 'INTERVIEW',
-          interviewed_at: new Date().toISOString(),
+          interviewed_at: interviewScheduledAt,
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
@@ -472,16 +480,23 @@ const ApplicantDetailView = () => {
       if (error) throw error
 
       try {
-        await notifyApplicantByEmail({ applicationId: id, status: 'INTERVIEW' })
+        await notifyApplicantByEmail({
+          applicationId: id,
+          status: 'INTERVIEW',
+          interviewScheduledAt,
+        })
       } catch (e) {
         console.warn('[ApplicantDetailView] notify INTERVIEW failed', e)
       }
+      setShowInterviewSchedule(false)
       await fetchApplication()
       await loadResumeBundle()
-      alert('Status updated to INTERVIEW.')
+      alert('Status updated to INTERVIEW. Applicant has been notified.')
     } catch (error) {
       console.error('Error approving applicant:', error)
       alert('Failed to approve applicant. Please try again.')
+    } finally {
+      setApprovingInterview(false)
     }
   }
 
@@ -658,6 +673,20 @@ const ApplicantDetailView = () => {
     if (!ds) return 'N/A'
     const d = new Date(ds)
     return Number.isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  }
+
+  const formatInterviewSchedule = (ds) => {
+    if (!ds) return 'N/A'
+    const d = new Date(ds)
+    return Number.isNaN(d.getTime())
+      ? 'N/A'
+      : d.toLocaleString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
   }
 
   const jobMatchScore =
@@ -1087,15 +1116,13 @@ const ApplicantDetailView = () => {
                   </p>
                 </div>
                 <div className="rounded-lg border border-blue-800/40 bg-blue-950/30 p-3">
-                  <p className="text-[10px] font-bold uppercase text-blue-200">Date interviewed</p>
+                  <p className="text-[10px] font-bold uppercase text-blue-200">Interview schedule</p>
                   <p className="mt-1 text-sm text-white">
                     {application?.interviewed_at
-                      ? formatLongDate(application.interviewed_at)
+                      ? formatInterviewSchedule(application.interviewed_at)
                       : st === 'INTERVIEW'
-                        ? formatLongDate(application?.updated_at)
-                        : st === 'HIRED'
-                          ? 'N/A'
-                          : 'N/A'}
+                        ? formatInterviewSchedule(application?.updated_at)
+                        : 'N/A'}
                   </p>
                 </div>
                 <div className="rounded-lg border border-[#324467] bg-[#0d121c] p-3">
@@ -1261,7 +1288,7 @@ const ApplicantDetailView = () => {
             </button>
             <button
               type="button"
-              onClick={handleApprove}
+              onClick={() => setShowInterviewSchedule(true)}
               disabled={interviewFooterDisabled}
               className="min-h-[48px] min-w-[160px] flex-1 rounded-lg bg-primary px-4 py-3 text-center text-sm font-bold uppercase tracking-wide text-white shadow-sm transition hover:bg-[#1151d3] disabled:pointer-events-none disabled:opacity-40 sm:flex-none sm:px-8"
             >
@@ -1278,6 +1305,16 @@ const ApplicantDetailView = () => {
           </div>
         </div>
       </footer>
+
+      <InterviewScheduleModal
+        open={showInterviewSchedule}
+        applicantName={
+          applicant ? `${applicant.first_name || ''} ${applicant.last_name || ''}`.trim() : ''
+        }
+        onClose={() => !approvingInterview && setShowInterviewSchedule(false)}
+        onConfirm={handleApprove}
+        confirming={approvingInterview}
+      />
     </div>
   )
 }

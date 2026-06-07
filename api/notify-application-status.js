@@ -17,6 +17,19 @@ function escapeHtml(s) {
     .replaceAll("'", '&#039;')
 }
 
+function formatInterviewSchedule(iso) {
+  const d = new Date(String(iso ?? ''))
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 function corsHeaders(request) {
   const origin = request.headers.get('origin')
   const headers = new Headers()
@@ -110,6 +123,7 @@ export default {
       const body = await request.json().catch(() => ({}))
       const applicationId = String(body.applicationId ?? '').trim()
       const status = toCanonicalStatus(body.status)
+      const interviewScheduledAt = String(body.interviewScheduledAt ?? '').trim() || null
       if (!applicationId) {
         return json(request, { error: 'Missing applicationId' }, 400)
       }
@@ -162,7 +176,12 @@ export default {
       if (status === 'INTERVIEW') {
         subject = `Interview update — ${jobTitle}`
         headline = 'You’ve been selected for interview.'
-        extraHtml = '<p>Our team will contact you with next steps and scheduling details.</p>'
+        const scheduleLabel = formatInterviewSchedule(interviewScheduledAt)
+        if (scheduleLabel) {
+          extraHtml = `<p>Your interview is scheduled for <strong>${escapeHtml(scheduleLabel)}</strong>.</p><p>Please arrive on time. If you need to reschedule, reply to the contact details provided by our team.</p>`
+        } else {
+          extraHtml = '<p>Our team will contact you with next steps and scheduling details.</p>'
+        }
       } else if (status === 'HIRED') {
         subject = `Hiring update — ${jobTitle}`
         headline = 'Congratulations — you’ve been hired.'
