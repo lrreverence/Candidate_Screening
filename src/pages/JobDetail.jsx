@@ -8,7 +8,11 @@ import { supabase } from '../lib/supabase'
 import { useApplicantJobMatchInputs } from '../hooks/useApplicantJobMatchInputs'
 import { computeRequirementMatchPercent } from '../lib/jobMatchScore'
 import JobRequirementMatchPill from '../components/JobRequirementMatchPill'
-import { normalizeApplicationStatus } from '../lib/applicationStatus'
+import {
+  applyEligibilityMessage,
+  getApplyEligibility,
+  normalizeApplicationStatus,
+} from '../lib/applicationStatus'
 import { normalizeOthersScoringFromJob } from '../lib/othersScoring'
 
 const APPLICATION_STATUS_LABELS = {
@@ -16,7 +20,8 @@ const APPLICATION_STATUS_LABELS = {
   PENDING: { label: 'PENDING — Under review', icon: 'schedule', className: 'text-yellow-500' },
   INTERVIEW: { label: 'INTERVIEW — Next step', icon: 'event_available', className: 'text-amber-400' },
   HIRED: { label: 'HIRED', icon: 'verified_user', className: 'text-emerald-400' },
-  REJECTED: { label: 'REJECTED', icon: 'cancel', className: 'text-red-400' }
+  REJECTED: { label: 'REJECTED', icon: 'cancel', className: 'text-red-400' },
+  RESIGNED: { label: 'RESIGNED — Eligible to reapply', icon: 'logout', className: 'text-slate-300' },
 }
 
 function ApplicationStatusLabel({ status }) {
@@ -77,10 +82,11 @@ const JobDetail = () => {
   const { loading: jobMatchLoading, data: jobMatchInputs } = useApplicantJobMatchInputs(user?.id)
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [hasApplied, setHasApplied] = useState(false)
-  const [applicationStatus, setApplicationStatus] = useState(null) // { status, rejection_reason }
+  const [applicantApplications, setApplicantApplications] = useState([])
+  const [applicationStatus, setApplicationStatus] = useState(null) // { status, rejection_reason, rejected_at }
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [jobImageUrl, setJobImageUrl] = useState(null)
+  const applyEligibility = getApplyEligibility(applicantApplications, jobId)
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -126,11 +132,11 @@ const JobDetail = () => {
     }
   }, [jobId, supabaseJobs, supabaseLoading])
 
-  // Check if user has already applied and load application status (for status + rejection reason)
+  // Load applications for eligibility + status panel (rejection reason, reapply, hired lock)
   useEffect(() => {
     const checkApplication = async () => {
       if (!user?.id || !jobId) {
-        setHasApplied(false)
+        setApplicantApplications([])
         setApplicationStatus(null)
         return
       }
@@ -143,30 +149,33 @@ const JobDetail = () => {
           .limit(1)
 
         if (!applicants?.length) {
-          setHasApplied(false)
+          setApplicantApplications([])
           setApplicationStatus(null)
           return
         }
 
-        const { data: applications } = await supabase
+        const { data: applications, error } = await supabase
           .from('applications')
-          .select('id, status, rejection_reason')
+          .select('id, job_id, status, rejection_reason, rejected_at, updated_at')
           .eq('applicant_id', applicants[0].id)
-          .eq('job_id', jobId)
-          .maybeSingle()
 
-        if (applications) {
-          setHasApplied(true)
+        if (error) throw error
+
+        const apps = Array.isArray(applications) ? applications : []
+        setApplicantApplications(apps)
+
+        const forJob = apps.find((a) => a.job_id === jobId)
+        if (forJob) {
           setApplicationStatus({
-            status: applications.status,
-            rejection_reason: applications.rejection_reason || null
+            status: forJob.status,
+            rejection_reason: forJob.rejection_reason || null,
+            rejected_at: forJob.rejected_at || null,
           })
         } else {
-          setHasApplied(false)
           setApplicationStatus(null)
         }
       } catch (error) {
-        setHasApplied(false)
+        setApplicantApplications([])
         setApplicationStatus(null)
       }
     }
@@ -190,6 +199,10 @@ const JobDetail = () => {
     if (!user) {
       // Show login modal if not logged in
       setShowLoginModal(true)
+      return
+    }
+    if (!applyEligibility.canApply) {
+      alert(applyEligibilityMessage(applyEligibility))
       return
     }
     // Navigate to application form if logged in
@@ -424,7 +437,7 @@ const JobDetail = () => {
                     </div>
                   </div>
                 </div>
-                {hasApplied && applicationStatus ? (
+                {applicationStatus && !applyEligibility.canApply ? (
                   <div className="space-y-3">
                     <div className="rounded-xl border p-4 bg-secondary/10 border-secondary/50">
                       <div className="flex items-center gap-2 text-white font-semibold mb-1">
@@ -438,26 +451,54 @@ const JobDetail = () => {
                           {applicationStatus.rejection_reason}
                         </p>
                       )}
+                      {applyEligibility.reason === 'rejected_cooldown' && (
+                        <p className="mt-3 text-sm text-amber-300/90 border-t border-secondary/30 pt-3">
+                          You may reapply in {applyEligibility.daysRemaining} day
+                          {applyEligibility.daysRemaining === 1 ? '' : 's'}.
+                        </p>
+                      )}
+                      {(applyEligibility.reason === 'hired_elsewhere' ||
+                        applyEligibility.reason === 'hired_this_job') && (
+                        <p className="mt-3 text-sm text-text-muted border-t border-secondary/30 pt-3">
+                          {applyEligibilityMessage(applyEligibility)}
+                        </p>
+                      )}
                     </div>
                   </div>
-                ) : hasApplied ? (
-                  <button
-                    type="button"
-                    disabled
-                    className="w-full h-12 rounded-full bg-secondary/50 text-white text-sm font-bold cursor-not-allowed flex items-center justify-center gap-2 opacity-75"
-                  >
-                    <span className="material-symbols-outlined">check_circle</span>
-                    Applied
-                  </button>
+                ) : applyEligibility.canApply ? (
+                  <div className="space-y-3">
+                    {applicationStatus &&
+                      (normalizeApplicationStatus(applicationStatus.status) === 'REJECTED' ||
+                        normalizeApplicationStatus(applicationStatus.status) === 'RESIGNED') && (
+                      <div className="rounded-xl border p-4 bg-secondary/10 border-secondary/50">
+                        <div className="flex items-center gap-2 text-white font-semibold mb-1">
+                          <span className="material-symbols-outlined text-primary">info</span>
+                          Previous application
+                        </div>
+                        <ApplicationStatusLabel status={applicationStatus.status} />
+                        {normalizeApplicationStatus(applicationStatus.status) === 'REJECTED' &&
+                          applicationStatus.rejection_reason && (
+                          <p className="mt-3 text-sm text-text-muted border-t border-secondary/30 pt-3">
+                            {applicationStatus.rejection_reason}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleApply}
+                      className="w-full h-12 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-2"
+                    >
+                      {applicationStatus ? 'Reapply' : 'Apply Now'}
+                      <span className="material-symbols-outlined">arrow_forward</span>
+                    </button>
+                  </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleApply}
-                    className="w-full h-12 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-2"
-                  >
-                    Apply Now
-                    <span className="material-symbols-outlined">arrow_forward</span>
-                  </button>
+                  <div className="rounded-xl border p-4 bg-secondary/10 border-secondary/50">
+                    <p className="text-sm text-text-muted">
+                      {applyEligibilityMessage(applyEligibility) || 'You cannot apply for this job right now.'}
+                    </p>
+                  </div>
                 )}
               </div>
 

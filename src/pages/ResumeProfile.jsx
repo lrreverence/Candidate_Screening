@@ -5,6 +5,11 @@ import { supabase } from '../lib/supabase'
 import ApplicationHeader from '../components/application/ApplicationHeader'
 import ApplicationFooter from '../components/application/ApplicationFooter'
 import { normalizeOthersScoringFromJob } from '../lib/othersScoring'
+import {
+  applyEligibilityMessage,
+  getApplyEligibility,
+  updateApplicationForReapply,
+} from '../lib/applicationStatus'
 
 const SECTION_DEFS = [
   { key: 'personal', label: 'Personal Information', icon: 'person', cta: { label: 'Edit', to: '/profile/personalinformation' } },
@@ -1401,6 +1406,18 @@ const ResumeProfile = () => {
     setContinueBusy(true)
     try {
       if (applyJobId) {
+        const { data: allApps, error: appsErr } = await supabase
+          .from('applications')
+          .select('id, job_id, status, rejected_at, updated_at')
+          .eq('applicant_id', applicant.id)
+        if (appsErr) throw appsErr
+
+        const eligibility = getApplyEligibility(allApps || [], applyJobId)
+        if (!eligibility.canApply) {
+          alert(applyEligibilityMessage(eligibility))
+          return
+        }
+
         const { data: existingApp, error: existErr } = await supabase
           .from('applications')
           .select('id')
@@ -1409,14 +1426,10 @@ const ResumeProfile = () => {
           .maybeSingle()
         if (existErr && existErr.code !== 'PGRST116') throw existErr
         if (existingApp?.id) {
-          const { error: upErr } = await supabase
-            .from('applications')
-            .update({
-              current_step: 5,
-              status: 'PENDING',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existingApp.id)
+          const { error: upErr } = await updateApplicationForReapply(supabase, existingApp.id, {
+            current_step: 5,
+            status: 'PENDING',
+          })
           if (upErr) throw upErr
         } else {
           const { error: insErr } = await supabase.from('applications').insert({

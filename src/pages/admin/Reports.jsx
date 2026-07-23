@@ -25,6 +25,7 @@ const STATUS_COLORS = {
   INTERVIEW: '#f59e0b', // amber-500
   HIRED: '#10b981', // emerald-500
   REJECTED: '#ef4444', // red-500
+  RESIGNED: '#64748b', // slate-500
 }
 
 function isoDayKey(d) {

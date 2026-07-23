@@ -287,14 +287,32 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         if (existingApp) {
-          // Update existing application
-          await supabaseClient
+          // Update existing application (supports reapply after reject/resign)
+          const fullUpdate = {
+            current_step: 2,
+            status: 'PENDING',
+            rejection_reason: null,
+            rejected_at: null,
+            resigned_at: null,
+            resignation_reason: null,
+            updated_at: new Date().toISOString(),
+          };
+          const { error: upErr } = await supabaseClient
             .from('applications')
-            .update({
-              current_step: 2,
-              status: 'PENDING'
-            })
+            .update(fullUpdate)
             .eq('id', existingApp.id);
+          if (upErr && /resigned_at|resignation_reason/i.test(String(upErr.message || ''))) {
+            await supabaseClient
+              .from('applications')
+              .update({
+                current_step: 2,
+                status: 'PENDING',
+                rejection_reason: null,
+                rejected_at: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', existingApp.id);
+          }
         } else {
           // Create new application
           await supabaseClient

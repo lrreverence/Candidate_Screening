@@ -69,6 +69,9 @@ const ApplicantDetailView = () => {
   const [downloadingAllDocs, setDownloadingAllDocs] = useState(false)
   const [showInterviewSchedule, setShowInterviewSchedule] = useState(false)
   const [approvingInterview, setApprovingInterview] = useState(false)
+  const [resignationReasonDraft, setResignationReasonDraft] = useState('')
+  const [resignationDateDraft, setResignationDateDraft] = useState('')
+  const [savingResignationNotes, setSavingResignationNotes] = useState(false)
 
   useEffect(() => {
     fetchApplication()
@@ -203,6 +206,10 @@ const ApplicantDetailView = () => {
       setApplication(appData)
       setJob(appData.jobs)
       setInterviewResultDraft(String(appData?.interview_result || ''))
+      setResignationReasonDraft(String(appData?.resignation_reason || ''))
+      setResignationDateDraft(
+        appData?.resigned_at ? String(appData.resigned_at).slice(0, 10) : ''
+      )
 
       // Set active file based on available documents
       const docList = documents || []
@@ -501,7 +508,13 @@ const ApplicantDetailView = () => {
   }
 
   const handleReject = async () => {
-    if (!confirm('Reject this applicant? This action cannot be undone.')) return
+    if (
+      !confirm(
+        'Reject this applicant? They may reapply to this same job after 30 days.'
+      )
+    ) {
+      return
+    }
 
     const rejectionReason = window.prompt(
       'Optional: Add a reason for the applicant (they will see this on the job detail page):'
@@ -565,6 +578,76 @@ const ApplicantDetailView = () => {
     } catch (error) {
       console.error('Error marking hired:', error)
       alert('Failed to update status. Please try again.')
+    }
+  }
+
+  const handleMarkResigned = async () => {
+    const cur = normalizeApplicationStatus(application?.status)
+    if (cur === 'RESIGNED') return
+    if (cur !== 'HIRED') {
+      alert('Only HIRED applicants can be marked as RESIGNED.')
+      return
+    }
+    if (!confirm('Mark this applicant as RESIGNED? They will be able to apply to job posts again.')) {
+      return
+    }
+    const reasonPrompt = window.prompt(
+      'Optional: Add resignation notes (date/reason). You can also edit these in the RESIGNED panel:'
+    )
+    if (reasonPrompt === null) return
+    const reason = reasonPrompt.trim() || null
+    const resignedAt = new Date().toISOString()
+    try {
+      const { error } = await supabase
+        .from('applications')
+        .update({
+          status: 'RESIGNED',
+          resigned_at: resignedAt,
+          resignation_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+      if (error) throw error
+      await fetchApplication()
+      await loadResumeBundle()
+      alert('Status updated to RESIGNED. Applicant can apply to jobs again.')
+    } catch (error) {
+      console.error('Error marking resigned:', error)
+      const msg = String(error?.message || '')
+      if (/resigned_at|resignation_reason/i.test(msg)) {
+        alert(
+          'Database migration required: run supabase/migrations/20260723053000_application_resigned_and_reapply.sql in the Supabase SQL Editor, then try again.'
+        )
+        return
+      }
+      alert(`Failed to mark resigned: ${error?.message || 'Please try again.'}`)
+    }
+  }
+
+  const handleSaveResignationNotes = async () => {
+    if (!id) return
+    setSavingResignationNotes(true)
+    try {
+      const reason = String(resignationReasonDraft || '').trim() || null
+      let resignedAt = application?.resigned_at || null
+      if (resignationDateDraft) {
+        const d = new Date(`${resignationDateDraft}T12:00:00`)
+        if (!Number.isNaN(d.getTime())) resignedAt = d.toISOString()
+      }
+      const payload = {
+        resignation_reason: reason,
+        updated_at: new Date().toISOString(),
+      }
+      if (resignedAt) payload.resigned_at = resignedAt
+      const { error } = await supabase.from('applications').update(payload).eq('id', id)
+      if (error) throw error
+      await fetchApplication()
+      alert('Resignation notes saved.')
+    } catch (e) {
+      console.error('Error saving resignation notes:', e)
+      alert(`Failed to save resignation notes: ${e?.message || 'Please try again.'}`)
+    } finally {
+      setSavingResignationNotes(false)
     }
   }
 
@@ -695,9 +778,10 @@ const ApplicantDetailView = () => {
       : getMatchPercentage()
 
   const st = normalizeApplicationStatus(application?.status)
-  const rejectedFooterDisabled = st === 'REJECTED'
-  const interviewFooterDisabled = st === 'INTERVIEW' || st === 'HIRED'
-  const hiredFooterDisabled = st === 'HIRED'
+  const rejectedFooterDisabled = st === 'REJECTED' || st === 'HIRED' || st === 'RESIGNED'
+  const interviewFooterDisabled = st === 'INTERVIEW' || st === 'HIRED' || st === 'RESIGNED'
+  const hiredFooterDisabled = st === 'HIRED' || st === 'RESIGNED'
+  const resignedFooterDisabled = st !== 'HIRED'
 
   const renderAccordionBody = (categoryKey) => {
     const edu = resumeBundle?.educationByLevel || {}
@@ -1148,10 +1232,53 @@ const ApplicantDetailView = () => {
                 <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/30 p-3">
                   <p className="text-[10px] font-bold uppercase text-emerald-200">Date hired</p>
                   <p className="mt-1 text-sm text-white">
-                    {st === 'HIRED'
+                    {st === 'HIRED' || st === 'RESIGNED'
                       ? formatLongDate(application?.hired_at || application?.updated_at)
                       : 'N/A'}
                   </p>
+                </div>
+                <div className="rounded-lg border border-slate-600/40 bg-slate-950/40 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
+                    Resigned
+                  </p>
+                  <label className="mt-2 block text-[10px] font-bold uppercase text-[#92a4c9]">
+                    Date resigned
+                    <input
+                      type="date"
+                      className="mt-1 w-full rounded-md border border-[#232f48] bg-[#111722] px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+                      value={resignationDateDraft}
+                      onChange={(e) => setResignationDateDraft(e.target.value)}
+                      disabled={st !== 'RESIGNED' && st !== 'HIRED'}
+                    />
+                  </label>
+                  <label className="mt-2 block text-[10px] font-bold uppercase text-[#92a4c9]">
+                    Reason / notes
+                    <textarea
+                      className="mt-1 w-full resize-none rounded-md border border-[#232f48] bg-[#111722] px-3 py-2 text-sm text-white placeholder:text-[#64748b] focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+                      placeholder="Enter resignation date notes and reason..."
+                      rows={3}
+                      value={resignationReasonDraft}
+                      onChange={(e) => setResignationReasonDraft(e.target.value)}
+                      disabled={st !== 'RESIGNED' && st !== 'HIRED'}
+                    />
+                  </label>
+                  <div className="mt-2 flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSaveResignationNotes}
+                      disabled={
+                        savingResignationNotes || (st !== 'RESIGNED' && st !== 'HIRED')
+                      }
+                      className="rounded-md bg-slate-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition hover:bg-slate-500 disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      {savingResignationNotes ? 'Saving…' : 'Save notes'}
+                    </button>
+                  </div>
+                  {st === 'RESIGNED' && (
+                    <p className="mt-2 text-xs text-[#92a4c9]">
+                      Recorded: {formatLongDate(application?.resigned_at || application?.updated_at)}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1301,6 +1428,14 @@ const ApplicantDetailView = () => {
               className="min-h-[48px] min-w-[140px] flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-center text-sm font-bold uppercase tracking-wide text-white shadow-sm transition hover:bg-emerald-500 disabled:pointer-events-none disabled:opacity-40 sm:flex-none sm:px-8"
             >
               Hired
+            </button>
+            <button
+              type="button"
+              onClick={handleMarkResigned}
+              disabled={resignedFooterDisabled}
+              className="min-h-[48px] min-w-[140px] flex-1 rounded-lg bg-slate-600 px-4 py-3 text-center text-sm font-bold uppercase tracking-wide text-white shadow-sm transition hover:bg-slate-500 disabled:pointer-events-none disabled:opacity-40 sm:flex-none sm:px-8"
+            >
+              Resigned
             </button>
           </div>
         </div>

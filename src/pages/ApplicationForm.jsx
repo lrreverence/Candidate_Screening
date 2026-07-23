@@ -9,6 +9,11 @@ import IdentitySection from '../components/application/IdentitySection'
 import ContactSection from '../components/application/ContactSection'
 import ApplicationFooter from '../components/application/ApplicationFooter'
 import ApplicationHelp from '../components/application/ApplicationHelp'
+import {
+  applyEligibilityMessage,
+  getApplyEligibility,
+  updateApplicationForReapply,
+} from '../lib/applicationStatus'
 
 const ApplicationForm = () => {
   const MAX_AGE = 65
@@ -332,6 +337,18 @@ const ApplicationForm = () => {
       }
 
       if (applicantId && jobId) {
+        const { data: allApps, error: appsErr } = await supabase
+          .from('applications')
+          .select('id, job_id, status, rejected_at, updated_at')
+          .eq('applicant_id', applicantId)
+        if (appsErr) throw appsErr
+
+        const eligibility = getApplyEligibility(allApps || [], jobId)
+        if (!eligibility.canApply) {
+          alert(applyEligibilityMessage(eligibility))
+          return
+        }
+
         // Check if application exists
         const { data: existingApp, error: appCheckError } = await supabase
           .from('applications')
@@ -345,14 +362,12 @@ const ApplicationForm = () => {
         }
 
         if (existingApp) {
-          // Update existing application
-          await supabase
-            .from('applications')
-            .update({
-              current_step: 1,
-              status: 'PENDING'
-            })
-            .eq('id', existingApp.id)
+          // Update existing application (supports reapply after reject/resign)
+          const { error: upErr } = await updateApplicationForReapply(supabase, existingApp.id, {
+            current_step: 1,
+            status: 'PENDING',
+          })
+          if (upErr) throw upErr
         } else {
           // Create new application
           await supabase

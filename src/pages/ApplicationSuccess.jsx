@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { updateApplicationForReapply } from '../lib/applicationStatus'
 
 const ApplicationSuccess = () => {
   const navigate = useNavigate()
@@ -81,14 +82,14 @@ const ApplicationSuccess = () => {
         if (findAppError) {
           console.error('Error finding application:', findAppError)
         } else if (existingApp) {
-          const { error: updateAppError } = await supabase
-            .from('applications')
-            .update({
+          const { error: updateAppError } = await updateApplicationForReapply(
+            supabase,
+            existingApp.id,
+            {
               status: 'NEW',
               current_step: 5,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', existingApp.id)
+            }
+          )
 
           if (updateAppError) {
             console.error('Error updating application:', updateAppError)

@@ -8,6 +8,10 @@ import { getJobImageUrl } from '../lib/storageUpload'
 import { useApplicantJobMatchInputs } from '../hooks/useApplicantJobMatchInputs'
 import { computeRequirementMatchPercent } from '../lib/jobMatchScore'
 import JobRequirementMatchPill from '../components/JobRequirementMatchPill'
+import {
+  applyEligibilityMessage,
+  getApplyEligibility,
+} from '../lib/applicationStatus'
 
 const Home = () => {
   const navigate = useNavigate()
@@ -21,8 +25,7 @@ const Home = () => {
   const [showSignupModal, setShowSignupModal] = useState(false)
   const [pendingJobId, setPendingJobId] = useState(null)
   const [pendingRedirectTo, setPendingRedirectTo] = useState(null)
-  const [appliedJobIds, setAppliedJobIds] = useState(new Set())
-  const [checkingApplications, setCheckingApplications] = useState(false)
+  const [applicantApplications, setApplicantApplications] = useState([])
 
   // Redirect admin users to /admin after login (only if not already there)
   useEffect(() => {
@@ -31,15 +34,14 @@ const Home = () => {
     }
   }, [user, userProfile, navigate, location.pathname])
 
-  // Check which jobs the user has applied to
+  // Load applicant applications for apply eligibility (reapply / hired lock)
   useEffect(() => {
     const checkApplications = async () => {
       if (!user?.id || !supabaseJobs || supabaseJobs.length === 0) {
-        setAppliedJobIds(new Set())
+        setApplicantApplications([])
         return
       }
 
-      setCheckingApplications(true)
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sbmwzgtlqmwtbrgdehuw.supabase.co'
         const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNibXd6Z3RscW13dGJyZ2RlaHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDUyMDMsImV4cCI6MjA3ODY4MTIwM30.LaXLtSuHVnY0JbN5YTa-2JlbrN2_cLAbAd6NfXtdyJY'
@@ -58,21 +60,20 @@ const Home = () => {
 
         if (!applicantResponse.ok) {
           console.error('[HOME] Error fetching applicant:', applicantResponse.statusText)
-          setAppliedJobIds(new Set())
+          setApplicantApplications([])
           return
         }
 
         const applicants = await applicantResponse.json()
         if (!applicants || applicants.length === 0) {
-          setAppliedJobIds(new Set())
+          setApplicantApplications([])
           return
         }
 
         const applicantId = applicants[0].id
 
-        // Get all applications for this applicant
         const appsResponse = await fetch(
-          `${supabaseUrl}/rest/v1/applications?applicant_id=eq.${applicantId}&select=job_id`,
+          `${supabaseUrl}/rest/v1/applications?applicant_id=eq.${applicantId}&select=id,job_id,status,rejected_at,updated_at`,
           {
             headers: {
               'apikey': anonKey,
@@ -84,18 +85,15 @@ const Home = () => {
 
         if (!appsResponse.ok) {
           console.error('[HOME] Error fetching applications:', appsResponse.statusText)
-          setAppliedJobIds(new Set())
+          setApplicantApplications([])
           return
         }
 
         const applications = await appsResponse.json()
-        const appliedIds = new Set(applications.map(app => app.job_id).filter(Boolean))
-        setAppliedJobIds(appliedIds)
+        setApplicantApplications(Array.isArray(applications) ? applications : [])
       } catch (error) {
         console.error('[HOME] Exception checking applications:', error)
-        setAppliedJobIds(new Set())
-      } finally {
-        setCheckingApplications(false)
+        setApplicantApplications([])
       }
     }
 
@@ -205,7 +203,13 @@ const Home = () => {
       setShowLoginModal(true)
       return
     }
-    
+
+    const eligibility = getApplyEligibility(applicantApplications, jobId || null)
+    if (!eligibility.canApply) {
+      alert(applyEligibilityMessage(eligibility))
+      return
+    }
+
     // Navigate to application form if logged in
     navigate(jobId ? `/profile/apply/${jobId}` : '/profile/apply')
   }
@@ -475,25 +479,41 @@ const Home = () => {
                         >
                           View Details
                         </button>
-                        {appliedJobIds.has(job.id) ? (
-                          <button 
-                            type="button"
-                            disabled
-                            className="flex-1 h-10 rounded-full bg-secondary/50 text-white text-sm font-bold cursor-not-allowed flex items-center justify-center gap-1 opacity-75"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                            Applied
-                          </button>
-                        ) : (
-                          <button 
-                            type="button"
-                            onClick={() => handleApply(job.id)}
-                            className="flex-1 h-10 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-1"
-                          >
-                            Apply
-                            <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                          </button>
-                        )}
+                        {(() => {
+                          const eligibility = getApplyEligibility(applicantApplications, job.id)
+                          if (eligibility.canApply) {
+                            const reapply =
+                              eligibility.reason === 'rejected_reapply' ||
+                              eligibility.reason === 'resigned_reapply'
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleApply(job.id)}
+                                className="flex-1 h-10 rounded-full bg-primary text-[#0f172a] text-sm font-bold hover:bg-[#60a5fa] transition-colors flex items-center justify-center gap-1"
+                              >
+                                {reapply ? 'Reapply' : 'Apply'}
+                                <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                              </button>
+                            )
+                          }
+                          const label =
+                            eligibility.reason === 'rejected_cooldown'
+                              ? `Reapply in ${eligibility.daysRemaining}d`
+                              : eligibility.reason === 'hired_this_job' || eligibility.reason === 'hired_elsewhere'
+                                ? 'Hired'
+                                : 'Applied'
+                          return (
+                            <button
+                              type="button"
+                              disabled
+                              title={applyEligibilityMessage(eligibility) || undefined}
+                              className="flex-1 h-10 rounded-full bg-secondary/50 text-white text-sm font-bold cursor-not-allowed flex items-center justify-center gap-1 opacity-75"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                              {label}
+                            </button>
+                          )
+                        })()}
                       </div>
                     </div>
                   </article>

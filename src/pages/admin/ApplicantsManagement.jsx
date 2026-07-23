@@ -693,6 +693,7 @@ const ApplicantsManagement = () => {
                     <option value="INTERVIEW">INTERVIEW</option>
                     <option value="HIRED">HIRED</option>
                     <option value="REJECTED">REJECTED</option>
+                    <option value="RESIGNED">RESIGNED</option>
                   </select>
                   <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">expand_more</span>
                 </div>
